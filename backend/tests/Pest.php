@@ -12,7 +12,7 @@
 */
 
 pest()->extend(Tests\TestCase::class)
- // ->use(Illuminate\Foundation\Testing\RefreshDatabase::class)
+    ->use(Tests\RefreshesTenantDatabase::class)
     ->in('Feature', 'Unit');
 
 /*
