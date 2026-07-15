@@ -2315,7 +2315,7 @@ git commit -m "feat: add TenantAwareJob trait for queue tenant-context propagati
 
 This suite deliberately tries to leak data between two tenants through the real HTTP API and must fail to do so — the explicit risk mitigation from PRD §19.
 
-- [ ] **Step 1: Write the test suite**
+- [x] **Step 1: Write the test suite**
 
 ```php
 <?php
@@ -2417,12 +2417,12 @@ it('never lets accepting an expired invite create a membership', function () {
 });
 ```
 
-- [ ] **Step 2: Run the tests**
+- [x] **Step 2: Run the tests**
 
 Run: `cd backend && php artisan test --filter=CrossTenantLeakTest`
 Expected: PASS (5 passed)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/tests/Feature/Tenancy/CrossTenantLeakTest.php
