@@ -1738,7 +1738,7 @@ git commit -m "feat: add business creation endpoint"
 - Modify: `backend/routes/api.php`
 - Test: `backend/tests/Feature/Business/SwitchBusinessTest.php`
 
-- [ ] **Step 1: Add `mine` and `switch` to BusinessController**
+- [x] **Step 1: Add `mine` and `switch` to BusinessController**
 
 ```php
 // app/Http/Controllers/Api/V1/BusinessController.php — add these methods to the existing class:
@@ -1771,7 +1771,7 @@ public function switch(Request $request, string $id)
 }
 ```
 
-- [ ] **Step 2: Add the routes**
+- [x] **Step 2: Add the routes**
 
 Add inside the `Route::middleware(['auth:api', 'tenant.context'])->group(...)` block:
 
@@ -1780,7 +1780,7 @@ Route::get('businesses/mine', [\App\Http\Controllers\Api\V1\BusinessController::
 Route::post('businesses/{id}/switch', [\App\Http\Controllers\Api\V1\BusinessController::class, 'switch']);
 ```
 
-- [ ] **Step 3: Write failing feature tests**
+- [x] **Step 3: Write failing feature tests**
 
 ```php
 <?php
@@ -1834,14 +1834,39 @@ it('rejects switching to a business the user is not a member of', function () {
         ->postJson("/api/v1/businesses/{$notMyBusiness->id}/switch")
         ->assertStatus(403);
 });
+
+it('rejects switching into a business that someone else is a member of', function () {
+    // The business above has no memberships at all, so that test passes even
+    // with the authorization check deleted — nothing exists to find. Here a
+    // membership row genuinely exists and belongs to a stranger, which is the
+    // row a broken query would hand back.
+    $user = User::factory()->create();
+    $stranger = User::factory()->create();
+    $strangersBusiness = Business::factory()->create();
+    Membership::on('pgsql_migrate')->create([
+        'user_id' => $stranger->id,
+        'business_id' => $strangersBusiness->id,
+        'role' => 'owner',
+    ]);
+
+    $token = (new TokenService())->issue($user);
+
+    $this->withHeader('Authorization', "Bearer {$token}")
+        ->postJson("/api/v1/businesses/{$strangersBusiness->id}/switch")
+        ->assertStatus(403);
+});
 ```
 
-- [ ] **Step 4: Run the tests**
+The fourth test exists because the third proves nothing on its own: `$notMyBusiness` has no memberships, so the query finds nothing whether or not the authorization check is present — deleting `->where('user_id', ...)` from `switch()` leaves it passing. The fourth puts a real membership row in the way.
+
+Worth knowing what that fourth test does and does not pin down: with the app-level `user_id` check deleted it *still* returns 403, because RLS independently hides the stranger's membership (the caller's token carries no `tid`, so the policy's `business_id = current_tenant` branch is NULL and the `user_id` branch does not match). That is defense in depth behaving exactly as designed — the DB layer alone is sufficient — and it means no HTTP-level test can isolate the app-layer check while RLS is healthy. The test guards the case where *both* layers regress.
+
+- [x] **Step 4: Run the tests**
 
 Run: `cd backend && php artisan test --filter=SwitchBusinessTest`
-Expected: PASS (3 passed)
+Expected: PASS (4 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/Http/Controllers/Api/V1/BusinessController.php backend/routes/api.php backend/tests/Feature/Business/SwitchBusinessTest.php
