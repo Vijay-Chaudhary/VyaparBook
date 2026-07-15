@@ -2447,7 +2447,7 @@ Two things are required for this to mean anything in a real deployment, neither 
 
 A genuine integration test would need the app connection routed through PgBouncer and enough concurrent requests to force server-connection reuse. Consider that a follow-up rather than something this task delivers.
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 ```php
 <?php
@@ -2504,12 +2504,12 @@ it('does not leak app.current_tenant across sequential requests on the same conn
 });
 ```
 
-- [ ] **Step 2: Run the test**
+- [x] **Step 2: Run the test**
 
 Run: `cd backend && php artisan test --filter=PgBouncerPooledConnectionTest`
 Expected: PASS
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/tests/Feature/Tenancy/PgBouncerPooledConnectionTest.php
