@@ -2224,7 +2224,7 @@ git commit -m "feat: add staff invite creation and acceptance endpoints"
 
 No real queued job exists yet in this slice, so this is proven with a minimal fixture job in the test, ready for future slices (e.g., sending a WhatsApp reminder) to adopt.
 
-- [ ] **Step 1: Write the trait**
+- [x] **Step 1: Write the trait**
 
 ```php
 <?php
@@ -2260,7 +2260,7 @@ trait TenantAwareJob
 
 Set the GUC via `TenantContext::switchTo()`, never `DB::statement('SET LOCAL app.current_tenant = ?', [...])`. Postgres's `SET` grammar does not accept a bind parameter in the value position — that statement fails with `syntax error at or near "$1"` on every connection. `switchTo()` wraps `set_config(name, value, true)`, which is parameterizable and has identical `SET LOCAL` (transaction-scoped) semantics.
 
-- [ ] **Step 2: Write a failing unit test with a fixture job**
+- [x] **Step 2: Write a failing unit test with a fixture job**
 
 ```php
 <?php
@@ -2294,12 +2294,12 @@ it('sets the tenant GUC before running the job body', function () {
 });
 ```
 
-- [ ] **Step 3: Run the test**
+- [x] **Step 3: Run the test**
 
 Run: `cd backend && php artisan test --filter=TenantAwareJobTest`
 Expected: PASS
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/app/Traits/TenantAwareJob.php backend/tests/Unit/TenantAwareJobTest.php
