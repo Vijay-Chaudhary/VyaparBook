@@ -6,6 +6,8 @@
 
 **Architecture:** Laravel 11 app in `backend/`, two Postgres connections (`pgsql` — restricted `vyaparbook_app` role, via PgBouncer, used by the running app; `pgsql_migrate` — privileged role, direct to Postgres, used only by migrations/DDL). A `SetTenantContext` middleware opens one transaction per request, sets `app.current_user_id`/`app.current_tenant` Postgres session variables via `SET LOCAL`, and verifies membership before calling the next handler — RLS policies enforce isolation at the DB layer, a `BelongsToTenant` Eloquent trait enforces it again at the app layer for future domain models (defense in depth). `Membership` (the one tenant-scoped table this slice introduces) gets a bespoke RLS policy rather than the flat trait, because it must remain visible/insertable across the pre-tenant-selection window (login, business creation, invite accept).
 
+**Testing:** tests do **not** declare `uses(RefreshDatabase::class)`. Laravel's `RefreshDatabase` is unusable against this design — it drops tables over the restricted `pgsql` role that does not own them; it wraps each test in a `pgsql` transaction whose uncommitted rows are invisible to the `pgsql_migrate` session that setup code needs to bypass RLS (so foreign keys to them fail); and its outer transaction keeps `SET LOCAL` alive across a whole test rather than one request, silently weakening the isolation the RLS tests exist to prove. `tests/Pest.php` instead applies `Tests\RefreshesTenantDatabase` to every test in `Feature`/`Unit`: migrate once per run, `TRUNCATE` as the privileged role between tests, and let every write genuinely commit. `phpunit.xml` points the suite at a dedicated `vyaparbook_test` database so a run never wipes dev data.
+
 **Tech Stack:** PHP 8.3, Laravel 11, PostgreSQL, PgBouncer (transaction pooling), Redis, `php-open-source-saver/jwt-auth`, Pest. No Docker — native local services.
 
 ---
@@ -34,7 +36,7 @@ backend/
       TokenService.php                 (issues JWTs with tid/role claims)
       OtpService.php                    (generate/hash/verify OTP codes)
     Support/
-      TenantContext.php                  (switchTo() helper for cross-tenant inserts)
+      TenantContext.php                  (switchTo() for cross-tenant inserts, forUser() for public auth routes)
     Policies/
       InvitePolicy.php                     (owner/admin-only invite creation)
     Traits/
@@ -70,6 +72,10 @@ backend/
     Unit/
       BelongsToTenantTraitTest.php
       TenantAwareJobTest.php
+    RefreshesTenantDatabase.php   (replaces Laravel's RefreshDatabase — see Testing above)
+    TenantDatabaseState.php        (once-per-run migration flag)
+    Pest.php                        (modified — applies RefreshesTenantDatabase to Feature/Unit)
+  phpunit.xml            (modified — points the suite at the vyaparbook_test database)
   README.md            (setup: Postgres roles, RLS, PgBouncer, .env, running dev)
 ```
 
@@ -630,10 +636,41 @@ class TenantContext
      */
     public static function switchTo(string $businessId): void
     {
-        DB::statement('SET LOCAL app.current_tenant = ?', [$businessId]);
+        // NOTE: Postgres's `SET` statement grammar does not accept a bind
+        // parameter (`$1`) in the value position — `SET LOCAL app.current_tenant = ?`
+        // fails with a syntax error on every real Postgres connection, regardless
+        // of driver. `set_config(name, value, is_local)` is the parameterizable,
+        // semantically identical equivalent: the third argument `true` gives it
+        // `SET LOCAL` (transaction-scoped) semantics rather than session-scoped.
+        DB::statement("SELECT set_config('app.current_tenant', ?, true)", [$businessId]);
+    }
+
+    /**
+     * Run $callback in a transaction scoped to a user but no tenant.
+     *
+     * Public auth routes (login, otp/verify) resolve a user's memberships before
+     * any tenant is selected, and they run outside SetTenantContext — so
+     * app.current_user_id is unset and the memberships RLS policy hides every
+     * row, making membership lookups silently return nothing. Setting the GUC
+     * here activates the policy's user_id branch, which exists for exactly this
+     * pre-tenant-selection window.
+     *
+     * @template T
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public static function forUser(int $userId, callable $callback): mixed
+    {
+        return DB::transaction(function () use ($userId, $callback) {
+            DB::statement("SELECT set_config('app.current_user_id', ?, true)", [(string) $userId]);
+
+            return $callback();
+        });
     }
 }
 ```
+
+`switchTo()` and `forUser()` are the only two places that touch the tenant GUCs outside `SetTenantContext`. Never write `DB::statement('SET LOCAL <guc> = ?', [...])` anywhere — it is a syntax error against real Postgres, not a portability nicety.
 
 - [x] **Step 4: Write the factory**
 
@@ -686,7 +723,11 @@ it('lets a user see their own membership without a tenant set', function () {
     ]);
 
     DB::transaction(function () use ($user) {
-        DB::statement('SET LOCAL app.current_user_id = ?', [$user->id]);
+        // set_config(name, value, true) is the parameterizable equivalent of
+        // `SET LOCAL app.current_user_id = ?` — Postgres's SET statement grammar
+        // rejects bind parameters in the value position, so `?`/`$1` here would
+        // be a syntax error rather than a GUC assignment. See TenantContext::switchTo().
+        DB::statement("SELECT set_config('app.current_user_id', ?, true)", [$user->id]);
 
         $visible = Membership::where('user_id', $user->id)->count();
 
@@ -701,8 +742,8 @@ it('blocks inserting a membership for a business other than the current tenant',
 
     expect(function () use ($user, $business, $otherBusiness) {
         DB::transaction(function () use ($user, $business, $otherBusiness) {
-            DB::statement('SET LOCAL app.current_user_id = ?', [$user->id]);
-            DB::statement('SET LOCAL app.current_tenant = ?', [$business->id]);
+            DB::statement("SELECT set_config('app.current_user_id', ?, true)", [$user->id]);
+            DB::statement("SELECT set_config('app.current_tenant', ?, true)", [$business->id]);
 
             Membership::create([
                 'user_id' => $user->id,
@@ -783,8 +824,6 @@ use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\Schema;
 use Illuminate\Support\Str;
-
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 class TenantFixtureItem extends Model
 {
@@ -926,8 +965,6 @@ use App\Models\User;
 use App\Services\TokenService;
 use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
 
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
-
 it('issues a token with no tid when no membership is given', function () {
     $user = User::factory()->create();
 
@@ -1004,14 +1041,20 @@ class SetTenantContext
         $tid = $payload->get('tid');
         $role = $payload->get('role');
 
-        app()->instance('tenant.id', null);
-        app()->instance('tenant.role', null);
-        app()->instance('tenant.user_id', $userId);
+        // bind(), not instance(): the container resolves instances via
+        // isset($this->instances[$abstract]), and isset(null) is false — a null
+        // instance falls through to construction and throws
+        // "Target class [tenant.id] does not exist".
+        app()->bind('tenant.id', fn () => null);
+        app()->bind('tenant.role', fn () => null);
+        app()->bind('tenant.user_id', fn () => $userId);
 
         DB::beginTransaction();
 
         try {
-            DB::statement('SET LOCAL app.current_user_id = ?', [$userId]);
+            // set_config(..., true) is SET LOCAL with bind parameters — Postgres
+            // rejects placeholders in a bare `SET LOCAL`.
+            DB::statement("select set_config('app.current_user_id', ?, true)", [(string) $userId]);
 
             if ($tid !== null) {
                 $isMember = Membership::where('user_id', $userId)
@@ -1024,9 +1067,9 @@ class SetTenantContext
                     return response()->json(['message' => 'Not a member of this business.'], 403);
                 }
 
-                DB::statement('SET LOCAL app.current_tenant = ?', [$tid]);
-                app()->instance('tenant.id', $tid);
-                app()->instance('tenant.role', $role);
+                DB::statement("select set_config('app.current_tenant', ?, true)", [(string) $tid]);
+                app()->bind('tenant.id', fn () => $tid);
+                app()->bind('tenant.role', fn () => $role);
             }
 
             $response = $next($request);
@@ -1070,9 +1113,15 @@ class RequireTenant
 
 - [x] **Step 3: Register both middleware aliases**
 
-Edit `backend/bootstrap/app.php`:
+Edit `backend/bootstrap/app.php`. Laravel 11 does not load `routes/api.php` unless it is registered, so add the `api:` line as well — without it every route in this task 404s:
 
 ```php
+->withRouting(
+    web: __DIR__.'/../routes/web.php',
+    api: __DIR__.'/../routes/api.php',
+    commands: __DIR__.'/../routes/console.php',
+    health: '/up',
+)
 ->withMiddleware(function (Middleware $middleware) {
     $middleware->alias([
         'tenant.context' => \App\Http\Middleware\SetTenantContext::class,
@@ -1112,8 +1161,6 @@ use App\Models\Business;
 use App\Models\Membership;
 use App\Models\User;
 use App\Services\TokenService;
-
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 it('resolves tenant id and role from the token for a member', function () {
     $user = User::factory()->create();
@@ -1297,6 +1344,7 @@ use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\OtpService;
 use App\Services\TokenService;
+use App\Support\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\RateLimiter;
@@ -1345,7 +1393,10 @@ class OtpController extends Controller
             ['name' => $data['phone'], 'password' => bcrypt(str()->random(32))]
         );
 
-        $membership = $user->memberships()->count() === 1 ? $user->memberships()->first() : null;
+        $membership = TenantContext::forUser(
+            $user->id,
+            fn () => $user->memberships()->count() === 1 ? $user->memberships()->first() : null
+        );
 
         return response()->json(['token' => $this->tokenService->issue($user, $membership)]);
     }
@@ -1368,8 +1419,6 @@ Route::post('auth/otp/verify', [\App\Http\Controllers\Api\V1\OtpController::clas
 ```php
 <?php
 // tests/Feature/Auth/OtpTest.php
-
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 it('issues a token after verifying a correct otp', function () {
     $phone = '9876543210';
@@ -1437,6 +1486,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\User;
 use App\Services\TokenService;
+use App\Support\TenantContext;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 
@@ -1474,12 +1524,17 @@ class AuthController extends Controller
             return response()->json(['message' => 'Invalid credentials.'], 401);
         }
 
-        $membership = $user->memberships()->count() === 1 ? $user->memberships()->first() : null;
+        $membership = TenantContext::forUser(
+            $user->id,
+            fn () => $user->memberships()->count() === 1 ? $user->memberships()->first() : null
+        );
 
         return response()->json(['token' => $this->tokenService->issue($user, $membership)]);
     }
 }
 ```
+
+Both `login` here and `otp/verify` in Task 9 resolve memberships through `TenantContext::forUser()`. These are public routes, so `SetTenantContext` never runs and `app.current_user_id` is never set — and without it the memberships RLS policy hides *every* row. `$user->memberships()->count()` would always be `0`, the single-membership auto-select would silently never fire, and every user would get a tenant-less token while the code reads as though it works. This is the failure mode the policy's `user_id` branch exists to prevent; it just has to be switched on.
 
 - [x] **Step 2: Add the routes**
 
@@ -1495,8 +1550,6 @@ Route::post('auth/login', [\App\Http\Controllers\Api\V1\AuthController::class, '
 ```php
 <?php
 // tests/Feature/Auth/RegisterLoginTest.php
-
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 it('registers a new user and issues a token', function () {
     $this->postJson('/api/v1/auth/register', [
@@ -1626,8 +1679,6 @@ Route::post('businesses', [\App\Http\Controllers\Api\V1\BusinessController::clas
 use App\Models\User;
 use App\Services\TokenService;
 
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
-
 it('creates a business and returns a token scoped to it as owner', function () {
     $user = User::factory()->create();
     $token = (new TokenService())->issue($user);
@@ -1739,8 +1790,6 @@ use App\Models\Business;
 use App\Models\Membership;
 use App\Models\User;
 use App\Services\TokenService;
-
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 it('lists every business the user belongs to', function () {
     $user = User::factory()->create();
@@ -2000,8 +2049,6 @@ use App\Models\Membership;
 use App\Models\User;
 use App\Services\TokenService;
 
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
-
 it('lets an owner create an invite', function () {
     $owner = User::factory()->create();
     $business = Business::factory()->create();
@@ -2084,6 +2131,7 @@ No real queued job exists yet in this slice, so this is proven with a minimal fi
 
 namespace App\Traits;
 
+use App\Support\TenantContext;
 use Illuminate\Support\Facades\DB;
 
 trait TenantAwareJob
@@ -2100,7 +2148,7 @@ trait TenantAwareJob
     public function handle(): void
     {
         DB::transaction(function () {
-            DB::statement('SET LOCAL app.current_tenant = ?', [$this->tenantId]);
+            TenantContext::switchTo($this->tenantId);
             $this->handleForTenant();
         });
     }
@@ -2108,6 +2156,8 @@ trait TenantAwareJob
     abstract public function handleForTenant(): void;
 }
 ```
+
+Set the GUC via `TenantContext::switchTo()`, never `DB::statement('SET LOCAL app.current_tenant = ?', [...])`. Postgres's `SET` grammar does not accept a bind parameter in the value position — that statement fails with `syntax error at or near "$1"` on every connection. `switchTo()` wraps `set_config(name, value, true)`, which is parameterizable and has identical `SET LOCAL` (transaction-scoped) semantics.
 
 - [ ] **Step 2: Write a failing unit test with a fixture job**
 
@@ -2120,8 +2170,6 @@ use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
 use Illuminate\Support\Facades\DB;
-
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 class FixtureTenantJob implements ShouldQueue
 {
@@ -2176,8 +2224,6 @@ use App\Models\Business;
 use App\Models\Membership;
 use App\Models\User;
 use App\Services\TokenService;
-
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 function ownerContext(): array
 {
@@ -2241,7 +2287,9 @@ it('rejects business As owner inviting staff into business B via a mismatched pa
         ->postJson("/api/v1/businesses/{$businessB->id}/invite", ['role' => 'salesman'])
         ->assertCreated();
 
-    $invite = \App\Models\Invite::latest('id')->first();
+    // latest('created_at'), not latest('id'): Invite uses HasUuids, so ordering
+    // by id sorts UUIDs lexically rather than chronologically.
+    $invite = \App\Models\Invite::latest('created_at')->first();
     expect($invite->business_id)->toBe($businessA->id);
     expect($invite->business_id)->not->toBe($businessB->id);
 });
@@ -2287,7 +2335,16 @@ git commit -m "test: add cross-tenant leak suite"
 **Files:**
 - Create: `backend/tests/Feature/Tenancy/PgBouncerPooledConnectionTest.php`
 
-This simulates the exact failure mode PRD §4.2 warns about: two sequential requests reusing a pooled connection must never see each other's `SET LOCAL` value, because `SET LOCAL` is transaction-scoped and cleared on commit.
+This targets the failure mode PRD §4.2 warns about: two sequential requests reusing a pooled connection must never see each other's `SET LOCAL` value, because `SET LOCAL` is transaction-scoped and cleared on commit.
+
+**Be precise about what this test does and does not prove.** It runs in-process through Laravel's test HTTP layer, so it does not put PgBouncer in the path and does not prove PgBouncer is configured correctly. What it proves is the *property* that PgBouncer safety depends on: that the tenant GUC does not survive its transaction as session state on a reused connection. That is worth proving — if it ever regressed (e.g. someone "fixes" a bug by switching `SET LOCAL` to a session-scoped `SET`), transaction pooling would leak tenant context between unrelated requests. But it is a Postgres-semantics test, not an integration test.
+
+Two things are required for this to mean anything in a real deployment, neither of which the test can enforce:
+
+- `DB_PORT` must point at PgBouncer (6432), not directly at Postgres (5432). If the app connects straight to Postgres, PgBouncer is not exercised anywhere in the suite and this test's name is misleading.
+- PgBouncer must run with `pool_mode = transaction` (see Task 17).
+
+A genuine integration test would need the app connection routed through PgBouncer and enough concurrent requests to force server-connection reuse. Consider that a follow-up rather than something this task delivers.
 
 - [ ] **Step 1: Write the test**
 
@@ -2300,8 +2357,6 @@ use App\Models\Membership;
 use App\Models\User;
 use App\Services\TokenService;
 use Illuminate\Support\Facades\DB;
-
-uses(\Illuminate\Foundation\Testing\RefreshDatabase::class);
 
 it('does not leak app.current_tenant across sequential requests on the same connection', function () {
     [$ownerA, $businessA, $tokenA] = (function () {
@@ -2332,8 +2387,13 @@ it('does not leak app.current_tenant across sequential requests on the same conn
     // Immediately after commit, confirm the GUC has actually cleared on this
     // connection — proving SET LOCAL's scope ended with the transaction and did
     // not silently persist as session state (which is what would leak under PgBouncer).
+    //
+    // toBeEmpty(), not toBeNull(): once a custom GUC has been set in a session,
+    // ending the transaction reverts it to '' rather than NULL. This is exactly
+    // why every RLS policy wraps it as NULLIF(current_setting(...), '') — an
+    // assertion of toBeNull() here fails against real Postgres.
     $leftover = DB::selectOne("select current_setting('app.current_tenant', true) as t")->t;
-    expect($leftover)->toBeNull();
+    expect($leftover)->toBeEmpty();
 
     // Request 2: tenant B, reusing the same underlying connection/process.
     $this->withHeader('Authorization', "Bearer {$tokenB}")
@@ -2385,11 +2445,22 @@ PgBouncer, and Redis run as native local services.
    CREATE DATABASE vyaparbook;
    ```
 2. After running migrations once (`php artisan migrate --database=pgsql_migrate`,
-   see below), the `vyaparbook_app` role will exist but have no password set.
-   Set one to match your `.env`:
+   see below), the `vyaparbook_app` role will exist but have no password set —
+   the migration creates the role but deliberately never sets a password, so no
+   secret is embedded in migration history. Until you set one, the app cannot
+   connect and every request fails with `password authentication failed for user
+   "vyaparbook_app"`. Set it to match your `.env`:
    ```sql
    ALTER ROLE vyaparbook_app WITH PASSWORD 'change-me';
    ```
+3. Create the test database. `phpunit.xml` points the suite at it so that running
+   tests never wipes your development data:
+   ```sql
+   CREATE DATABASE vyaparbook_test;
+   ```
+   No grants are needed by hand — the `create_app_role` migration grants against
+   whichever database it runs on, and the test suite migrates this one on its
+   first run.
 
 ## PgBouncer setup
 
@@ -2417,6 +2488,10 @@ cp .env.example .env
 php artisan key:generate
 php artisan jwt:secret
 # Fill in DB_* and DB_MIGRATE_* in .env to match your Postgres/PgBouncer setup.
+# DB_PORT must be PgBouncer's port (6432), not Postgres's (5432) — pointing it at
+# 5432 bypasses PgBouncer entirely, so nothing in the app or the test suite ever
+# exercises transaction pooling and the Task 16 test proves less than it appears to.
+# DB_MIGRATE_PORT is the one that goes direct to Postgres (5432).
 php artisan migrate --database=pgsql_migrate
 php artisan serve
 ```
