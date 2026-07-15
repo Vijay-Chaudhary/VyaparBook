@@ -1607,7 +1607,7 @@ git commit -m "feat: add email/password register and login endpoints"
 - Modify: `backend/routes/api.php`
 - Test: `backend/tests/Feature/Business/CreateBusinessTest.php`
 
-- [ ] **Step 1: Write the BusinessController's store method**
+- [x] **Step 1: Write the BusinessController's store method**
 
 ```php
 <?php
@@ -1662,7 +1662,7 @@ class BusinessController extends Controller
 
 The nested `DB::transaction` here runs inside the outer transaction `SetTenantContext` already opened (Laravel/Postgres handle this via a savepoint), and `TenantContext::switchTo()` re-points `app.current_tenant` to the newly created business right before the `Membership` insert — satisfying the RLS `WITH CHECK` even though the caller's JWT `tid` (if any) points at a different business entirely.
 
-- [ ] **Step 2: Add the route**
+- [x] **Step 2: Add the route**
 
 Add inside the `Route::middleware(['auth:api', 'tenant.context'])->group(...)` block in `backend/routes/api.php`:
 
@@ -1670,7 +1670,7 @@ Add inside the `Route::middleware(['auth:api', 'tenant.context'])->group(...)` b
 Route::post('businesses', [\App\Http\Controllers\Api\V1\BusinessController::class, 'store']);
 ```
 
-- [ ] **Step 3: Write a failing feature test**
+- [x] **Step 3: Write a failing feature test**
 
 ```php
 <?php
@@ -1715,14 +1715,14 @@ it('lets a user create a second business while already owning one', function () 
 });
 ```
 
-The second test is the one that actually exercises the `TenantContext::switchTo()` fix — without it, this insert would fail the RLS `WITH CHECK` because the request's active `tid` (the first business) differs from the new membership's `business_id` (the second business).
+**Both** tests exercise `TenantContext::switchTo()` — verified by deleting the call and watching each fail with `new row violates row-level security policy for table "memberships"`. The second is the more obvious case: the request's active `tid` (the first business) differs from the new membership's `business_id` (the second), so `WITH CHECK` compares two different UUIDs and rejects. But the first fails too, for a subtler reason: a tenant-less token leaves `app.current_tenant` unset, so `WITH CHECK` evaluates `business_id = NULL`, which is `NULL` rather than `true` — and a check constraint only admits a row on `true`. Creating your very first business is just as dependent on `switchTo()` as creating your fifth.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `cd backend && php artisan test --filter=CreateBusinessTest`
 Expected: PASS (2 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/Http/Controllers/Api/V1/BusinessController.php backend/routes/api.php backend/tests/Feature/Business/CreateBusinessTest.php
