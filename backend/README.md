@@ -37,11 +37,13 @@ PgBouncer, and Redis run as native local services.
 
 ## PgBouncer setup
 
-> **Status: not yet wired up.** The stock `pgbouncer.ini` shipped by the package
-> is still in place, `userlist.txt` is empty, and `.env` currently has
-> `DB_PORT=5432` — so the app talks straight to Postgres and nothing routes
-> through PgBouncer. The steps below are what it takes to close that gap; they
-> need root and have not been applied to this machine. Until they are, treat
+> **Status: not yet wired up** (re-verified 2026-07-15). The PgBouncer process is
+> up and accepting connections on 6432, but it is still the stock package config:
+> connecting through it fails with `FATAL: no such database` for both
+> `vyaparbook` and `vyaparbook_test`, so nothing routes through the proxy. `.env`
+> also has `DB_PORT=5432` (direct to Postgres) while `.env.example` correctly
+> says `6432` — the working `.env` has drifted. The steps below are what it takes
+> to close the gap; they need root. Until they are applied, treat
 > `tests/Feature/Tenancy/PgBouncerPooledConnectionTest.php` as proving Postgres
 > `SET LOCAL` semantics only, not PgBouncer behaviour (the test says as much).
 
@@ -55,7 +57,7 @@ vyaparbook_test = host=127.0.0.1 port=5432 dbname=vyaparbook_test
 pool_mode = transaction
 listen_addr = 127.0.0.1
 listen_port = 6432
-auth_type = md5
+auth_type = scram-sha-256
 auth_file = /etc/pgbouncer/userlist.txt
 ```
 
@@ -69,21 +71,36 @@ List both databases, not just `vyaparbook` — PgBouncer rejects any database no
 named here with `FATAL: no such database`, and the test suite connects to
 `vyaparbook_test`.
 
-In `/etc/pgbouncer/userlist.txt`, add the app role and its md5 hash (the hash is
-`md5` + `md5(password + username)`):
+In `/etc/pgbouncer/userlist.txt`, add the app role and its **plaintext** password:
 ```
-"vyaparbook_app" "md5<hash>"
+"vyaparbook_app" "<password>"
 ```
-Generate the hash with:
-```bash
-echo -n "md5"; echo -n "<password>vyaparbook_app" | md5sum | cut -d' ' -f1
-```
+
+The plaintext is deliberate, not laziness. This Postgres runs
+`password_encryption = scram-sha-256` and stores `vyaparbook_app`'s password as a
+SCRAM verifier (`select rolname, rolpassword from pg_authid` to confirm).
+PgBouncer authenticates twice — client→proxy, then proxy→Postgres — and the
+second hop needs to answer a SCRAM challenge, which is only possible from the
+plaintext password or a stored SCRAM secret. An md5 hash in `userlist.txt` is
+enough to check an incoming client but cannot produce a SCRAM response, so the
+backend connection fails even though the client hop looks fine. Keep the file
+`chmod 640`, owned by the `postgres` user.
+
+The alternative that avoids storing the plaintext is `auth_query` — point
+PgBouncer at a `SECURITY DEFINER` function that reads `pg_shadow`, so it fetches
+each role's verifier from Postgres on demand. Worth doing before this reaches a
+real server; the plaintext file is acceptable only for local dev.
 
 Then restart and verify the connection actually goes through the proxy:
 ```bash
 sudo service pgbouncer restart
-psql -h 127.0.0.1 -p 6432 -U vyaparbook_app -d vyaparbook_test -c 'select 1;'
+PGPASSWORD=<password> psql -h 127.0.0.1 -p 6432 -U vyaparbook_app -d vyaparbook_test -c 'select 1;'
 ```
+A `select 1` that returns through 6432 is the real check — `pg_isready` on 6432
+succeeds even against the stock config, because PgBouncer answers the port long
+before it knows whether the database is routable. That false green is what hid
+this gap.
+
 Once that succeeds, set `DB_PORT=6432` in `.env` and re-run `php artisan test`.
 
 ## App setup

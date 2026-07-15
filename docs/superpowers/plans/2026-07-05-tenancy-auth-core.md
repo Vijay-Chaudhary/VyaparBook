@@ -2651,6 +2651,16 @@ git commit -m "docs: add backend setup instructions"
   `backend/README.md` under "PgBouncer setup". A true integration test also needs
   concurrent requests to force server-connection reuse — still a follow-up.
 
+  **Correction (2026-07-15):** the README originally specified `auth_type = md5`
+  with an md5 hash in `userlist.txt`. That would not have worked on this machine —
+  Postgres runs `password_encryption = scram-sha-256` and stores `vyaparbook_app`'s
+  password as a SCRAM verifier, and PgBouncer cannot answer the backend's SCRAM
+  challenge from an md5 hash. The README now specifies `auth_type = scram-sha-256`
+  with the plaintext password in `userlist.txt` (or `auth_query` for anything
+  beyond local dev). Re-verified the same day that PgBouncer still rejects both
+  databases with `FATAL: no such database`; note that `pg_isready` on 6432 returns
+  success regardless, so it is not a valid check for this.
+
 ---
 
 ## Self-Review Notes
