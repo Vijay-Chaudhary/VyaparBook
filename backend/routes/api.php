@@ -1,0 +1,20 @@
+<?php
+
+use Illuminate\Support\Facades\Route;
+
+Route::prefix('v1')->group(function () {
+    Route::post('auth/register', [\App\Http\Controllers\Api\V1\AuthController::class, 'register']);
+    Route::post('auth/login', [\App\Http\Controllers\Api\V1\AuthController::class, 'login']);
+    Route::post('auth/otp/request', [\App\Http\Controllers\Api\V1\OtpController::class, 'request']);
+    Route::post('auth/otp/verify', [\App\Http\Controllers\Api\V1\OtpController::class, 'verify']);
+
+    Route::middleware(['auth:api', 'tenant.context'])->group(function () {
+        Route::get('whoami', function () {
+            return response()->json([
+                'user_id' => app('tenant.user_id'),
+                'tenant_id' => app('tenant.id'),
+                'role' => app('tenant.role'),
+            ]);
+        });
+    });
+});

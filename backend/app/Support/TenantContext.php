@@ -22,4 +22,27 @@ class TenantContext
         // `SET LOCAL` (transaction-scoped) semantics rather than session-scoped.
         DB::statement("SELECT set_config('app.current_tenant', ?, true)", [$businessId]);
     }
+
+    /**
+     * Run $callback in a transaction scoped to a user but no tenant.
+     *
+     * Public auth routes (login, otp/verify) resolve a user's memberships before
+     * any tenant is selected, and they run outside SetTenantContext — so
+     * app.current_user_id is unset and the memberships RLS policy hides every
+     * row, making membership lookups silently return nothing. Setting the GUC
+     * here activates the policy's user_id branch, which exists for exactly this
+     * pre-tenant-selection window.
+     *
+     * @template T
+     * @param  callable(): T  $callback
+     * @return T
+     */
+    public static function forUser(int $userId, callable $callback): mixed
+    {
+        return DB::transaction(function () use ($userId, $callback) {
+            DB::statement("SELECT set_config('app.current_user_id', ?, true)", [(string) $userId]);
+
+            return $callback();
+        });
+    }
 }
