@@ -83,7 +83,7 @@ backend/
 - Modify: `backend/.env`, `backend/.env.example`
 - Test: `backend/tests/Feature/HealthCheckTest.php`
 
-- [ ] **Step 1: Create the Laravel project**
+- [x] **Step 1: Create the Laravel project**
 
 ```bash
 cd "//wsl.localhost/ubuntu-22.04/home/appuser/workspace/projects/VyaparBook"
@@ -93,7 +93,7 @@ composer require pestphp/pest pestphp/pest-plugin-laravel --dev --with-all-depen
 php artisan pest:install
 ```
 
-- [ ] **Step 2: Add the dual Postgres connections**
+- [x] **Step 2: Add the dual Postgres connections**
 
 Edit `backend/config/database.php`, inside the `'connections'` array, replace the default `'pgsql'` entry and add `'pgsql_migrate'`:
 
@@ -127,7 +127,7 @@ Edit `backend/config/database.php`, inside the `'connections'` array, replace th
 
 `pgsql` connects through PgBouncer (port 6432) as the restricted `vyaparbook_app` role — this is what the running app uses for every request. `pgsql_migrate` connects directly to Postgres (port 5432) as the privileged `postgres` role — used only by migrations, since DDL (`CREATE TABLE`, `ENABLE ROW LEVEL SECURITY`, `CREATE POLICY`, `CREATE ROLE`) needs privileges the restricted role deliberately does not have.
 
-- [ ] **Step 3: Set `.env` and `.env.example`**
+- [x] **Step 3: Set `.env` and `.env.example`**
 
 Add to both `backend/.env` and `backend/.env.example`:
 
@@ -148,7 +148,7 @@ DB_MIGRATE_PASSWORD=
 
 Remove any `DB_CONNECTION=sqlite` default Laravel 11 ships with.
 
-- [ ] **Step 4: Write a health-check feature test**
+- [x] **Step 4: Write a health-check feature test**
 
 ```php
 <?php
@@ -159,12 +159,12 @@ it('responds to the root route', function () {
 });
 ```
 
-- [ ] **Step 5: Run it to verify the scaffold works**
+- [x] **Step 5: Run it to verify the scaffold works**
 
 Run: `cd backend && php artisan test --filter=HealthCheckTest`
 Expected: PASS (1 passed)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend .gitignore
@@ -181,7 +181,7 @@ git commit -m "chore: scaffold Laravel backend with dual Postgres connections"
 
 This migration creates the restricted `vyaparbook_app` Postgres role if it doesn't already exist, and grants it the DML (not DDL) privileges it needs. It deliberately does **not** set the role's password from application code — passwords are set once by whoever runs the initial setup (documented in Task 17's README), so a secret never gets embedded in migration SQL or migration history.
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```php
 <?php
@@ -232,12 +232,12 @@ return new class extends Migration
 
 Every migration in this project follows the same pattern: schema/DDL statements go through `DB::connection('pgsql_migrate')` or `Schema::connection('pgsql_migrate')`, never the default `pgsql` connection, because the restricted app role has no DDL rights.
 
-- [ ] **Step 2: Run the migration**
+- [x] **Step 2: Run the migration**
 
 Run: `cd backend && php artisan migrate --database=pgsql_migrate`
 Expected: `2026_07_05_000001_create_app_role ... DONE`
 
-- [ ] **Step 3: Write a test confirming the role exists and lacks superuser/DDL rights**
+- [x] **Step 3: Write a test confirming the role exists and lacks superuser/DDL rights**
 
 ```php
 <?php
@@ -254,12 +254,12 @@ it('creates a non-superuser vyaparbook_app role', function () {
 });
 ```
 
-- [ ] **Step 4: Run the test**
+- [x] **Step 4: Run the test**
 
 Run: `cd backend && php artisan test --filter=AppRoleMigrationTest`
 Expected: PASS
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/database/migrations backend/tests/Feature/AppRoleMigrationTest.php
@@ -276,7 +276,7 @@ git commit -m "feat: bootstrap restricted vyaparbook_app Postgres role"
 - Create: `backend/database/factories/BusinessFactory.php`
 - Test: `backend/tests/Unit/BusinessModelTest.php`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```php
 <?php
@@ -310,7 +310,7 @@ return new class extends Migration
 
 `businesses` has no RLS policy — it's the tenant identity table itself, not tenant-owned data. Any authenticated user can read a business row they're resolving via a valid `Membership`; app-level checks (not RLS) gate that access.
 
-- [ ] **Step 2: Write the Business model**
+- [x] **Step 2: Write the Business model**
 
 ```php
 <?php
@@ -330,7 +330,7 @@ class Business extends Model
 }
 ```
 
-- [ ] **Step 3: Write the factory**
+- [x] **Step 3: Write the factory**
 
 ```php
 <?php
@@ -357,7 +357,7 @@ class BusinessFactory extends Factory
 }
 ```
 
-- [ ] **Step 4: Write a failing test**
+- [x] **Step 4: Write a failing test**
 
 ```php
 <?php
@@ -373,7 +373,7 @@ it('generates a uuid primary key on create', function () {
 });
 ```
 
-- [ ] **Step 5: Run the migration and test**
+- [x] **Step 5: Run the migration and test**
 
 ```bash
 cd backend
@@ -382,7 +382,7 @@ php artisan test --filter=BusinessModelTest
 ```
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/database backend/app/Models/Business.php backend/tests/Unit/BusinessModelTest.php
@@ -399,7 +399,7 @@ git commit -m "feat: add Business model and migration"
 - Modify: `backend/database/factories/UserFactory.php`
 - Test: `backend/tests/Unit/UserModelTest.php`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```php
 <?php
@@ -431,7 +431,7 @@ return new class extends Migration
 
 Email is made nullable because phone-only OTP signups won't have one.
 
-- [ ] **Step 2: Modify the User model**
+- [x] **Step 2: Modify the User model**
 
 ```php
 <?php
@@ -476,7 +476,7 @@ class User extends Authenticatable implements JWTSubject
 
 (`getJWTCustomClaims` returns empty here deliberately — `tid`/`role` are attached per-issuance by `TokenService`, built in Task 7, not baked into the model.)
 
-- [ ] **Step 3: Update the User factory to include phone**
+- [x] **Step 3: Update the User factory to include phone**
 
 ```php
 <?php
@@ -485,7 +485,7 @@ class User extends Authenticatable implements JWTSubject
 'phone' => fn () => $this->faker->unique()->numerify('9#########'),
 ```
 
-- [ ] **Step 4: Write a failing test**
+- [x] **Step 4: Write a failing test**
 
 ```php
 <?php
@@ -500,7 +500,7 @@ it('has a unique phone number', function () {
 });
 ```
 
-- [ ] **Step 5: Run the migration and test**
+- [x] **Step 5: Run the migration and test**
 
 ```bash
 cd backend
@@ -509,7 +509,7 @@ php artisan test --filter=UserModelTest
 ```
 Expected: PASS
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/database backend/app/Models/User.php
@@ -529,7 +529,7 @@ git commit -m "feat: add phone and is_platform_admin to users, implement JWTSubj
 
 This is the load-bearing task: it establishes the actual RLS policy and the `TenantContext::switchTo()` helper every membership-creating endpoint will need.
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```php
 <?php
@@ -579,7 +579,7 @@ return new class extends Migration
 
 `current_setting(..., true)` (the `true` second argument) returns `NULL` instead of raising an error when the GUC is unset — necessary because plenty of queries run before any tenant is selected.
 
-- [ ] **Step 2: Write the Membership model — no BelongsToTenant trait**
+- [x] **Step 2: Write the Membership model — no BelongsToTenant trait**
 
 ```php
 <?php
@@ -611,7 +611,7 @@ class Membership extends Model
 
 Membership deliberately does **not** use the `BelongsToTenant` trait (built in Task 6): that trait's global scope filters strictly by the current tenant, which would hide a user's memberships in every business except the currently active one — breaking `/businesses/mine`. Membership's visibility rule is the union condition the RLS policy already encodes; the app layer doesn't need a second, different scope on top of it here.
 
-- [ ] **Step 3: Write the TenantContext helper**
+- [x] **Step 3: Write the TenantContext helper**
 
 ```php
 <?php
@@ -635,7 +635,7 @@ class TenantContext
 }
 ```
 
-- [ ] **Step 4: Write the factory**
+- [x] **Step 4: Write the factory**
 
 ```php
 <?php
@@ -663,7 +663,7 @@ class MembershipFactory extends Factory
 }
 ```
 
-- [ ] **Step 5: Write a failing test proving the RLS policy's shape**
+- [x] **Step 5: Write a failing test proving the RLS policy's shape**
 
 This test exercises the raw SQL session variables directly (no HTTP layer yet — that comes in Task 8) to prove the policy itself behaves correctly.
 
@@ -714,7 +714,7 @@ it('blocks inserting a membership for a business other than the current tenant',
 });
 ```
 
-- [ ] **Step 6: Run the migration and tests**
+- [x] **Step 6: Run the migration and tests**
 
 ```bash
 cd backend
@@ -723,7 +723,7 @@ php artisan test --filter=MembershipRlsTest
 ```
 Expected: PASS (2 passed)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/database backend/app/Models/Membership.php backend/app/Support/TenantContext.php backend/tests/Feature/Tenancy/MembershipRlsTest.php
@@ -740,7 +740,7 @@ git commit -m "feat: add Membership model with RLS isolation policy"
 
 No real domain model in this slice uses `BelongsToTenant` (Membership is the exception carved out in Task 5), but the spec commits to building it now as shared infrastructure the next slice's `Product`/`Customer`/`Sale` models will adopt immediately. It's proven here against a throwaway fixture table created inline in the test.
 
-- [ ] **Step 1: Write the trait**
+- [x] **Step 1: Write the trait**
 
 ```php
 <?php
@@ -772,7 +772,7 @@ trait BelongsToTenant
 
 If `app('tenant.id')` is null (no tenant in scope), the global scope adds no `WHERE` clause at all — relying on RLS alone to block the query. This means the app-level scope is a strict *narrowing*, never a bypass: it can only make a query more restrictive than RLS already is, never less.
 
-- [ ] **Step 2: Write a failing unit test against a fixture table**
+- [x] **Step 2: Write a failing unit test against a fixture table**
 
 ```php
 <?php
@@ -829,12 +829,12 @@ it('only returns rows for the current tenant', function () {
 });
 ```
 
-- [ ] **Step 3: Run the tests**
+- [x] **Step 3: Run the tests**
 
 Run: `cd backend && php artisan test --filter=BelongsToTenantTraitTest`
 Expected: PASS (2 passed)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/app/Traits/BelongsToTenant.php backend/tests/Unit/BelongsToTenantTraitTest.php
@@ -850,7 +850,7 @@ git commit -m "feat: add BelongsToTenant trait for future domain models"
 - Create: `backend/app/Services/TokenService.php`
 - Test: `backend/tests/Unit/TokenServiceTest.php`
 
-- [ ] **Step 1: Install and configure jwt-auth**
+- [x] **Step 1: Install and configure jwt-auth**
 
 ```bash
 cd backend
@@ -866,7 +866,7 @@ JWT_REFRESH_TTL=10080
 ```
 (`JWT_TTL` is in minutes — 15 min access tokens, `JWT_REFRESH_TTL` 10080 min = 7 days, matching the spec.)
 
-- [ ] **Step 2: Point the `api` guard at the jwt driver**
+- [x] **Step 2: Point the `api` guard at the jwt driver**
 
 Edit `backend/config/auth.php`:
 
@@ -883,7 +883,7 @@ Edit `backend/config/auth.php`:
 ],
 ```
 
-- [ ] **Step 3: Write the TokenService**
+- [x] **Step 3: Write the TokenService**
 
 ```php
 <?php
@@ -914,7 +914,7 @@ class TokenService
 }
 ```
 
-- [ ] **Step 4: Write a failing test**
+- [x] **Step 4: Write a failing test**
 
 ```php
 <?php
@@ -955,12 +955,12 @@ it('issues a token with tid and role when a membership is given', function () {
 });
 ```
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 Run: `cd backend && php artisan test --filter=TokenServiceTest`
 Expected: PASS (2 passed)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/config/auth.php backend/app/Services/TokenService.php backend/tests/Unit/TokenServiceTest.php backend/.env.example
@@ -980,7 +980,7 @@ git commit -m "feat: configure JWT auth and add TokenService for tid/role claims
 
 This is the mechanism from PRD §4.2/§4.3 translated into Laravel: one transaction per request, `SET LOCAL` for both GUCs, membership verification, and app-container bindings other code reads via `app('tenant.id')`/`app('tenant.role')`/`app('tenant.user_id')`.
 
-- [ ] **Step 1: Write SetTenantContext**
+- [x] **Step 1: Write SetTenantContext**
 
 ```php
 <?php
@@ -1043,7 +1043,7 @@ class SetTenantContext
 
 The `Membership::where(...)->exists()` check itself runs *inside* the same transaction, after `app.current_user_id` is set but before `app.current_tenant` is — it's allowed through by the RLS policy's `user_id` branch (Task 5), not the `tid` branch, since the tenant GUC isn't set yet at that point.
 
-- [ ] **Step 2: Write RequireTenant**
+- [x] **Step 2: Write RequireTenant**
 
 ```php
 <?php
@@ -1068,7 +1068,7 @@ class RequireTenant
 }
 ```
 
-- [ ] **Step 3: Register both middleware aliases**
+- [x] **Step 3: Register both middleware aliases**
 
 Edit `backend/bootstrap/app.php`:
 
@@ -1081,7 +1081,7 @@ Edit `backend/bootstrap/app.php`:
 })
 ```
 
-- [ ] **Step 4: Add a `whoami` smoke-test route**
+- [x] **Step 4: Add a `whoami` smoke-test route**
 
 ```php
 <?php
@@ -1102,7 +1102,7 @@ Route::prefix('v1')->group(function () {
 });
 ```
 
-- [ ] **Step 5: Write a failing feature test**
+- [x] **Step 5: Write a failing feature test**
 
 ```php
 <?php
@@ -1151,12 +1151,12 @@ it('rejects a token whose tid the user is not a member of', function () {
 });
 ```
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `cd backend && php artisan test --filter=TenantContextMiddlewareTest`
 Expected: PASS (2 passed)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/app/Http/Middleware backend/bootstrap/app.php backend/routes/api.php backend/tests/Feature/Tenancy/TenantContextMiddlewareTest.php
@@ -1175,7 +1175,7 @@ git commit -m "feat: add SetTenantContext/RequireTenant middleware"
 - Modify: `backend/routes/api.php`
 - Test: `backend/tests/Feature/Auth/OtpTest.php`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```php
 <?php
@@ -1210,7 +1210,7 @@ return new class extends Migration
 
 No RLS — pre-membership, scoped by `phone` + expiry/attempts at the app layer (per the approved spec).
 
-- [ ] **Step 2: Write the OtpCode model**
+- [x] **Step 2: Write the OtpCode model**
 
 ```php
 <?php
@@ -1231,7 +1231,7 @@ class OtpCode extends Model
 }
 ```
 
-- [ ] **Step 3: Write the OtpService**
+- [x] **Step 3: Write the OtpService**
 
 ```php
 <?php
@@ -1285,7 +1285,7 @@ class OtpService
 }
 ```
 
-- [ ] **Step 4: Write the OtpController**
+- [x] **Step 4: Write the OtpController**
 
 ```php
 <?php
@@ -1352,7 +1352,7 @@ class OtpController extends Controller
 }
 ```
 
-- [ ] **Step 5: Add the routes**
+- [x] **Step 5: Add the routes**
 
 Add to `backend/routes/api.php`, above the authenticated group:
 
@@ -1363,7 +1363,7 @@ Route::post('auth/otp/verify', [\App\Http\Controllers\Api\V1\OtpController::clas
 
 (Wrap these, along with the existing authenticated group, inside the `Route::prefix('v1')->group(...)` block already present.)
 
-- [ ] **Step 6: Write failing feature tests**
+- [x] **Step 6: Write failing feature tests**
 
 ```php
 <?php
@@ -1401,7 +1401,7 @@ it('rate limits repeated otp requests for the same phone', function () {
 });
 ```
 
-- [ ] **Step 7: Run the migration and tests**
+- [x] **Step 7: Run the migration and tests**
 
 ```bash
 cd backend
@@ -1410,7 +1410,7 @@ php artisan test --filter=OtpTest
 ```
 Expected: PASS (3 passed)
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/database backend/app/Models/OtpCode.php backend/app/Services/OtpService.php backend/app/Http/Controllers/Api/V1/OtpController.php backend/routes/api.php backend/tests/Feature/Auth/OtpTest.php
@@ -1426,7 +1426,7 @@ git commit -m "feat: add phone OTP request/verify endpoints"
 - Modify: `backend/routes/api.php`
 - Test: `backend/tests/Feature/Auth/RegisterLoginTest.php`
 
-- [ ] **Step 1: Write the AuthController**
+- [x] **Step 1: Write the AuthController**
 
 ```php
 <?php
@@ -1481,7 +1481,7 @@ class AuthController extends Controller
 }
 ```
 
-- [ ] **Step 2: Add the routes**
+- [x] **Step 2: Add the routes**
 
 Add to `backend/routes/api.php`, alongside the OTP routes:
 
@@ -1490,7 +1490,7 @@ Route::post('auth/register', [\App\Http\Controllers\Api\V1\AuthController::class
 Route::post('auth/login', [\App\Http\Controllers\Api\V1\AuthController::class, 'login']);
 ```
 
-- [ ] **Step 3: Write failing feature tests**
+- [x] **Step 3: Write failing feature tests**
 
 ```php
 <?php
@@ -1533,12 +1533,12 @@ it('logs in with the correct password', function () {
 });
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `cd backend && php artisan test --filter=RegisterLoginTest`
 Expected: PASS (3 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/Http/Controllers/Api/V1/AuthController.php backend/routes/api.php backend/tests/Feature/Auth/RegisterLoginTest.php
