@@ -1,0 +1,51 @@
+<?php
+
+namespace App\Http\Controllers\Api\V1;
+
+use App\Http\Controllers\Controller;
+use App\Models\Business;
+use App\Models\Membership;
+use App\Models\User;
+use App\Services\TokenService;
+use App\Support\TenantContext;
+use Illuminate\Http\Request;
+use Illuminate\Support\Facades\DB;
+
+class BusinessController extends Controller
+{
+    public function __construct(private readonly TokenService $tokenService) {}
+
+    public function store(Request $request)
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:120'],
+            'city' => ['nullable', 'string', 'max:80'],
+            'gstin' => ['nullable', 'string', 'max:15'],
+            'default_language' => ['nullable', 'string', 'max:8'],
+        ]);
+
+        $userId = app('tenant.user_id');
+
+        $membership = DB::transaction(function () use ($data, $userId) {
+            $business = Business::create($data);
+
+            // Re-point app.current_tenant at the new business before the insert:
+            // the RLS WITH CHECK only admits a membership for the transaction's
+            // current tenant, and the caller's tid (if any) is a different business.
+            TenantContext::switchTo($business->id);
+
+            return Membership::create([
+                'user_id' => $userId,
+                'business_id' => $business->id,
+                'role' => 'owner',
+            ]);
+        });
+
+        $user = User::find($userId);
+
+        return response()->json([
+            'business' => $membership->business,
+            'token' => $this->tokenService->issue($user, $membership),
+        ], 201);
+    }
+}

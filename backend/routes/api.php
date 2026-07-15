@@ -9,6 +9,8 @@ Route::prefix('v1')->group(function () {
     Route::post('auth/otp/verify', [\App\Http\Controllers\Api\V1\OtpController::class, 'verify']);
 
     Route::middleware(['auth:api', 'tenant.context'])->group(function () {
+        Route::post('businesses', [\App\Http\Controllers\Api\V1\BusinessController::class, 'store']);
+
         Route::get('whoami', function () {
             return response()->json([
                 'user_id' => app('tenant.user_id'),
