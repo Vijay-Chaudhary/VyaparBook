@@ -2523,7 +2523,7 @@ git commit -m "test: confirm SET LOCAL tenant GUC clears between pooled requests
 **Files:**
 - Create: `backend/README.md`
 
-- [ ] **Step 1: Write the README**
+- [x] **Step 1: Write the README**
 
 ```markdown
 # VyaparBook Backend
@@ -2619,12 +2619,37 @@ php artisan test
   app-level scope (defense in depth) — see `app/Traits/BelongsToTenant.php`.
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add backend/README.md
 git commit -m "docs: add backend setup instructions"
 ```
+
+---
+
+## Known Gaps (as implemented)
+
+- **PgBouncer is not exercised anywhere.** Task 16 named two preconditions for its
+  test to mean what its filename says; neither holds on the dev machine as of
+  2026-07-15. `backend/.env` has `DB_PORT=5432` (direct to Postgres) rather than
+  `6432`, while `.env.example` correctly says `6432` — the working `.env` has
+  drifted. `/etc/pgbouncer/pgbouncer.ini` is still the stock package file with no
+  `vyaparbook` database entries, and `/etc/pgbouncer/userlist.txt` is empty, so
+  connecting through 6432 fails with `FATAL: no such database`. The process runs;
+  nothing routes through it.
+
+  Consequence: `PgBouncerPooledConnectionTest` proves the Postgres property that
+  transaction pooling depends on (`SET LOCAL` does not survive its transaction),
+  which is worth having and would catch a regression to session-scoped `SET`. It
+  does **not** prove PgBouncer is configured correctly. The whole suite currently
+  runs against Postgres directly.
+
+  Closing this needs root: configure `pgbouncer.ini` (`pool_mode = transaction`,
+  both `vyaparbook` and `vyaparbook_test` listed) and `userlist.txt`, then flip
+  `DB_PORT` to 6432 and re-run the suite. Steps are written up in
+  `backend/README.md` under "PgBouncer setup". A true integration test also needs
+  concurrent requests to force server-connection reuse — still a follow-up.
 
 ---
 

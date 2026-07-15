@@ -1,66 +1,138 @@
-<p align="center"><a href="https://laravel.com" target="_blank"><img src="https://raw.githubusercontent.com/laravel/art/master/logo-lockup/5%20SVG/2%20CMYK/1%20Full%20Color/laravel-logolockup-cmyk-red.svg" width="400" alt="Laravel Logo"></a></p>
+# VyaparBook Backend
 
-<p align="center">
-<a href="https://github.com/laravel/framework/actions"><img src="https://github.com/laravel/framework/workflows/tests/badge.svg" alt="Build Status"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/dt/laravel/framework" alt="Total Downloads"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/v/laravel/framework" alt="Latest Stable Version"></a>
-<a href="https://packagist.org/packages/laravel/framework"><img src="https://img.shields.io/packagist/l/laravel/framework" alt="License"></a>
-</p>
+Laravel 11 API for VyaparBook's tenancy & auth core. No Docker — Postgres,
+PgBouncer, and Redis run as native local services.
 
-## About Laravel
+## Prerequisites
 
-Laravel is a web application framework with expressive, elegant syntax. We believe development must be an enjoyable and creative experience to be truly fulfilling. Laravel takes the pain out of development by easing common tasks used in many web projects, such as:
+- PHP 8.3, Composer
+- PostgreSQL 15+
+- PgBouncer
+- Redis
 
-- [Simple, fast routing engine](https://laravel.com/docs/routing).
-- [Powerful dependency injection container](https://laravel.com/docs/container).
-- Multiple back-ends for [session](https://laravel.com/docs/session) and [cache](https://laravel.com/docs/cache) storage.
-- Expressive, intuitive [database ORM](https://laravel.com/docs/eloquent).
-- Database agnostic [schema migrations](https://laravel.com/docs/migrations).
-- [Robust background job processing](https://laravel.com/docs/queues).
-- [Real-time event broadcasting](https://laravel.com/docs/broadcasting).
+## One-time Postgres setup
 
-Laravel is accessible, powerful, and provides tools required for large, robust applications.
+1. Create the database and a privileged superuser role for migrations (or use
+   your existing `postgres` superuser):
+   ```sql
+   CREATE DATABASE vyaparbook;
+   ```
+2. After running migrations once (`php artisan migrate --database=pgsql_migrate`,
+   see below), the `vyaparbook_app` role will exist but have no password set —
+   the migration creates the role but deliberately never sets a password, so no
+   secret is embedded in migration history. Until you set one, the app cannot
+   connect and every request fails with `password authentication failed for user
+   "vyaparbook_app"`. Set it to match your `.env`:
+   ```sql
+   ALTER ROLE vyaparbook_app WITH PASSWORD 'change-me';
+   ```
+3. Create the test database. `phpunit.xml` points the suite at it so that running
+   tests never wipes your development data:
+   ```sql
+   CREATE DATABASE vyaparbook_test;
+   ```
+   No grants are needed by hand — the `create_app_role` migration grants against
+   whichever database it runs on, and the test suite migrates this one on its
+   first run.
 
-## Learning Laravel
+## PgBouncer setup
 
-Laravel has the most extensive and thorough [documentation](https://laravel.com/docs) and video tutorial library of all modern web application frameworks, making it a breeze to get started with the framework.
+> **Status: not yet wired up.** The stock `pgbouncer.ini` shipped by the package
+> is still in place, `userlist.txt` is empty, and `.env` currently has
+> `DB_PORT=5432` — so the app talks straight to Postgres and nothing routes
+> through PgBouncer. The steps below are what it takes to close that gap; they
+> need root and have not been applied to this machine. Until they are, treat
+> `tests/Feature/Tenancy/PgBouncerPooledConnectionTest.php` as proving Postgres
+> `SET LOCAL` semantics only, not PgBouncer behaviour (the test says as much).
 
-You may also try the [Laravel Bootcamp](https://bootcamp.laravel.com), where you will be guided through building a modern Laravel application from scratch.
+In `/etc/pgbouncer/pgbouncer.ini`:
+```ini
+[databases]
+vyaparbook = host=127.0.0.1 port=5432 dbname=vyaparbook
+vyaparbook_test = host=127.0.0.1 port=5432 dbname=vyaparbook_test
 
-If you don't feel like reading, [Laracasts](https://laracasts.com) can help. Laracasts contains thousands of video tutorials on a range of topics including Laravel, modern PHP, unit testing, and JavaScript. Boost your skills by digging into our comprehensive video library.
+[pgbouncer]
+pool_mode = transaction
+listen_addr = 127.0.0.1
+listen_port = 6432
+auth_type = md5
+auth_file = /etc/pgbouncer/userlist.txt
+```
 
-## Laravel Sponsors
+`pool_mode = transaction` is required — this project's tenant isolation relies on
+`SET LOCAL` inside one transaction per request, which only works correctly under
+transaction pooling (see `docs/superpowers/specs/2026-07-04-tenancy-auth-core-design.md` §4).
+Under `session` pooling the GUC would outlive the request; under `statement`
+pooling multi-statement transactions break outright.
 
-We would like to extend our thanks to the following sponsors for funding Laravel development. If you are interested in becoming a sponsor, please visit the [Laravel Partners program](https://partners.laravel.com).
+List both databases, not just `vyaparbook` — PgBouncer rejects any database not
+named here with `FATAL: no such database`, and the test suite connects to
+`vyaparbook_test`.
 
-### Premium Partners
+In `/etc/pgbouncer/userlist.txt`, add the app role and its md5 hash (the hash is
+`md5` + `md5(password + username)`):
+```
+"vyaparbook_app" "md5<hash>"
+```
+Generate the hash with:
+```bash
+echo -n "md5"; echo -n "<password>vyaparbook_app" | md5sum | cut -d' ' -f1
+```
 
-- **[Vehikl](https://vehikl.com/)**
-- **[Tighten Co.](https://tighten.co)**
-- **[WebReinvent](https://webreinvent.com/)**
-- **[Kirschbaum Development Group](https://kirschbaumdevelopment.com)**
-- **[64 Robots](https://64robots.com)**
-- **[Curotec](https://www.curotec.com/services/technologies/laravel/)**
-- **[Cyber-Duck](https://cyber-duck.co.uk)**
-- **[DevSquad](https://devsquad.com/hire-laravel-developers)**
-- **[Jump24](https://jump24.co.uk)**
-- **[Redberry](https://redberry.international/laravel/)**
-- **[Active Logic](https://activelogic.com)**
-- **[byte5](https://byte5.de)**
-- **[OP.GG](https://op.gg)**
+Then restart and verify the connection actually goes through the proxy:
+```bash
+sudo service pgbouncer restart
+psql -h 127.0.0.1 -p 6432 -U vyaparbook_app -d vyaparbook_test -c 'select 1;'
+```
+Once that succeeds, set `DB_PORT=6432` in `.env` and re-run `php artisan test`.
 
-## Contributing
+## App setup
 
-Thank you for considering contributing to the Laravel framework! The contribution guide can be found in the [Laravel documentation](https://laravel.com/docs/contributions).
+```bash
+cd backend
+composer install
+cp .env.example .env
+php artisan key:generate
+php artisan jwt:secret
+# Fill in DB_* and DB_MIGRATE_* in .env to match your Postgres/PgBouncer setup.
+# DB_PORT must be PgBouncer's port (6432), not Postgres's (5432) — pointing it at
+# 5432 bypasses PgBouncer entirely, so nothing in the app or the test suite ever
+# exercises transaction pooling and the Task 16 test proves less than it appears to.
+# DB_MIGRATE_PORT is the one that goes direct to Postgres (5432).
+php artisan migrate --database=pgsql_migrate
+php artisan serve
+```
 
-## Code of Conduct
+In a separate terminal, run the queue worker:
+```bash
+cd backend
+php artisan queue:work
+```
 
-In order to ensure that the Laravel community is welcoming to all, please review and abide by the [Code of Conduct](https://laravel.com/docs/contributions#code-of-conduct).
+On WSL, the native services do not survive a restart and must be started by hand:
+```bash
+sudo service postgresql start && sudo service pgbouncer start && sudo service redis-server start
+```
 
-## Security Vulnerabilities
+## Running tests
 
-If you discover a security vulnerability within Laravel, please send an e-mail to Taylor Otwell via [taylor@laravel.com](mailto:taylor@laravel.com). All security vulnerabilities will be promptly addressed.
+```bash
+cd backend
+php artisan test
+```
 
-## License
+The suite does not use Laravel's `RefreshDatabase` — see `tests/RefreshesTenantDatabase.php`
+for why (it is incompatible with the restricted role, RLS, and the one-transaction-per-request
+design). It migrates once per run and truncates as the privileged role between tests.
 
-The Laravel framework is open-sourced software licensed under the [MIT license](https://opensource.org/licenses/MIT).
+## Notes
+
+- All schema migrations run against the `pgsql_migrate` connection (a privileged
+  role, direct to Postgres) — the app's runtime connection (`pgsql`, through
+  PgBouncer, as the restricted `vyaparbook_app` role) has no DDL rights by design.
+- Every tenant-scoped table is protected by Postgres Row-Level Security *and* an
+  app-level scope (defense in depth) — see `app/Traits/BelongsToTenant.php`.
+  `memberships` is the deliberate exception to the flat scope: it carries a
+  bespoke RLS policy so a user's memberships stay visible before any tenant is
+  selected. `businesses`, `users`, `invites`, and `otp_codes` are not tenant-owned
+  data and carry no RLS — see the design spec for the reasoning.
