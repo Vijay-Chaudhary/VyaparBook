@@ -12,6 +12,11 @@ Route::prefix('v1')->group(function () {
         Route::post('businesses', [\App\Http\Controllers\Api\V1\BusinessController::class, 'store']);
         Route::get('businesses/mine', [\App\Http\Controllers\Api\V1\BusinessController::class, 'mine']);
         Route::post('businesses/{id}/switch', [\App\Http\Controllers\Api\V1\BusinessController::class, 'switch']);
+        Route::post('invites/accept', [\App\Http\Controllers\Api\V1\InviteController::class, 'accept']);
+
+        Route::middleware(['require.tenant'])->group(function () {
+            Route::post('businesses/{id}/invite', [\App\Http\Controllers\Api\V1\InviteController::class, 'store']);
+        });
 
         Route::get('whoami', function () {
             return response()->json([
