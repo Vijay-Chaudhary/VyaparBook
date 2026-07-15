@@ -10,6 +10,8 @@ Route::prefix('v1')->group(function () {
 
     Route::middleware(['auth:api', 'tenant.context'])->group(function () {
         Route::post('businesses', [\App\Http\Controllers\Api\V1\BusinessController::class, 'store']);
+        Route::get('businesses/mine', [\App\Http\Controllers\Api\V1\BusinessController::class, 'mine']);
+        Route::post('businesses/{id}/switch', [\App\Http\Controllers\Api\V1\BusinessController::class, 'switch']);
 
         Route::get('whoami', function () {
             return response()->json([

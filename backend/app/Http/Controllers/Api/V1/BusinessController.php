@@ -48,4 +48,35 @@ class BusinessController extends Controller
             'token' => $this->tokenService->issue($user, $membership),
         ], 201);
     }
+
+    public function mine(Request $request)
+    {
+        // No tenant filter: this runs inside SetTenantContext, so
+        // app.current_user_id is set and the memberships RLS policy's user_id
+        // branch exposes the caller's memberships across every business —
+        // which is the whole point of this endpoint.
+        $memberships = Membership::with('business')
+            ->where('user_id', app('tenant.user_id'))
+            ->get();
+
+        return response()->json($memberships->map(fn ($m) => [
+            'business' => $m->business,
+            'role' => $m->role,
+        ]));
+    }
+
+    public function switch(Request $request, string $id)
+    {
+        $membership = Membership::where('user_id', app('tenant.user_id'))
+            ->where('business_id', $id)
+            ->first();
+
+        if (! $membership) {
+            return response()->json(['message' => 'Not a member of this business.'], 403);
+        }
+
+        $user = User::find(app('tenant.user_id'));
+
+        return response()->json(['token' => $this->tokenService->issue($user, $membership)]);
+    }
 }
