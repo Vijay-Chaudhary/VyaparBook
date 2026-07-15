@@ -1883,10 +1883,11 @@ git commit -m "feat: add businesses/mine and business switch endpoints"
 - Create: `backend/app/Policies/InvitePolicy.php`
 - Create: `backend/app/Http/Controllers/Api/V1/InviteController.php`
 - Modify: `backend/routes/api.php`
-- Modify: `backend/app/Providers/AppServiceProvider.php` (register policy)
 - Test: `backend/tests/Feature/Invite/InviteTest.php`
 
-- [ ] **Step 1: Write the migration**
+(No `AppServiceProvider` change: `InvitePolicy` reads `app('tenant.role')` and takes neither a `User` nor a model, so it is a role-check helper the controller calls directly, not a Gate policy there would be anything to register.)
+
+- [x] **Step 1: Write the migration**
 
 ```php
 <?php
@@ -1922,7 +1923,7 @@ return new class extends Migration
 
 No RLS — same reasoning as `otp_codes`: pre-membership, scoped by the unguessable `token` + expiry/redemption state at the app layer.
 
-- [ ] **Step 2: Write the Invite model**
+- [x] **Step 2: Write the Invite model**
 
 ```php
 <?php
@@ -1951,7 +1952,7 @@ class Invite extends Model
 }
 ```
 
-- [ ] **Step 3: Write the InvitePolicy**
+- [x] **Step 3: Write the InvitePolicy**
 
 ```php
 <?php
@@ -1968,7 +1969,7 @@ class InvitePolicy
 }
 ```
 
-- [ ] **Step 4: Write the InviteController**
+- [x] **Step 4: Write the InviteController**
 
 ```php
 <?php
@@ -2030,6 +2031,18 @@ class InviteController extends Controller
 
         $userId = app('tenant.user_id');
 
+        // Invite links get shared in group chats, so an existing member tapping
+        // one is routine. Without this the memberships unique index raises and
+        // the request 500s. The invite is deliberately left unredeemed so the
+        // person it was actually meant for can still use it.
+        $alreadyMember = Membership::where('user_id', $userId)
+            ->where('business_id', $invite->business_id)
+            ->exists();
+
+        if ($alreadyMember) {
+            return response()->json(['message' => 'Already a member of this business.'], 409);
+        }
+
         $membership = DB::transaction(function () use ($invite, $userId) {
             TenantContext::switchTo($invite->business_id);
 
@@ -2039,7 +2052,13 @@ class InviteController extends Controller
                 'role' => $invite->role,
             ]);
 
-            $invite->update(['redeemed_by' => $userId, 'redeemed_at' => Carbon::now()]);
+            // Assigned directly rather than via update(): redeemed_by/redeemed_at
+            // are not in the model's $fillable (and must not be — they are never
+            // client-supplied), so mass assignment silently drops them, leaving
+            // the invite redeemable by anyone holding the link until it expires.
+            $invite->redeemed_by = $userId;
+            $invite->redeemed_at = Carbon::now();
+            $invite->save();
 
             return $membership;
         });
@@ -2051,7 +2070,7 @@ class InviteController extends Controller
 }
 ```
 
-- [ ] **Step 5: Add the routes**
+- [x] **Step 5: Add the routes**
 
 Add `invites/accept` inside the `['auth:api', 'tenant.context']` group, and `businesses/{id}/invite` inside a nested `['require.tenant']` group:
 
@@ -2063,13 +2082,14 @@ Route::middleware(['require.tenant'])->group(function () {
 });
 ```
 
-- [ ] **Step 6: Write failing feature tests**
+- [x] **Step 6: Write failing feature tests**
 
 ```php
 <?php
 // tests/Feature/Invite/InviteTest.php
 
 use App\Models\Business;
+use App\Models\Invite;
 use App\Models\Membership;
 use App\Models\User;
 use App\Services\TokenService;
@@ -2120,18 +2140,74 @@ it('lets a new user accept an invite and become a member', function () {
     expect($payload->get('tid'))->toBe($business->id);
     expect($payload->get('role'))->toBe('salesman');
 });
+
+it('rejects accepting an invite for a business the user already belongs to', function () {
+    $owner = User::factory()->create();
+    $business = Business::factory()->create();
+    $ownerMembership = Membership::on('pgsql_migrate')->create(['user_id' => $owner->id, 'business_id' => $business->id, 'role' => 'owner']);
+    $ownerToken = (new TokenService())->issue($owner, $ownerMembership);
+
+    $inviteResponse = $this->withHeader('Authorization', "Bearer {$ownerToken}")
+        ->postJson("/api/v1/businesses/{$business->id}/invite", ['role' => 'salesman'])
+        ->assertCreated();
+
+    $inviteToken = str($inviteResponse->json('invite_link'))->after('token=')->toString();
+
+    $this->withHeader('Authorization', "Bearer {$ownerToken}")
+        ->postJson('/api/v1/invites/accept', ['token' => $inviteToken])
+        ->assertStatus(409);
+
+    // The invite must survive unredeemed so the person it was meant for can use it.
+    expect(Invite::on('pgsql_migrate')->where('token', $inviteToken)->first()->redeemed_at)->toBeNull();
+});
+
+it('marks an invite redeemed so a second person cannot reuse the link', function () {
+    $owner = User::factory()->create();
+    $business = Business::factory()->create();
+    $ownerMembership = Membership::on('pgsql_migrate')->create(['user_id' => $owner->id, 'business_id' => $business->id, 'role' => 'owner']);
+    $ownerToken = (new TokenService())->issue($owner, $ownerMembership);
+
+    $inviteResponse = $this->withHeader('Authorization', "Bearer {$ownerToken}")
+        ->postJson("/api/v1/businesses/{$business->id}/invite", ['role' => 'salesman'])
+        ->assertCreated();
+
+    $inviteToken = str($inviteResponse->json('invite_link'))->after('token=')->toString();
+
+    $firstUser = User::factory()->create();
+    $this->withHeader('Authorization', 'Bearer ' . (new TokenService())->issue($firstUser))
+        ->postJson('/api/v1/invites/accept', ['token' => $inviteToken])
+        ->assertOk();
+
+    $invite = Invite::on('pgsql_migrate')->where('token', $inviteToken)->first();
+    expect($invite->redeemed_at)->not->toBeNull();
+    expect($invite->redeemed_by)->toBe($firstUser->id);
+
+    // An invite is single-use. A second person holding the same link — forwarded
+    // from a group chat, say — must not be able to join the business with it.
+    $secondUser = User::factory()->create();
+    $this->withHeader('Authorization', 'Bearer ' . (new TokenService())->issue($secondUser))
+        ->postJson('/api/v1/invites/accept', ['token' => $inviteToken])
+        ->assertStatus(422);
+
+    expect(Membership::on('pgsql_migrate')->where('user_id', $secondUser->id)->exists())->toBeFalse();
+});
 ```
 
-- [ ] **Step 7: Run the migration and tests**
+The last two tests cover bugs the first three do not reach, both found by driving the endpoints for real rather than by reading the code:
+
+- **Accepting an invite for a business you already belong to returned HTTP 500** — the `memberships` unique index raised and nothing caught it. Routine in practice: invite links get forwarded, and existing members tap them.
+- **Invites were never marked redeemed, so a single link could be redeemed by unlimited people.** `redeemed_by`/`redeemed_at` are absent from `Invite::$fillable`, so `$invite->update([...])` was silently a no-op. The first three tests all pass with this bug present — none of them checks redemption state or tries to reuse a link. `invites` carries no RLS, so nothing at the database layer backstops it either; the token is the only thing standing between a forwarded link and a stranger joining the business.
+
+- [x] **Step 7: Run the migration and tests**
 
 ```bash
 cd backend
 php artisan migrate --database=pgsql_migrate
 php artisan test --filter=InviteTest
 ```
-Expected: PASS (3 passed)
+Expected: PASS (5 passed)
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add backend/database backend/app/Models/Invite.php backend/app/Policies backend/app/Http/Controllers/Api/V1/InviteController.php backend/routes/api.php backend/tests/Feature/Invite/InviteTest.php
