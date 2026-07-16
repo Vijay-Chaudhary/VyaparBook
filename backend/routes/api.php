@@ -16,6 +16,11 @@ Route::prefix('v1')->group(function () {
 
         Route::middleware(['require.tenant'])->group(function () {
             Route::post('businesses/{id}/invite', [\App\Http\Controllers\Api\V1\InviteController::class, 'store']);
+
+            Route::post('products', [\App\Http\Controllers\Api\V1\ProductController::class, 'store']);
+            Route::patch('products/{id}', [\App\Http\Controllers\Api\V1\ProductController::class, 'update']);
+            Route::delete('products/{id}', [\App\Http\Controllers\Api\V1\ProductController::class, 'destroy']);
+            Route::post('products/{id}/restore', [\App\Http\Controllers\Api\V1\ProductController::class, 'restore']);
         });
 
         Route::get('whoami', function () {
