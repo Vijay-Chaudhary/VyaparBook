@@ -21,6 +21,11 @@ Route::prefix('v1')->group(function () {
             Route::patch('products/{id}', [\App\Http\Controllers\Api\V1\ProductController::class, 'update']);
             Route::delete('products/{id}', [\App\Http\Controllers\Api\V1\ProductController::class, 'destroy']);
             Route::post('products/{id}/restore', [\App\Http\Controllers\Api\V1\ProductController::class, 'restore']);
+
+            Route::post('pack-sizes', [\App\Http\Controllers\Api\V1\PackSizeController::class, 'store']);
+            Route::patch('pack-sizes/{id}', [\App\Http\Controllers\Api\V1\PackSizeController::class, 'update']);
+            Route::delete('pack-sizes/{id}', [\App\Http\Controllers\Api\V1\PackSizeController::class, 'destroy']);
+            Route::post('pack-sizes/{id}/restore', [\App\Http\Controllers\Api\V1\PackSizeController::class, 'restore']);
         });
 
         Route::get('whoami', function () {
