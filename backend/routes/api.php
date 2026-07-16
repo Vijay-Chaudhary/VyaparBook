@@ -31,6 +31,8 @@ Route::prefix('v1')->group(function () {
             Route::patch('product-packs/{id}', [\App\Http\Controllers\Api\V1\ProductPackController::class, 'update']);
             Route::delete('product-packs/{id}', [\App\Http\Controllers\Api\V1\ProductPackController::class, 'destroy']);
             Route::post('product-packs/{id}/restore', [\App\Http\Controllers\Api\V1\ProductPackController::class, 'restore']);
+
+            Route::get('catalog', [\App\Http\Controllers\Api\V1\CatalogController::class, 'index']);
         });
 
         Route::get('whoami', function () {
