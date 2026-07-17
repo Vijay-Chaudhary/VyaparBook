@@ -153,3 +153,32 @@ design). It migrates once per run and truncates as the privileged role between t
   bespoke RLS policy so a user's memberships stay visible before any tenant is
   selected. `businesses`, `users`, `invites`, and `otp_codes` are not tenant-owned
   data and carry no RLS — see the design spec for the reasoning.
+
+## Catalog API
+
+All catalog routes require a selected tenant (`auth:api` + `tenant.context` +
+`require.tenant`).
+
+| Route | Roles | Notes |
+|---|---|---|
+| `GET /api/v1/catalog` | any | Whole catalog in one payload; `?include_archived=1` for the management view |
+| `POST /api/v1/catalog/seed` | owner, admin | One-time onboarding; 409 if the catalog is non-empty |
+| `POST\|PATCH\|DELETE /api/v1/products/{id}` | owner, admin | `DELETE` archives, it does not delete |
+| `POST /api/v1/products/{id}/restore` | owner, admin | |
+| …same shape for `/pack-sizes` and `/product-packs` | owner, admin | |
+
+Templates live in `database/catalog_templates/*.php`. Adding a vertical is a new
+file — no migration, no code change. `blank` is a valid template that seeds nothing.
+
+Two behaviours that look like bugs and are not:
+
+- **A cross-tenant row returns 404, not 403.** RLS hides other tenants' rows, so
+  `findOrFail` genuinely finds nothing. This also avoids confirming that another
+  tenant's id is real.
+- **`Rule::unique('pack_sizes', 'label')` has no tenant clause.** Validation runs
+  inside the request transaction with `app.current_tenant` set, so RLS has already
+  narrowed the table to one business.
+
+Archiving is evaluated at read time and never cascaded: a product pack is hidden
+when it, its product, or its pack size is archived, but archiving a product does
+not write `archived_at` onto its packs. This keeps restore lossless.
