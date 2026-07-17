@@ -479,10 +479,11 @@ class KhataPolicy
         return in_array(app('tenant.role'), ['owner', 'admin'], true);
     }
 
-    /** PRD §7 "Record payments": all four roles. */
+    /** PRD §7 "Record payments": all four roles. Explicit whitelist rather than
+     *  `!== null` so an unexpected role value can never slip through. */
     public function recordPayment(): bool
     {
-        return app('tenant.role') !== null;
+        return in_array(app('tenant.role'), ['owner', 'admin', 'salesman', 'accountant'], true);
     }
 
     // "View customer khata" and customer CRUD reuse recordSale-level gating for
