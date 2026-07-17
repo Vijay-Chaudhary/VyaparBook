@@ -37,7 +37,7 @@
 | 15 | `POST /catalog/seed` endpoint | ✅ Done | `2f4aabf` |
 | 16 | DB-level RLS proof (`CatalogRlsTest`) | ✅ Done | `083b403` |
 | 17 | Catalog cases in the cross-tenant leak suite | ✅ Done | `5028a08` |
-| 18 | Full suite, docs, plan close-out | ✅ Done | `f8ba0d8` |
+| 18 | Full suite, docs, plan close-out | ✅ Done | `ef7b461` |
 
 **Verified:** full suite — 102 passed (200 assertions) on 2026-07-17.
 
