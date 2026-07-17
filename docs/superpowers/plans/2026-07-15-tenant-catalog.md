@@ -14,6 +14,35 @@
 
 ---
 
+## Progress (updated 2026-07-17)
+
+**15 of 18 tasks complete.** The full catalog slice — models, RLS, CRUD, aggregate read, templates and seeding — is built, committed, and green against a live Postgres. What remains is the tenant-isolation test hardening (Tasks 16–17) and the close-out (Task 18).
+
+| # | Task | Status | Commit |
+|---|------|--------|--------|
+| 1 | Container defaults for `tenant.*` bindings | ✅ Done | `7ce70de` |
+| 2 | `TenantAwareJob` binds the app-level tenant | ✅ Done | `2bf6b5d` |
+| 3 | `HasVersion` trait | ✅ Done | `4c88963` |
+| 4 | Product model, migration, factory | ✅ Done | `9f1382f` |
+| 5 | PackSize model, migration, factory | ✅ Done | `184783d` |
+| 6 | ProductPack model, migration, factory | ✅ Done | `7974b0b` |
+| 7 | `CatalogService::suggestedCostPrice` | ✅ Done | `00c0cfb` |
+| 8 | `CatalogPolicy` | ✅ Done | `7475002` |
+| 9 | Product CRUD + archive/restore | ✅ Done | `7f434fe` |
+| 10 | RBAC coverage for catalog writes | ✅ Done | `cbf5dc9` |
+| 11 | PackSize CRUD + archive/restore | ✅ Done | `73057cc` |
+| 12 | ProductPack CRUD + archive/restore | ✅ Done | `2079db2` |
+| 13 | `GET /catalog` aggregate read | ✅ Done | `7d1520c` |
+| 14 | Catalog templates + `CatalogTemplateService` | ✅ Done | `dc1b0aa` |
+| 15 | `POST /catalog/seed` endpoint | ✅ Done | `2f4aabf` |
+| 16 | DB-level RLS proof (`CatalogRlsTest`) | ⬜ Pending | — |
+| 17 | Catalog cases in the cross-tenant leak suite | ⬜ Pending | — |
+| 18 | Full suite, docs, plan close-out | ⬜ Pending | — |
+
+**Verified:** `tests/Feature/Catalog` — 33 passed (74 assertions) on 2026-07-17.
+
+---
+
 ## Two pre-existing gaps this slice must close first
 
 Tasks 1 and 2 are not catalog features. They fix container/queue behaviour that has never fired because **no model used `BelongsToTenant` until now**. Both were verified against the running app, not assumed:
