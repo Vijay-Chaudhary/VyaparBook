@@ -518,6 +518,8 @@ Follows `ProductController` exactly: `(new KhataPolicy())->recordSale()` gates w
 
 - [ ] **Step 1: `store` — idempotent, append-only, price-snapshotting.**
 
+> **As built (refines the sketch below):** the committed controller resolves every pack and freezes its rate *first*, accumulating the total, then saves the sale **once** with that total — instead of saving with `0.00` and updating after the line loop. A second save would bump `HasVersion` to 2 on a brand-new sale (the Task 3 lesson). Lines are then written with the now-known `sale_id`. Behaviour is otherwise identical to the sketch.
+
 ```php
 public function store(Request $request, KhataService $khata)
 {

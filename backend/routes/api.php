@@ -39,6 +39,9 @@ Route::prefix('v1')->group(function () {
             Route::patch('customers/{id}', [\App\Http\Controllers\Api\V1\CustomerController::class, 'update']);
             Route::delete('customers/{id}', [\App\Http\Controllers\Api\V1\CustomerController::class, 'destroy']);
             Route::post('customers/{id}/restore', [\App\Http\Controllers\Api\V1\CustomerController::class, 'restore']);
+
+            Route::post('sales', [\App\Http\Controllers\Api\V1\SaleController::class, 'store']);
+            Route::post('sales/{id}/void', [\App\Http\Controllers\Api\V1\SaleController::class, 'void']);
         });
 
         Route::get('whoami', function () {
