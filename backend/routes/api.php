@@ -45,6 +45,9 @@ Route::prefix('v1')->group(function () {
 
             Route::post('payments', [\App\Http\Controllers\Api\V1\PaymentController::class, 'store']);
             Route::post('payments/{id}/reverse', [\App\Http\Controllers\Api\V1\PaymentController::class, 'reverse']);
+
+            Route::get('khata', [\App\Http\Controllers\Api\V1\KhataController::class, 'index']);
+            Route::get('khata/{id}', [\App\Http\Controllers\Api\V1\KhataController::class, 'show']);
         });
 
         Route::get('whoami', function () {
