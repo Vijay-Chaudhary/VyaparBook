@@ -42,6 +42,9 @@ Route::prefix('v1')->group(function () {
 
             Route::post('sales', [\App\Http\Controllers\Api\V1\SaleController::class, 'store']);
             Route::post('sales/{id}/void', [\App\Http\Controllers\Api\V1\SaleController::class, 'void']);
+
+            Route::post('payments', [\App\Http\Controllers\Api\V1\PaymentController::class, 'store']);
+            Route::post('payments/{id}/reverse', [\App\Http\Controllers\Api\V1\PaymentController::class, 'reverse']);
         });
 
         Route::get('whoami', function () {
