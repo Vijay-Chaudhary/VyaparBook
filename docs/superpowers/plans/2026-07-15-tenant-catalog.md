@@ -16,7 +16,7 @@
 
 ## Progress (updated 2026-07-17)
 
-**15 of 18 tasks complete.** The full catalog slice — models, RLS, CRUD, aggregate read, templates and seeding — is built, committed, and green against a live Postgres. What remains is the tenant-isolation test hardening (Tasks 16–17) and the close-out (Task 18).
+**16 of 18 tasks complete.** The full catalog slice — models, RLS, CRUD, aggregate read, templates and seeding — is built, committed, and green against a live Postgres, and the DB-level RLS proof is in place. What remains is the cross-tenant leak-suite cases (Task 17) and the close-out (Task 18).
 
 | # | Task | Status | Commit |
 |---|------|--------|--------|
@@ -35,7 +35,7 @@
 | 13 | `GET /catalog` aggregate read | ✅ Done | `7d1520c` |
 | 14 | Catalog templates + `CatalogTemplateService` | ✅ Done | `dc1b0aa` |
 | 15 | `POST /catalog/seed` endpoint | ✅ Done | `2f4aabf` |
-| 16 | DB-level RLS proof (`CatalogRlsTest`) | ⬜ Pending | — |
+| 16 | DB-level RLS proof (`CatalogRlsTest`) | ✅ Done | `083b403` |
 | 17 | Catalog cases in the cross-tenant leak suite | ⬜ Pending | — |
 | 18 | Full suite, docs, plan close-out | ⬜ Pending | — |
 
