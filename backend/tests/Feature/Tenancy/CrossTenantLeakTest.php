@@ -3,6 +3,7 @@
 
 use App\Models\Business;
 use App\Models\Membership;
+use App\Models\Product;
 use App\Models\User;
 use App\Services\TokenService;
 
@@ -94,4 +95,73 @@ it('never lets accepting an expired invite create a membership', function () {
         ->assertStatus(422);
 
     expect(Membership::on('pgsql_migrate')->where('user_id', $newUser->id)->exists())->toBeFalse();
+});
+
+it('never returns business Bs catalog to business A', function () {
+    $businessA = Business::factory()->create();
+    $businessB = Business::factory()->create();
+
+    $userA = User::factory()->create();
+    $membershipA = Membership::on('pgsql_migrate')->create([
+        'user_id' => $userA->id, 'business_id' => $businessA->id, 'role' => 'owner',
+    ]);
+
+    Product::on('pgsql_migrate')->create([
+        'business_id' => $businessB->id, 'name_hi' => 'हल्दी', 'name_en' => 'Haldi',
+    ]);
+
+    $token = (new TokenService())->issue($userA, $membershipA);
+
+    $this->withHeader('Authorization', "Bearer {$token}")
+        ->getJson('/api/v1/catalog')
+        ->assertOk()
+        ->assertJsonCount(0, 'products');
+});
+
+it('rejects business As owner reading business Bs product by id', function () {
+    $businessA = Business::factory()->create();
+    $businessB = Business::factory()->create();
+
+    $userA = User::factory()->create();
+    $membershipA = Membership::on('pgsql_migrate')->create([
+        'user_id' => $userA->id, 'business_id' => $businessA->id, 'role' => 'owner',
+    ]);
+
+    $foreign = Product::on('pgsql_migrate')->create([
+        'business_id' => $businessB->id, 'name_hi' => 'हल्दी',
+    ]);
+
+    $token = (new TokenService())->issue($userA, $membershipA);
+
+    // 404, not 403: a 403 would confirm the row exists, leaking that a
+    // competitor's product id is real.
+    $this->withHeader('Authorization', "Bearer {$token}")
+        ->patchJson("/api/v1/products/{$foreign->id}", ['name_en' => 'Stolen'])
+        ->assertStatus(404);
+});
+
+it('rejects business As owner archiving business Bs product', function () {
+    $businessA = Business::factory()->create();
+    $businessB = Business::factory()->create();
+
+    $userA = User::factory()->create();
+    $membershipA = Membership::on('pgsql_migrate')->create([
+        'user_id' => $userA->id, 'business_id' => $businessA->id, 'role' => 'owner',
+    ]);
+
+    $foreign = Product::on('pgsql_migrate')->create([
+        'business_id' => $businessB->id, 'name_hi' => 'हल्दी',
+    ]);
+
+    $token = (new TokenService())->issue($userA, $membershipA);
+
+    $this->withHeader('Authorization', "Bearer {$token}")
+        ->deleteJson("/api/v1/products/{$foreign->id}")
+        ->assertStatus(404);
+
+    // And it really is untouched. withoutGlobalScopes() because the request
+    // above bound app('tenant.id') to business A for the rest of the process;
+    // BelongsToTenant's scope would otherwise filter this business-B row out and
+    // the read would see null — hiding, not proving, that the row is intact.
+    expect(Product::on('pgsql_migrate')->withoutGlobalScopes()->find($foreign->id)->archived_at)->toBeNull();
 });
