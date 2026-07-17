@@ -33,6 +33,7 @@ Route::prefix('v1')->group(function () {
             Route::post('product-packs/{id}/restore', [\App\Http\Controllers\Api\V1\ProductPackController::class, 'restore']);
 
             Route::get('catalog', [\App\Http\Controllers\Api\V1\CatalogController::class, 'index']);
+            Route::post('catalog/seed', [\App\Http\Controllers\Api\V1\CatalogController::class, 'seed']);
         });
 
         Route::get('whoami', function () {

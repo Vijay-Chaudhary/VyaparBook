@@ -6,10 +6,15 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\PackSize;
 use App\Models\Product;
+use App\Policies\CatalogPolicy;
+use App\Services\CatalogTemplateService;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class CatalogController extends Controller
 {
+    public function __construct(private readonly CatalogTemplateService $templateService) {}
+
     /**
      * The whole tenant catalog in one response. Readable by every role: a
      * salesman cannot sell without it and an accountant needs it to read a khata.
@@ -77,5 +82,33 @@ class CatalogController extends Controller
                 'version' => $packSize->version,
             ])->values(),
         ]);
+    }
+
+    public function seed(Request $request)
+    {
+        if (! (new CatalogPolicy())->manage()) {
+            return response()->json(
+                ['message' => 'Only owners and admins can manage the catalog.'],
+                403
+            );
+        }
+
+        $data = $request->validate([
+            'template' => ['required', 'string', Rule::in(CatalogTemplateService::available())],
+        ]);
+
+        // Seeding is guarded, not idempotent. Without this, a second seed hits
+        // the pack_sizes unique index and surfaces a raw constraint violation as
+        // a 500. PRD §5 frames this as a one-time onboarding step; a 409 states
+        // that rule, a duplicate-key crash does not.
+        if (Product::query()->exists()) {
+            return response()->json([
+                'message' => 'Catalog is not empty. Seeding is a one-time onboarding step.',
+            ], 409);
+        }
+
+        $this->templateService->apply($data['template'], app('tenant.id'));
+
+        return response()->json(['message' => 'Catalog seeded.'], 201);
     }
 }
