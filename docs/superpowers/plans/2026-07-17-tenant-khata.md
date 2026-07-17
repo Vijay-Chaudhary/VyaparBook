@@ -44,7 +44,7 @@
 
 ## Two foundations this slice adds before any domain table
 
-1. **A global `sync_seq` sequence + `HasSyncSequence` trait.** Delta pull needs a *total order* across a tenant's rows. `HasVersion`'s per-row counter can't serve — it starts at 1 on every row, so it isn't monotonic across rows. A global Postgres sequence stamped on every insert/update gives one monotonic stream; RLS narrows the pull to one tenant. The restricted `vyaparbook_app` role needs `USAGE` on the sequence (DDL grants, unlike table privileges, are **not** covered by the `ALTER DEFAULT PRIVILEGES` from `create_app_role`).
+1. **A global `sync_seq` sequence + `HasSyncSequence` trait.** Delta pull needs a *total order* across a tenant's rows. `HasVersion`'s per-row counter can't serve — it starts at 1 on every row, so it isn't monotonic across rows. A global Postgres sequence stamped on every insert/update gives one monotonic stream; RLS narrows the pull to one tenant. No explicit grant is needed: `create_app_role` already runs `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES`, so a sequence created later by the same privileged role is usable by the restricted `vyaparbook_app` role — the same mechanism the catalog tables rely on for their table grants. (The `HasSyncSequenceTraitTest` writes on the restricted connection, so it proves this path.)
 2. **A client-`uuid` idempotency convention.** Every syncable table gets a `uuid` column with a `(business_id, uuid)` unique index. Writes go through a "find-by-uuid or create" path so a sale/payment retried over a flaky link posts exactly once (PRD §9). This is data + a service helper, not a trait — the controller must decide the *response* (200 replay vs 201 created).
 
 ---
@@ -129,14 +129,10 @@ return new class extends Migration
     {
         // One global sequence, not one per tenant: it only has to be monotonic,
         // never gap-free, and RLS narrows every pull to a single tenant's rows.
+        // No explicit GRANT: create_app_role's ALTER DEFAULT PRIVILEGES ... ON
+        // SEQUENCES already makes this usable by the restricted role (same as the
+        // catalog tables' grants).
         DB::connection('pgsql_migrate')->statement('CREATE SEQUENCE sync_seq_global');
-
-        // ALTER DEFAULT PRIVILEGES from create_app_role covers TABLES, not
-        // SEQUENCES — the restricted runtime role needs USAGE explicitly or every
-        // insert through pgsql fails with "permission denied for sequence".
-        DB::connection('pgsql_migrate')->statement(
-            'GRANT USAGE ON SEQUENCE sync_seq_global TO vyaparbook_app'
-        );
     }
 
     public function down(): void
