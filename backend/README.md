@@ -182,3 +182,47 @@ Two behaviours that look like bugs and are not:
 Archiving is evaluated at read time and never cascaded: a product pack is hidden
 when it, its product, or its pack size is archived, but archiving a product does
 not write `archived_at` onto its packs. This keeps restore lossless.
+
+## Khata & Sync API
+
+The transactional core — customers, an append-only sales/payments ledger, and the
+offline sync endpoints. All routes require a selected tenant (`auth:api` +
+`tenant.context` + `require.tenant`).
+
+| Route | Roles | Notes |
+|---|---|---|
+| `GET /api/v1/khata` | any | Every customer with its outstanding; `?include_archived=1` for the full view |
+| `GET /api/v1/khata/{id}` | any | One customer's time-ordered statement with a running balance |
+| `POST\|PATCH\|DELETE /api/v1/customers/{id}` | owner, admin, salesman | `DELETE` archives; idempotent create by `uuid` |
+| `POST /api/v1/sales` | owner, admin, salesman | Idempotent by `uuid`; freezes each line's rate |
+| `POST /api/v1/sales/{id}/void` | owner, admin | Writes a reversing entry; never mutates the original |
+| `POST /api/v1/payments` | owner, admin, salesman, accountant | Idempotent by `uuid` |
+| `POST /api/v1/payments/{id}/reverse` | owner, admin | Reversing entry |
+| `POST /api/v1/sync/push` | any (per-mutation role check) | Drains the offline outbox; see below |
+| `GET /api/v1/sync/pull?since=` | any | Delta since a `sync_seq` cursor |
+
+Four rules that look surprising and are deliberate:
+
+- **The ledger is append-only.** A sale or payment is immutable once written. A
+  void or reversal is a *new* row whose `reverses_id` points at the original and
+  whose amounts are negated. `outstanding = opening_balance + Σ sale.total −
+  Σ payment.amount` is therefore always recomputable, and reversals net themselves
+  out. Nothing is ever edited or deleted.
+- **`sale_lines.rate` is a snapshot.** It is copied from the product pack at sale
+  time and stored, never read live — a two-year-old sale reflects the price then,
+  not today's catalog.
+- **Every write is idempotent by `(business_id, uuid)`.** A sale/payment/customer
+  retried over a flaky link posts exactly once; the replay returns the existing
+  row (`200`) instead of creating a duplicate (`201`). The REST endpoints and
+  `sync/push` share one write path (`LedgerWriter`), so online and offline creates
+  cannot drift.
+- **A cross-tenant reference returns 404, not 403** (RLS hides the row), and
+  `sync/push` rejects any mutation whose `tenant_id` ≠ the session tenant at the
+  app layer *before* RLS's `WITH CHECK` would — reported per item, never fatal to
+  the batch.
+
+Delta sync uses a globally monotonic `sync_seq` (a Postgres sequence stamped on
+every insert/update via `HasSyncSequence`). `pull` returns rows with `sync_seq >
+since` ordered by `sync_seq`, plus the new cursor; RLS guarantees the response
+holds only the caller's tenant. Archived rows ride the delta so the client learns
+to hide them.

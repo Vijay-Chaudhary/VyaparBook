@@ -21,6 +21,50 @@
 
 ---
 
+## Status — ✅ complete (2026-07-17)
+
+All 16 tasks shipped and committed. Full suite: **171 passed (389 assertions)** — 102 baseline (end of the catalog slice) + 69 from this slice. The whole transactional core (customers, append-only sales/payments ledger, outstanding) and the offline sync loop (idempotent push with tenant-mismatch rejection, delta pull on `sync_seq`) are built, tested against a live Postgres, and documented in `backend/README.md`.
+
+| # | Task | Commit |
+|---|------|--------|
+| 1 | sync_seq sequence + HasSyncSequence trait | `89b8506` |
+| 2 | Customer model | `ed69f5d` |
+| 3 | Sale + SaleLine models | `ede32ff` |
+| 4 | Payment model | `1112e2f` |
+| 5 | KhataService (outstanding, ledger) | `abf2bdf` |
+| 6 | KhataPolicy | `051a509` |
+| 7 | Customer CRUD | `7d42a66` |
+| 8 | Sale create + void | `dd3b0a3` |
+| 9 | Payment record + reverse | `eea1bb0` |
+| 10 | Khata reads | `cce5567` |
+| 11 | Sync push (+ LedgerWriter) | `e085d8c` |
+| 12 | Sync pull | `53c6f78` |
+| 13 | RBAC coverage | `84f6a4c` |
+| 14 | DB-level RLS proof | `6f1f123` |
+| 15 | Cross-tenant leak cases | `89b5a7a` |
+| 16 | Full suite, docs, close-out | _(this commit)_ |
+
+### Deviations from the plan as written (all corrected in-line above)
+
+- **`created_by` is a `foreignId` (bigint)**, not `foreignUuid` — `users.id` is a bigint auto-key, unlike the uuid PKs on tenant tables.
+- **Self-referencing `reverses_id` FK** added in a follow-up `Schema::table()` — Postgres can't reference a table mid-create.
+- **Single-write sale total** — total computed up front so a fresh sale stays at `version 1` (the two-save sketch bumped it to 2).
+- **`sync_seq` migration uses `CREATE SEQUENCE IF NOT EXISTS`** — a standalone sequence survives `migrate:fresh`, so a re-run must be a no-op.
+- **`LedgerWriter` service extracted** so the REST controllers and `sync/push` share one idempotent write path (the plan's "reuse the create paths", made literal). Push lives in `SyncController`, not a separate `SyncService`; pull too.
+- **`outstandingFor` sums via `::text`** so no PHP float ever touches a rupee.
+- **`IdempotencyTest.php` was not created** as a separate file — idempotency is proven inside `CustomerCrudTest`, `SaleTest`, `PaymentTest`, and `SyncPushTest` instead.
+
+### Known Gaps
+
+Nothing was cut from scope. Deferred by design (each noted in Scope above):
+
+- **Redis-cached outstanding** (PRD §10) — computed on read; the cache will wrap `KhataService::outstandingFor` unchanged when it lands.
+- **Plan-limit gating** (PRD §8, e.g. ≤50 customers on Free) — no billing logic in this slice.
+- **No frontend / Dexie outbox** — this slice ships and proves the *server* sync contract (`SyncPushTest`/`SyncPullTest`), not a live client.
+- **PgBouncer still not configured** (carried forward from every prior slice) — the suite runs against Postgres directly, so the `SET LOCAL` GUC and RLS guarantees are proven against Postgres semantics, not transaction pooling in situ. A green suite is not evidence pooling is safe.
+
+---
+
 ## Scope
 
 **In scope:**
@@ -114,7 +158,7 @@ backend/
 - Create: `backend/app/Traits/HasSyncSequence.php`
 - Test: `backend/tests/Unit/HasSyncSequenceTraitTest.php`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```php
 <?php
@@ -143,7 +187,7 @@ return new class extends Migration
 };
 ```
 
-- [ ] **Step 2: Write the trait**
+- [x] **Step 2: Write the trait**
 
 ```php
 <?php
@@ -179,13 +223,13 @@ trait HasSyncSequence
 }
 ```
 
-- [ ] **Step 3: Write a failing test against a fixture table**
+- [x] **Step 3: Write a failing test against a fixture table**
 
 Mirror `HasVersionTraitTest`'s fixture-table approach (`tests/Unit/HasVersionTraitTest.php`): a throwaway model on `pgsql_migrate` with a `sync_seq` column, asserting (a) an insert stamps a positive value, (b) a second insert stamps a strictly greater value, (c) an update advances it again.
 
-- [ ] **Step 4: Run** — `php artisan test --filter=HasSyncSequenceTraitTest` → PASS (3 passed).
+- [x] **Step 4: Run** — `php artisan test --filter=HasSyncSequenceTraitTest` → PASS (3 passed).
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/database/migrations/2026_07_17_000001_create_sync_seq_sequence.php \
@@ -204,7 +248,7 @@ git commit -m "feat: add global sync_seq sequence and HasSyncSequence trait"
 - Create: `backend/database/factories/CustomerFactory.php`
 - Test: `backend/tests/Unit/` coverage folded into `CustomerCrudTest` (Task 7); this task ships the model the rest depends on.
 
-- [ ] **Step 1: Write the migration** (RLS policy identical in shape to `products`)
+- [x] **Step 1: Write the migration** (RLS policy identical in shape to `products`)
 
 ```php
 Schema::connection('pgsql_migrate')->create('customers', function (Blueprint $table) {
@@ -230,16 +274,16 @@ Schema::connection('pgsql_migrate')->create('customers', function (Blueprint $ta
 // USING/WITH CHECK (business_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
 ```
 
-- [ ] **Step 2: Write the model** — `use BelongsToTenant, HasFactory, HasUuids, HasVersion, HasSyncSequence;`
+- [x] **Step 2: Write the model** — `use BelongsToTenant, HasFactory, HasUuids, HasVersion, HasSyncSequence;`
   `$fillable = ['business_id', 'uuid', 'name', 'village', 'phone', 'opening_balance'];`
   `$casts = ['opening_balance' => 'decimal:2', 'archived_at' => 'datetime', 'version' => 'integer', 'sync_seq' => 'integer'];`
   Relations: `sales(): HasMany`, `payments(): HasMany`.
 
-- [ ] **Step 3: Write the factory** — `business_id => Business::factory()`, `uuid => $this->faker->uuid()`, name/village/phone faker, `opening_balance => '0.00'`.
+- [x] **Step 3: Write the factory** — `business_id => Business::factory()`, `uuid => $this->faker->uuid()`, name/village/phone faker, `opening_balance => '0.00'`.
 
-- [ ] **Step 4: Migrate + a smoke test** (`php artisan migrate --database=pgsql_migrate`; assert a factory row round-trips `opening_balance` as `'0.00'` and gets a positive `sync_seq`). → PASS.
+- [x] **Step 4: Migrate + a smoke test** (`php artisan migrate --database=pgsql_migrate`; assert a factory row round-trips `opening_balance` as `'0.00'` and gets a positive `sync_seq`). → PASS.
 
-- [ ] **Step 5: Commit** — `feat: add Customer model with RLS isolation policy`.
+- [x] **Step 5: Commit** — `feat: add Customer model with RLS isolation policy`.
 
 ---
 
@@ -251,7 +295,7 @@ Schema::connection('pgsql_migrate')->create('customers', function (Blueprint $ta
 - Create: `backend/database/factories/SaleFactory.php`, `SaleLineFactory.php`
 - Test: `backend/tests/Unit/SaleModelTest.php`
 
-- [ ] **Step 1: `sales` migration**
+- [x] **Step 1: `sales` migration**
 
 ```php
 $table->uuid('id')->primary();
@@ -281,7 +325,7 @@ $table->index(['business_id', 'sync_seq']);
 // + RLS policy sales_isolation (flat, same shape as products)
 ```
 
-- [ ] **Step 2: `sale_lines` migration**
+- [x] **Step 2: `sale_lines` migration**
 
 ```php
 $table->uuid('id')->primary();
@@ -303,15 +347,15 @@ $table->index(['business_id', 'sync_seq']);
 
 `sale_lines` has **no `uuid`**: a line is never independently created offline — it is only ever written as part of its parent `Sale` in one transaction, so the sale's `(business_id, uuid)` idempotency already covers it. It still carries `sync_seq` so pull streams lines alongside their sale.
 
-- [ ] **Step 3: Models** — both `use BelongsToTenant, HasFactory, HasUuids, HasVersion, HasSyncSequence;`.
+- [x] **Step 3: Models** — both `use BelongsToTenant, HasFactory, HasUuids, HasVersion, HasSyncSequence;`.
   `Sale`: fillable `['business_id','uuid','customer_id','sale_date','reverses_id']` (**not** `total`, `created_by` — set explicitly); casts `sale_date` → date, `total` → decimal:2. Relations: `customer()`, `lines(): HasMany`, `reverses(): BelongsTo self`.
   `SaleLine`: fillable `['business_id','sale_id','product_pack_id','qty','rate']` (**not** `line_total`); casts `rate`/`line_total` → decimal:2, `qty` → integer. Relations: `sale()`, `productPack()`.
 
-- [ ] **Step 4: Factories** — `SaleFactory` builds an unrelated business/customer/user by default (callers pass the trio when they must agree, exactly like `ProductPackFactory`). `total => '0.00'` default. `SaleLineFactory` sets `rate`, `qty`, and `line_total = bcmul(rate, qty, 2)`.
+- [x] **Step 4: Factories** — `SaleFactory` builds an unrelated business/customer/user by default (callers pass the trio when they must agree, exactly like `ProductPackFactory`). `total => '0.00'` default. `SaleLineFactory` sets `rate`, `qty`, and `line_total = bcmul(rate, qty, 2)`.
 
-- [ ] **Step 5: Failing test** (`SaleModelTest`): a sale with two lines relates them; `reverses()` resolves a reversal back to its original; `sale_lines.rate` persists as a snapshot independent of the pack's later price. → PASS after migrate.
+- [x] **Step 5: Failing test** (`SaleModelTest`): a sale with two lines relates them; `reverses()` resolves a reversal back to its original; `sale_lines.rate` persists as a snapshot independent of the pack's later price. → PASS after migrate.
 
-- [ ] **Step 6: Commit** — `feat: add Sale and SaleLine models with append-only RLS ledger`.
+- [x] **Step 6: Commit** — `feat: add Sale and SaleLine models with append-only RLS ledger`.
 
 ---
 
@@ -322,7 +366,7 @@ $table->index(['business_id', 'sync_seq']);
 - Create: `backend/app/Models/Payment.php`, `backend/database/factories/PaymentFactory.php`
 - Test: `backend/tests/Unit/PaymentModelTest.php`
 
-- [ ] **Step 1: `payments` migration**
+- [x] **Step 1: `payments` migration**
 
 ```php
 $table->uuid('id')->primary();
@@ -344,14 +388,14 @@ $table->index(['business_id', 'sync_seq']);
 // + RLS policy payments_isolation (flat)
 ```
 
-- [ ] **Step 2: Model** — `use BelongsToTenant, HasFactory, HasUuids, HasVersion, HasSyncSequence;`
+- [x] **Step 2: Model** — `use BelongsToTenant, HasFactory, HasUuids, HasVersion, HasSyncSequence;`
   fillable `['business_id','uuid','customer_id','payment_date','amount','mode','reverses_id']` (**not** `created_by`); casts `amount` → decimal:2, `payment_date` → date. Relations `customer()`, `reverses()`.
 
-- [ ] **Step 3: Factory** — unrelated defaults, `mode => 'cash'`, `amount` faker as a 2-decimal string.
+- [x] **Step 3: Factory** — unrelated defaults, `mode => 'cash'`, `amount` faker as a 2-decimal string.
 
-- [ ] **Step 4: Failing test** — amount round-trips as a string; a reversal resolves its original. → PASS.
+- [x] **Step 4: Failing test** — amount round-trips as a string; a reversal resolves its original. → PASS.
 
-- [ ] **Step 5: Commit** — `feat: add Payment model with RLS isolation policy`.
+- [x] **Step 5: Commit** — `feat: add Payment model with RLS isolation policy`.
 
 ---
 
@@ -363,13 +407,13 @@ $table->index(['business_id', 'sync_seq']);
 
 This is the correctness core. All three methods use exact decimal math; none returns a float.
 
-- [ ] **Step 1: Failing test** — cover:
+- [x] **Step 1: Failing test** — cover:
   - `outstandingFor`: `opening_balance + Σsale.total − Σpayment.amount`, as an exact string. A reversal (negative-net sale/payment) leaves the total unchanged.
   - `outstandingFor` with no activity returns the opening balance verbatim.
   - `ledgerFor`: returns sales and payments merged, ordered by date then `created_at`, each annotated with a **running balance** whose final value equals `outstandingFor`.
   - `snapshotRate`: given a `ProductPack`, returns its `default_sell_price` as the rate to freeze onto a line (kept in the service so "where the sale rate comes from" has one home).
 
-- [ ] **Step 2: Write the service**
+- [x] **Step 2: Write the service**
 
 ```php
 <?php
@@ -443,9 +487,9 @@ class KhataService
 }
 ```
 
-- [ ] **Step 3: Run** — `php artisan test --filter=KhataServiceTest` → PASS.
+- [x] **Step 3: Run** — `php artisan test --filter=KhataServiceTest` → PASS.
 
-- [ ] **Step 4: Commit** — `feat: add KhataService with exact-decimal outstanding and ledger`.
+- [x] **Step 4: Commit** — `feat: add KhataService with exact-decimal outstanding and ledger`.
 
 > **Note for the implementer:** the SUM is taken as `::text` in SQL (above) so no PHP float ever touches a rupee value — resolved during Task 5, not left to chance. Redis caching of outstanding (PRD §10) is deliberately not built here; when it lands it wraps `outstandingFor`, keyed per tenant+customer, invalidated on any sale/payment write.
 
@@ -492,7 +536,7 @@ class KhataPolicy
 }
 ```
 
-- [ ] **Step 1: Write the policy.**  **Step 2: Commit** — `feat: add KhataPolicy encoding the PRD §7 role matrix`.
+- [x] **Step 1: Write the policy.**  **Step 2: Commit** — `feat: add KhataPolicy encoding the PRD §7 role matrix`.
 
 ---
 
@@ -505,7 +549,7 @@ class KhataPolicy
 
 Follows `ProductController` exactly: `(new KhataPolicy())->recordSale()` gates writes (a salesman onboards customers); `findOrFail` for tenant-scoped 404-not-403; archive sets `archived_at`, never deletes. `uuid` is accepted from the client when present (offline create) and generated server-side otherwise, via a find-or-create on `(business_id, uuid)` for idempotency. Validation whitelist: `name` (required), `village`/`phone` (nullable), `opening_balance` (nullable numeric ≥ 0), `uuid` (nullable uuid). `business_id`, `created_by`, `sync_seq` never come from the request.
 
-- [ ] Steps: controller → routes (`customers` resource under the `require.tenant` group) → failing feature test (create stamps tenant; salesman allowed; accountant 403; cross-tenant 404; duplicate `uuid` replays the same row) → run → commit `feat: add customer CRUD with idempotent create`.
+- [x] Steps: controller → routes (`customers` resource under the `require.tenant` group) → failing feature test (create stamps tenant; salesman allowed; accountant 403; cross-tenant 404; duplicate `uuid` replays the same row) → run → commit `feat: add customer CRUD with idempotent create`.
 
 ---
 
@@ -516,7 +560,7 @@ Follows `ProductController` exactly: `(new KhataPolicy())->recordSale()` gates w
 - Modify: `backend/routes/api.php`
 - Test: `backend/tests/Feature/Khata/SaleTest.php`
 
-- [ ] **Step 1: `store` — idempotent, append-only, price-snapshotting.**
+- [x] **Step 1: `store` — idempotent, append-only, price-snapshotting.**
 
 > **As built (refines the sketch below):** the committed controller resolves every pack and freezes its rate *first*, accumulating the total, then saves the sale **once** with that total — instead of saving with `0.00` and updating after the line loop. A second save would bump `HasVersion` to 2 on a brand-new sale (the Task 3 lesson). Lines are then written with the now-known `sale_id`. Behaviour is otherwise identical to the sketch.
 
@@ -587,7 +631,7 @@ public function store(Request $request, KhataService $khata)
 }
 ```
 
-- [ ] **Step 2: `void` — append-only reversal (owner/admin).**
+- [x] **Step 2: `void` — append-only reversal (owner/admin).**
 
 ```php
 public function void(string $id)
@@ -639,11 +683,11 @@ public function void(string $id)
 }
 ```
 
-- [ ] **Step 3: Routes** — `POST sales`, `POST sales/{id}/void` under `require.tenant`.
+- [x] **Step 3: Routes** — `POST sales`, `POST sales/{id}/void` under `require.tenant`.
 
-- [ ] **Step 4: Failing feature test** (`SaleTest`): create stamps tenant + `created_by` + correct `total`; the same `uuid` posted twice yields one sale (200 on replay); a return line (negative qty) lowers the total; `void` creates a reversal and leaves outstanding at the pre-sale figure; a salesman can create but **cannot** void (403); double-void 409s. → PASS.
+- [x] **Step 4: Failing feature test** (`SaleTest`): create stamps tenant + `created_by` + correct `total`; the same `uuid` posted twice yields one sale (200 on replay); a return line (negative qty) lowers the total; `void` creates a reversal and leaves outstanding at the pre-sale figure; a salesman can create but **cannot** void (403); double-void 409s. → PASS.
 
-- [ ] **Step 5: Commit** — `feat: add idempotent sale create and append-only void`.
+- [x] **Step 5: Commit** — `feat: add idempotent sale create and append-only void`.
 
 ---
 
@@ -655,7 +699,7 @@ public function void(string $id)
 
 Same shape as Task 8 but simpler (no lines). `store` gates on `recordPayment()` (all four roles), validates `uuid`/`customer_id`/`payment_date`/`amount` (`numeric`, `gt:0`)/`mode` (`Rule::in(['cash','upi','cheque','bank','other'])`), replays on duplicate `uuid`, stamps `created_by`. `reverse` gates on `voidSale()` (a payment reversal is a correction — owner/admin), writes a new payment with `amount = −original` and `reverses_id` set; 409 on double-reverse.
 
-- [ ] Steps: controller → routes → failing test (record lowers outstanding; replay idempotent; accountant may record but not reverse; reversal restores outstanding) → run → commit `feat: add idempotent payment record and reversal`.
+- [x] Steps: controller → routes → failing test (record lowers outstanding; replay idempotent; accountant may record but not reverse; reversal restores outstanding) → run → commit `feat: add idempotent payment record and reversal`.
 
 ---
 
@@ -667,9 +711,9 @@ Same shape as Task 8 but simpler (no lines). `store` gates on `recordPayment()` 
 
 Reads are open to **any** member (salesman and accountant both need the khata).
 
-- [ ] **`index`** — `GET /khata`: every non-archived customer with its `outstanding` (from `KhataService`), for the "who owes me" screen. `?include_archived=1` for the full view, mirroring `GET /catalog`.
-- [ ] **`show`** — `GET /khata/{customer}`: the customer plus its `ledgerFor` statement (time-ordered entries with running balance) and final `outstanding`. `findOrFail` → cross-tenant 404.
-- [ ] Failing test: outstanding matches `opening + sales − payments`; ledger entries are date-ordered with a running balance whose last value equals outstanding; a reversal shows as its own entry and nets out; cross-tenant customer 404s. → PASS. Commit `feat: add khata summary and per-customer ledger reads`.
+- [x] **`index`** — `GET /khata`: every non-archived customer with its `outstanding` (from `KhataService`), for the "who owes me" screen. `?include_archived=1` for the full view, mirroring `GET /catalog`.
+- [x] **`show`** — `GET /khata/{customer}`: the customer plus its `ledgerFor` statement (time-ordered entries with running balance) and final `outstanding`. `findOrFail` → cross-tenant 404.
+- [x] Failing test: outstanding matches `opening + sales − payments`; ledger entries are date-ordered with a running balance whose last value equals outstanding; a reversal shows as its own entry and nets out; cross-tenant customer 404s. → PASS. Commit `feat: add khata summary and per-customer ledger reads`.
 
 ---
 
@@ -681,13 +725,13 @@ Reads are open to **any** member (salesman and accountant both need the khata).
 
 > **As built:** to make "reuse the Task 8/9 create paths" literal, the three idempotent creates were extracted into a shared `LedgerWriter` service (`createCustomer`/`createSale`/`recordPayment`, plus centralized `rulesFor*()`); the REST controllers and push both call it, so the online and offline writes cannot drift. Push is a controller method (`SyncController::push`), not a separate `SyncService`. Each apply runs in its own savepoint (`DB::transaction`) so one failure — e.g. a `ModelNotFoundException` from a cross-tenant `customer_id` — is reported as `rejected` and never aborts the batch. Role-gating is proven with an accountant's **sale** mutation being rejected (the create types the push actually carries), rather than the plan's payment-reversal example — reversals are owner/admin corrections, not outbox creates.
 
-- [ ] **`POST /sync/push`** — a batch the client's outbox drains. Body: `{ mutations: [ { type, tenant_id, uuid, payload } ] }`. For each mutation `SyncController::push` (via `LedgerWriter`):
+- [x] **`POST /sync/push`** — a batch the client's outbox drains. Body: `{ mutations: [ { type, tenant_id, uuid, payload } ] }`. For each mutation `SyncController::push` (via `LedgerWriter`):
   1. **Reject tenant mismatch.** If `tenant_id !== app('tenant.id')` → record `rejected` for that item and skip it. This is belt-and-suspenders with RLS `WITH CHECK`; the test proves the app layer rejects *before* the DB would (PRD §9).
   2. **Idempotent apply** by `(business_id, uuid)` — reuse the Task 8/9 create paths so a mutation already applied returns `duplicate`, a new one returns `applied` with the server row.
   3. Everything runs inside the request transaction `SetTenantContext` opened; a single bad item is reported, not fatal to the batch (collect per-item results).
   Response: `{ results: [ { uuid, status: applied|duplicate|rejected, id? } ] }`, `200`.
 
-- [ ] Failing test: a fresh mutation applies and returns the server id; the same mutation in a second push is `duplicate` and creates nothing; a mutation carrying another tenant's `tenant_id` is `rejected` and writes nothing (assert via `pgsql_migrate` count); role gating still applies (a salesman's payment-reversal mutation is rejected by policy). → PASS. Commit `feat: add idempotent sync push with tenant-mismatch rejection`.
+- [x] Failing test: a fresh mutation applies and returns the server id; the same mutation in a second push is `duplicate` and creates nothing; a mutation carrying another tenant's `tenant_id` is `rejected` and writes nothing (assert via `pgsql_migrate` count); role gating still applies (a salesman's payment-reversal mutation is rejected by policy). → PASS. Commit `feat: add idempotent sync push with tenant-mismatch rejection`.
 
 ---
 
@@ -697,9 +741,9 @@ Reads are open to **any** member (salesman and accountant both need the khata).
 - Modify: `SyncController`, `SyncService`; modify routes
 - Test: `backend/tests/Feature/Sync/SyncPullTest.php`
 
-- [ ] **`GET /sync/pull?since=<seq>`** — `SyncService::pullSince` returns, per table, rows with `sync_seq > since` ordered by `sync_seq`, plus the new `cursor` (max `sync_seq` returned across all tables, or `since` when nothing changed). RLS guarantees only the caller's tenant appears. Shape: `{ cursor, customers: [...], sales: [...], sale_lines: [...], payments: [...] }`. A default `since=0` pulls everything (initial hydrate).
+- [x] **`GET /sync/pull?since=<seq>`** — `SyncService::pullSince` returns, per table, rows with `sync_seq > since` ordered by `sync_seq`, plus the new `cursor` (max `sync_seq` returned across all tables, or `since` when nothing changed). RLS guarantees only the caller's tenant appears. Shape: `{ cursor, customers: [...], sales: [...], sale_lines: [...], payments: [...] }`. A default `since=0` pulls everything (initial hydrate).
 
-- [ ] Failing test:
+- [x] Failing test:
   - initial pull (`since=0`) returns all the tenant's rows and a `cursor` > 0;
   - after one new payment, pull from the previous cursor returns **only** that payment and its sale-free delta;
   - a neighbour tenant's rows never appear regardless of `since`;
@@ -713,7 +757,7 @@ Reads are open to **any** member (salesman and accountant both need the khata).
 **Files:**
 - Test: `backend/tests/Feature/Khata/KhataRbacTest.php`
 
-- [ ] One table-driven test per capability against all four roles, asserting the PRD §7 matrix exactly:
+- [x] One table-driven test per capability against all four roles, asserting the PRD §7 matrix exactly:
   - create sale: owner ✓, admin ✓, salesman ✓, accountant ✗ (403)
   - void sale: owner ✓, admin ✓, salesman ✗, accountant ✗
   - record payment: all four ✓
@@ -728,7 +772,7 @@ Reads are open to **any** member (salesman and accountant both need the khata).
 **Files:**
 - Test: `backend/tests/Feature/Tenancy/KhataRlsTest.php`
 
-- [ ] Mirror `CatalogRlsTest` — query builder, no Eloquent, app layer removed:
+- [x] Mirror `CatalogRlsTest` — query builder, no Eloquent, app layer removed:
   - a neighbour's `customers`/`sales`/`payments` are invisible under `switchTo(mine)`;
   - inserting any of the four with a mismatched `business_id` throws (WITH CHECK);
   - a tenant sees its own rows.
@@ -741,7 +785,7 @@ Reads are open to **any** member (salesman and accountant both need the khata).
 **Files:**
 - Modify: `backend/tests/Feature/Tenancy/CrossTenantLeakTest.php`
 
-- [ ] Append (into the existing suite, per its convention):
+- [x] Append (into the existing suite, per its convention):
   - business A's `GET /khata` never shows B's customers;
   - A's owner posting a sale with B's `customer_id` → 404 (RLS hid the customer);
   - A's owner voiding B's sale → 404, and B's sale is provably untouched (read back with `withoutGlobalScopes()` on `pgsql_migrate` — the request pins `app('tenant.id')` to A, exactly the trap Task 17 of the catalog slice hit);
@@ -755,10 +799,10 @@ Reads are open to **any** member (salesman and accountant both need the khata).
 **Files:**
 - Modify: `backend/README.md`, this plan.
 
-- [ ] **Step 1** — `php artisan test`: full suite green. Baseline entering this slice is **102** (end of the catalog slice); every task above only adds tests. A materially lower number means tasks were skipped.
-- [ ] **Step 2** — append a "Khata & Sync API" section to `backend/README.md`: the route/role table (from PRD §7), the append-only/reversal rule, the price-snapshot rule, idempotency by `(business_id, uuid)`, and the `sync_seq` cursor contract. Call out the two look-like-bugs-but-arent behaviours: cross-tenant 404-not-403, and `sync/push` rejecting mismatched `tenant_id` at the app layer *before* RLS would.
-- [ ] **Step 3** — tick every checkbox in this plan and add a **Known Gaps** section (Redis-cached outstanding not built; plan-limit gating from PRD §8 deferred; no frontend outbox — the server contract is proven by `SyncPush/PullTest`, not by a real Dexie client). If nothing else was deferred, say so.
-- [ ] **Step 4** — Commit `docs: document the khata & sync API and close out the plan`.
+- [x] **Step 1** — `php artisan test`: full suite green. Baseline entering this slice is **102** (end of the catalog slice); every task above only adds tests. A materially lower number means tasks were skipped.
+- [x] **Step 2** — append a "Khata & Sync API" section to `backend/README.md`: the route/role table (from PRD §7), the append-only/reversal rule, the price-snapshot rule, idempotency by `(business_id, uuid)`, and the `sync_seq` cursor contract. Call out the two look-like-bugs-but-arent behaviours: cross-tenant 404-not-403, and `sync/push` rejecting mismatched `tenant_id` at the app layer *before* RLS would.
+- [x] **Step 3** — tick every checkbox in this plan and add a **Known Gaps** section (Redis-cached outstanding not built; plan-limit gating from PRD §8 deferred; no frontend outbox — the server contract is proven by `SyncPush/PullTest`, not by a real Dexie client). If nothing else was deferred, say so.
+- [x] **Step 4** — Commit `docs: document the khata & sync API and close out the plan`.
 
 ---
 
