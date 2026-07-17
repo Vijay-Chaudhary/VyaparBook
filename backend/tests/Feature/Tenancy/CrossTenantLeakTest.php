@@ -2,10 +2,13 @@
 // tests/Feature/Tenancy/CrossTenantLeakTest.php
 
 use App\Models\Business;
+use App\Models\Customer;
 use App\Models\Membership;
 use App\Models\Product;
+use App\Models\Sale;
 use App\Models\User;
 use App\Services\TokenService;
+use Illuminate\Support\Str;
 
 function ownerContext(): array
 {
@@ -164,4 +167,92 @@ it('rejects business As owner archiving business Bs product', function () {
     // BelongsToTenant's scope would otherwise filter this business-B row out and
     // the read would see null — hiding, not proving, that the row is intact.
     expect(Product::on('pgsql_migrate')->withoutGlobalScopes()->find($foreign->id)->archived_at)->toBeNull();
+});
+
+it('never returns business Bs khata to business A', function () {
+    [$ownerA, $businessA, $tokenA] = ownerContext();
+    [$ownerB, $businessB] = ownerContext();
+
+    Customer::on('pgsql_migrate')->create([
+        'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(), 'name' => 'Their Customer',
+    ]);
+
+    $this->withHeader('Authorization', "Bearer {$tokenA}")
+        ->getJson('/api/v1/khata')
+        ->assertOk()
+        ->assertJsonCount(0, 'customers');
+});
+
+it('rejects business As owner posting a sale for business Bs customer', function () {
+    [$ownerA, $businessA, $tokenA] = ownerContext();
+    [$ownerB, $businessB] = ownerContext();
+
+    // A pack in A's own catalog, so only the customer is cross-tenant.
+    $product = \App\Models\Product::on('pgsql_migrate')->create(['business_id' => $businessA->id, 'name_hi' => 'सेव']);
+    $packSize = \App\Models\PackSize::on('pgsql_migrate')->create(['business_id' => $businessA->id, 'label' => '500g', 'weight_kg' => '0.500']);
+    $pack = \App\Models\ProductPack::on('pgsql_migrate')->create([
+        'business_id' => $businessA->id, 'product_id' => $product->id,
+        'pack_size_id' => $packSize->id, 'default_sell_price' => '90.00',
+    ]);
+
+    $foreignCustomer = Customer::on('pgsql_migrate')->create([
+        'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(), 'name' => 'Their Customer',
+    ]);
+
+    // 404, not 403: RLS hides B's customer, so findOrFail genuinely finds nothing.
+    $this->withHeader('Authorization', "Bearer {$tokenA}")
+        ->postJson('/api/v1/sales', [
+            'uuid' => (string) Str::uuid(), 'customer_id' => $foreignCustomer->id,
+            'sale_date' => '2026-07-17', 'lines' => [['product_pack_id' => $pack->id, 'qty' => 1]],
+        ])
+        ->assertStatus(404);
+});
+
+it('rejects business As owner voiding business Bs sale and leaves it untouched', function () {
+    [$ownerA, $businessA, $tokenA] = ownerContext();
+    [$ownerB, $businessB] = ownerContext();
+
+    $customerB = Customer::on('pgsql_migrate')->create([
+        'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(), 'name' => 'Their Customer',
+    ]);
+    $saleB = new Sale([
+        'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(),
+        'customer_id' => $customerB->id, 'sale_date' => '2026-07-17',
+    ]);
+    $saleB->setConnection('pgsql_migrate');
+    $saleB->created_by = $ownerB->id;
+    $saleB->total = '90.00';
+    $saleB->save();
+
+    $this->withHeader('Authorization', "Bearer {$tokenA}")
+        ->postJson("/api/v1/sales/{$saleB->id}/void")
+        ->assertStatus(404);
+
+    // withoutGlobalScopes(): the request pinned app('tenant.id') to A, so a scoped
+    // read of this business-B row would see null and prove nothing.
+    $fresh = Sale::on('pgsql_migrate')->withoutGlobalScopes()->find($saleB->id);
+    expect($fresh->reverses_id)->toBeNull();
+    expect(Sale::on('pgsql_migrate')->withoutGlobalScopes()->where('reverses_id', $saleB->id)->exists())->toBeFalse();
+});
+
+it('rejects a sync push mutation stamped with business Bs tenant_id and writes nothing', function () {
+    [$ownerA, $businessA, $tokenA] = ownerContext();
+    [$ownerB, $businessB] = ownerContext();
+
+    $customerA = Customer::on('pgsql_migrate')->create([
+        'business_id' => $businessA->id, 'uuid' => (string) Str::uuid(), 'name' => 'My Customer',
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$tokenA}")
+        ->postJson('/api/v1/sync/push', ['mutations' => [[
+            'type' => 'payment',
+            'tenant_id' => $businessB->id, // A's session, B's tenant stamp
+            'uuid' => (string) Str::uuid(),
+            'payload' => ['customer_id' => $customerA->id, 'payment_date' => '2026-07-17', 'amount' => '100.00', 'mode' => 'cash'],
+        ]]])
+        ->assertOk();
+
+    expect($response->json('results.0.status'))->toBe('rejected');
+    expect($response->json('results.0.reason'))->toBe('tenant_mismatch');
+    expect(\App\Models\Payment::on('pgsql_migrate')->count())->toBe(0);
 });
