@@ -332,8 +332,8 @@ $table->foreignUuid('customer_id')->constrained('customers')->cascadeOnDelete();
 $table->date('payment_date');
 $table->decimal('amount', 12, 2); // positive = customer paid; a reversal negates
 $table->string('mode', 20); // cash | upi | cheque | bank | other (validated in controller)
-$table->foreignUuid('created_by')->constrained('users');
-$table->foreignUuid('reverses_id')->nullable()->constrained('payments');
+$table->foreignId('created_by')->constrained('users'); // bigint FK, as in sales
+$table->uuid('reverses_id')->nullable(); // self-FK added in a follow-up Schema::table()
 $table->unsignedInteger('version')->default(1);
 $table->bigInteger('sync_seq');
 $table->timestamps();
