@@ -131,8 +131,9 @@ return new class extends Migration
         // never gap-free, and RLS narrows every pull to a single tenant's rows.
         // No explicit GRANT: create_app_role's ALTER DEFAULT PRIVILEGES ... ON
         // SEQUENCES already makes this usable by the restricted role (same as the
-        // catalog tables' grants).
-        DB::connection('pgsql_migrate')->statement('CREATE SEQUENCE sync_seq_global');
+        // catalog tables' grants). IF NOT EXISTS because migrate:fresh (db:wipe)
+        // drops tables but not a standalone sequence, so a re-run must be a no-op.
+        DB::connection('pgsql_migrate')->statement('CREATE SEQUENCE IF NOT EXISTS sync_seq_global');
     }
 
     public function down(): void

@@ -18,7 +18,13 @@ return new class extends Migration
         // so a sequence created here by the same privileged role is already usable
         // by the restricted vyaparbook_app role — same mechanism the catalog tables
         // rely on for their table grants.
-        DB::connection('pgsql_migrate')->statement('CREATE SEQUENCE sync_seq_global');
+        //
+        // IF NOT EXISTS because a standalone sequence is not a table: migrate:fresh
+        // (db:wipe) drops tables but leaves this sequence in place, so re-running
+        // this migration would otherwise fail with "relation already exists". A
+        // surviving sequence is harmless — a cursor only needs monotonicity, so
+        // carrying its value across a fresh is fine.
+        DB::connection('pgsql_migrate')->statement('CREATE SEQUENCE IF NOT EXISTS sync_seq_global');
     }
 
     public function down(): void
