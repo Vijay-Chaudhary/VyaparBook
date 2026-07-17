@@ -259,14 +259,18 @@ $table->foreignUuid('business_id')->constrained('businesses')->cascadeOnDelete()
 $table->uuid('uuid');
 $table->foreignUuid('customer_id')->constrained('customers')->cascadeOnDelete();
 $table->date('sale_date');
-$table->foreignUuid('created_by')->constrained('users'); // app('tenant.user_id')
+// foreignId (bigint), NOT foreignUuid: users.id is a bigint auto-key, unlike the
+// uuid PKs on tenant-domain tables (memberships.user_id references it this way).
+$table->foreignId('created_by')->constrained('users'); // app('tenant.user_id')
 // Denormalized sum of line_totals. Stored, not computed on read: the ledger sums
 // thousands of sales per customer and must not re-join sale_lines to do it. The
 // service asserts it equals Σ line_total at write time (Task 5).
 $table->decimal('total', 12, 2);
 // Append-only void: a reversal is a NEW sale row pointing back at the original.
 // Null on an original; set on its reversal. The original is never mutated.
-$table->foreignUuid('reverses_id')->nullable()->constrained('sales');
+// Declare the column here, add the self-FK in a follow-up Schema::table() call —
+// Postgres cannot reference sales(id) while sales is still being created.
+$table->uuid('reverses_id')->nullable();
 $table->unsignedInteger('version')->default(1);
 $table->bigInteger('sync_seq');
 $table->timestamps();
