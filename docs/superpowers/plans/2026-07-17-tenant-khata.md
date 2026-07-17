@@ -392,8 +392,10 @@ class KhataService
      */
     public function outstandingFor(Customer $customer): string
     {
-        $sales = (string) $customer->sales()->sum('total');       // DB SUM, exact on numeric
-        $paid  = (string) $customer->payments()->sum('amount');
+        // ::text so Postgres returns an exact decimal string, never a PHP float
+        // that could already have drifted before bc math sees it.
+        $sales = (string) $customer->sales()->selectRaw('coalesce(sum(total), 0)::text as agg')->value('agg');
+        $paid  = (string) $customer->payments()->selectRaw('coalesce(sum(amount), 0)::text as agg')->value('agg');
 
         $balance = bcadd((string) $customer->opening_balance, $sales, 2);
 
@@ -445,7 +447,7 @@ class KhataService
 
 - [ ] **Step 4: Commit** — `feat: add KhataService with exact-decimal outstanding and ledger`.
 
-> **Note for the implementer:** `->sum()` on a Postgres `numeric` column returns an exact value; cast to string before bc math. Verify in tinker that Laravel does not hand back a float for these columns on this driver — if it does, sum via `selectRaw('sum(total)::text')` instead. Redis caching of outstanding (PRD §10) is deliberately not built here; when it lands it wraps `outstandingFor`, keyed per tenant+customer, invalidated on any sale/payment write.
+> **Note for the implementer:** the SUM is taken as `::text` in SQL (above) so no PHP float ever touches a rupee value — resolved during Task 5, not left to chance. Redis caching of outstanding (PRD §10) is deliberately not built here; when it lands it wraps `outstandingFor`, keyed per tenant+customer, invalidated on any sale/payment write.
 
 ---
 
