@@ -4,50 +4,26 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Models\Customer;
 use App\Models\Payment;
 use App\Policies\KhataPolicy;
+use App\Services\LedgerWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
-use Illuminate\Validation\Rule;
 
 class PaymentController extends Controller
 {
-    public function store(Request $request)
+    public function store(Request $request, LedgerWriter $writer)
     {
         if (! (new KhataPolicy())->recordPayment()) {
             return $this->denied();
         }
 
-        $data = $request->validate([
-            'uuid' => ['required', 'uuid'], // client-generated: the idempotency key
-            'customer_id' => ['required', 'uuid'],
-            'payment_date' => ['required', 'date'],
-            'amount' => ['required', 'numeric', 'gt:0'],
-            'mode' => ['required', Rule::in(['cash', 'upi', 'cheque', 'bank', 'other'])],
-        ]);
+        $data = $request->validate(LedgerWriter::rulesForPayment());
 
-        // Idempotent replay: a retry over a flaky link must not double-credit.
-        $existing = Payment::where('uuid', $data['uuid'])->first();
-        if ($existing) {
-            return response()->json($existing, 200);
-        }
+        // Idempotent create through the shared writer — the same path sync uses.
+        [$payment, $created] = $writer->recordPayment($data);
 
-        // findOrFail under RLS: a cross-tenant customer id 404s, never leaks.
-        $customer = Customer::findOrFail($data['customer_id']);
-
-        $payment = new Payment([
-            'business_id' => app('tenant.id'),
-            'uuid' => $data['uuid'],
-            'customer_id' => $customer->id,
-            'payment_date' => $data['payment_date'],
-            'amount' => $data['amount'],
-            'mode' => $data['mode'],
-        ]);
-        $payment->created_by = app('tenant.user_id'); // not fillable
-        $payment->save();
-
-        return response()->json($payment, 201);
+        return response()->json($payment, $created ? 201 : 200);
     }
 
     public function reverse(string $id)

@@ -48,6 +48,8 @@ Route::prefix('v1')->group(function () {
 
             Route::get('khata', [\App\Http\Controllers\Api\V1\KhataController::class, 'index']);
             Route::get('khata/{id}', [\App\Http\Controllers\Api\V1\KhataController::class, 'show']);
+
+            Route::post('sync/push', [\App\Http\Controllers\Api\V1\SyncController::class, 'push']);
         });
 
         Route::get('whoami', function () {

@@ -6,49 +6,26 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Policies\KhataPolicy;
+use App\Services\LedgerWriter;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 
 class CustomerController extends Controller
 {
-    public function store(Request $request)
+    public function store(Request $request, LedgerWriter $writer)
     {
         if (! (new KhataPolicy())->recordSale()) {
             return $this->denied();
         }
 
-        $data = $request->validate([
-            'uuid' => ['nullable', 'uuid'],
-            'name' => ['required', 'string', 'max:120'],
-            'village' => ['nullable', 'string', 'max:80'],
-            'phone' => ['nullable', 'string', 'max:20'],
-            'opening_balance' => ['nullable', 'numeric', 'min:0'],
-        ]);
+        $data = $request->validate(LedgerWriter::rulesForCustomer());
 
-        // Client sends its uuid when it created the row offline; the web app that
-        // has no outbox lets the server mint one.
-        $uuid = $data['uuid'] ?? (string) Str::uuid();
+        // Idempotent create through the shared writer: a retried outbox mutation
+        // with the same uuid replays the existing row (200) instead of creating
+        // a duplicate (201). The online and offline paths share this one code path.
+        [$customer, $created] = $writer->createCustomer($data);
 
-        // Idempotent create: a retried outbox mutation with the same uuid replays
-        // the existing row rather than duplicating it. RLS has already scoped
-        // customers to this tenant, so a uuid match is this tenant's row.
-        $existing = Customer::where('uuid', $uuid)->first();
-        if ($existing) {
-            return response()->json($existing, 200);
-        }
-
-        // business_id is stamped by BelongsToTenant from app('tenant.id') — never
-        // taken from the request, which is why it is not in the validated set.
-        $customer = Customer::create([
-            'uuid' => $uuid,
-            'name' => $data['name'],
-            'village' => $data['village'] ?? null,
-            'phone' => $data['phone'] ?? null,
-            'opening_balance' => $data['opening_balance'] ?? '0.00',
-        ]);
-
-        return response()->json($customer, 201);
+        return response()->json($customer, $created ? 201 : 200);
     }
 
     public function update(Request $request, string $id)

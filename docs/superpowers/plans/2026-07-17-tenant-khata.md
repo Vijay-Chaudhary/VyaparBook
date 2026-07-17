@@ -679,7 +679,9 @@ Reads are open to **any** member (salesman and accountant both need the khata).
 - Create: `backend/app/Http/Controllers/Api/V1/SyncController.php`, `backend/app/Services/SyncService.php`; modify routes
 - Test: `backend/tests/Feature/Sync/SyncPushTest.php`
 
-- [ ] **`POST /sync/push`** — a batch the client's outbox drains. Body: `{ mutations: [ { type, tenant_id, uuid, payload } ] }`. For each mutation `SyncService::applyPush`:
+> **As built:** to make "reuse the Task 8/9 create paths" literal, the three idempotent creates were extracted into a shared `LedgerWriter` service (`createCustomer`/`createSale`/`recordPayment`, plus centralized `rulesFor*()`); the REST controllers and push both call it, so the online and offline writes cannot drift. Push is a controller method (`SyncController::push`), not a separate `SyncService`. Each apply runs in its own savepoint (`DB::transaction`) so one failure — e.g. a `ModelNotFoundException` from a cross-tenant `customer_id` — is reported as `rejected` and never aborts the batch. Role-gating is proven with an accountant's **sale** mutation being rejected (the create types the push actually carries), rather than the plan's payment-reversal example — reversals are owner/admin corrections, not outbox creates.
+
+- [ ] **`POST /sync/push`** — a batch the client's outbox drains. Body: `{ mutations: [ { type, tenant_id, uuid, payload } ] }`. For each mutation `SyncController::push` (via `LedgerWriter`):
   1. **Reject tenant mismatch.** If `tenant_id !== app('tenant.id')` → record `rejected` for that item and skip it. This is belt-and-suspenders with RLS `WITH CHECK`; the test proves the app layer rejects *before* the DB would (PRD §9).
   2. **Idempotent apply** by `(business_id, uuid)` — reuse the Task 8/9 create paths so a mutation already applied returns `duplicate`, a new one returns `applied` with the server row.
   3. Everything runs inside the request transaction `SetTenantContext` opened; a single bad item is reported, not fatal to the batch (collect per-item results).

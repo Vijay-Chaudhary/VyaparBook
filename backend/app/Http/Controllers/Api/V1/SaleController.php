@@ -4,90 +4,29 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Models\Customer;
-use App\Models\ProductPack;
 use App\Models\Sale;
 use App\Models\SaleLine;
 use App\Policies\KhataPolicy;
-use App\Services\KhataService;
+use App\Services\LedgerWriter;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 class SaleController extends Controller
 {
-    public function store(Request $request, KhataService $khata)
+    public function store(Request $request, LedgerWriter $writer)
     {
         if (! (new KhataPolicy())->recordSale()) {
             return $this->denied();
         }
 
-        $data = $request->validate([
-            'uuid' => ['required', 'uuid'], // client-generated: the idempotency key
-            'customer_id' => ['required', 'uuid'],
-            'sale_date' => ['required', 'date'],
-            'lines' => ['required', 'array', 'min:1'],
-            'lines.*.product_pack_id' => ['required', 'uuid'],
-            'lines.*.qty' => ['required', 'integer', 'not_in:0'], // negative = return
-        ]);
+        $data = $request->validate(LedgerWriter::rulesForSale());
 
-        // Idempotent replay: a retry over a flaky link must not double-post. RLS
-        // has already scoped sales to this tenant, so a uuid match is this tenant's.
-        $existing = Sale::where('uuid', $data['uuid'])->first();
-        if ($existing) {
-            return response()->json($existing->load('lines'), 200);
-        }
+        // Idempotent create through the shared writer (snapshot rate, single-write
+        // total, replay on duplicate uuid) — the same path the offline sync uses.
+        [$sale, $created] = $writer->createSale($data);
 
-        // findOrFail under RLS: a customer from another tenant is invisible, so a
-        // cross-tenant id 404s rather than leaking existence.
-        $customer = Customer::findOrFail($data['customer_id']);
-
-        $sale = DB::transaction(function () use ($data, $customer, $khata) {
-            // Resolve packs and freeze rates first, so the sale's total is known
-            // before its single insert — a second save would bump HasVersion on a
-            // brand-new row (see the plan's Task 3 note).
-            $lines = [];
-            $total = '0.00';
-            foreach ($data['lines'] as $line) {
-                $pack = ProductPack::findOrFail($line['product_pack_id']);
-                $rate = $khata->snapshotRate($pack); // frozen now, never read live
-                $lineTotal = bcmul($rate, (string) $line['qty'], 2);
-
-                $lines[] = [
-                    'product_pack_id' => $pack->id,
-                    'qty' => $line['qty'],
-                    'rate' => $rate,
-                    'line_total' => $lineTotal,
-                ];
-                $total = bcadd($total, $lineTotal, 2);
-            }
-
-            $sale = new Sale([
-                'business_id' => app('tenant.id'),
-                'uuid' => $data['uuid'],
-                'customer_id' => $customer->id,
-                'sale_date' => $data['sale_date'],
-            ]);
-            $sale->created_by = app('tenant.user_id'); // not fillable
-            $sale->total = $total;                      // total = Σ line_total
-            $sale->save();
-
-            foreach ($lines as $l) {
-                $saleLine = new SaleLine([
-                    'business_id' => app('tenant.id'),
-                    'sale_id' => $sale->id,
-                    'product_pack_id' => $l['product_pack_id'],
-                    'qty' => $l['qty'],
-                    'rate' => $l['rate'],
-                ]);
-                $saleLine->line_total = $l['line_total']; // not fillable
-                $saleLine->save();
-            }
-
-            return $sale;
-        });
-
-        return response()->json($sale->load('lines'), 201);
+        return response()->json($sale, $created ? 201 : 200);
     }
 
     public function void(string $id)
