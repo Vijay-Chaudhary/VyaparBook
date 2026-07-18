@@ -1,6 +1,6 @@
 # Tenant Stock & Production Implementation Plan
 
-> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
+> **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [x]`) syntax for tracking.
 
 **Goal:** Build VyaparBook's raw-material **Stock** and **Production** modules on the same tenant-isolated, append-only, sync-ready foundation as the khata slice. Stock is a signed-movement ledger (`stock on hand = Σ movements`); Production records batches that consume materials, and **completing a batch draws stock down by writing `out` movements**, so on-hand is always real. Both modules are owner/admin-only (PRD §7).
 
@@ -108,11 +108,11 @@ backend/
 
 **Files:** migration `…100001…`, `app/Models/RawMaterial.php`, `database/factories/RawMaterialFactory.php`, test `tests/Unit/RawMaterialModelTest.php`
 
-- [ ] **Migration** — `id` uuid PK; `business_id` FK; `uuid`; `name` (120); `unit` (20 — 'kg'|'litre'|'piece'|…, free text validated in the controller); `reorder_level` decimal(12,3) nullable; `archived_at` nullable; `version`; `sync_seq`; timestamps. `unique(['business_id','uuid'])`; `index(['business_id','sync_seq'])`. Then RLS `raw_materials_isolation`.
-- [ ] **Model** — `use BelongsToTenant, HasFactory, HasSyncSequence, HasUuids, HasVersion;` `$fillable = ['business_id','uuid','name','unit','reorder_level'];` casts `reorder_level` → `decimal:3`, `archived_at` → datetime, `version`/`sync_seq` → integer. `movements(): HasMany`.
-- [ ] **Factory** — business_id, uuid, name (faker word), unit `'kg'`, reorder_level `'10.000'`.
-- [ ] **Test** — uuid PK + positive `sync_seq`; `reorder_level` round-trips as a 3-decimal string; duplicate `(business_id, uuid)` throws. Migrate + run → PASS.
-- [ ] **Commit** — `feat: add RawMaterial model with RLS isolation policy`.
+- [x] **Migration** — `id` uuid PK; `business_id` FK; `uuid`; `name` (120); `unit` (20 — 'kg'|'litre'|'piece'|…, free text validated in the controller); `reorder_level` decimal(12,3) nullable; `archived_at` nullable; `version`; `sync_seq`; timestamps. `unique(['business_id','uuid'])`; `index(['business_id','sync_seq'])`. Then RLS `raw_materials_isolation`.
+- [x] **Model** — `use BelongsToTenant, HasFactory, HasSyncSequence, HasUuids, HasVersion;` `$fillable = ['business_id','uuid','name','unit','reorder_level'];` casts `reorder_level` → `decimal:3`, `archived_at` → datetime, `version`/`sync_seq` → integer. `movements(): HasMany`.
+- [x] **Factory** — business_id, uuid, name (faker word), unit `'kg'`, reorder_level `'10.000'`.
+- [x] **Test** — uuid PK + positive `sync_seq`; `reorder_level` round-trips as a 3-decimal string; duplicate `(business_id, uuid)` throws. Migrate + run → PASS.
+- [x] **Commit** — `feat: add RawMaterial model with RLS isolation policy`.
 
 `reorder_level` is decimal(12,3): materials are weighed (0.5 kg), so 3 decimals mirror `pack_sizes.weight_kg`. Quantities across stock use the same scale.
 
@@ -122,10 +122,10 @@ backend/
 
 **Files:** migration `…100002…`, `app/Models/StockMovement.php`, factory, test folded into `StockMovementTest` (Task 6).
 
-- [ ] **Migration** — `id`; `business_id` FK; `uuid`; `raw_material_id` FK → `raw_materials`; `movement_date` date; `kind` (10 — `in`|`out`|`adjust`); `qty` decimal(12,3) **signed**; `note` (255) nullable; `created_by` `foreignId`→users; `version`; `sync_seq`; timestamps. `unique(['business_id','uuid'])`; `index(['business_id','raw_material_id'])`; `index(['business_id','sync_seq'])`. RLS `stock_movements_isolation`. **No `production_batch_id` yet** — added in Task 8's migration so Stock stands alone first.
-- [ ] **Model** — traits as above; `$fillable = ['business_id','uuid','raw_material_id','movement_date','kind','qty','note','production_batch_id'];` (`production_batch_id` is fillable so the production writer sets it; it stays null for manual movements). casts `qty` → `decimal:3`. `rawMaterial(): BelongsTo`.
-- [ ] **Factory** — unrelated defaults; `kind` `'in'`, `qty` `'100.000'`; `created_by` via `afterMaking`.
-- [ ] **Commit** — `feat: add StockMovement append-only signed ledger`.
+- [x] **Migration** — `id`; `business_id` FK; `uuid`; `raw_material_id` FK → `raw_materials`; `movement_date` date; `kind` (10 — `in`|`out`|`adjust`); `qty` decimal(12,3) **signed**; `note` (255) nullable; `created_by` `foreignId`→users; `version`; `sync_seq`; timestamps. `unique(['business_id','uuid'])`; `index(['business_id','raw_material_id'])`; `index(['business_id','sync_seq'])`. RLS `stock_movements_isolation`. **No `production_batch_id` yet** — added in Task 8's migration so Stock stands alone first.
+- [x] **Model** — traits as above; `$fillable = ['business_id','uuid','raw_material_id','movement_date','kind','qty','note','production_batch_id'];` (`production_batch_id` is fillable so the production writer sets it; it stays null for manual movements). casts `qty` → `decimal:3`. `rawMaterial(): BelongsTo`.
+- [x] **Factory** — unrelated defaults; `kind` `'in'`, `qty` `'100.000'`; `created_by` via `afterMaking`.
+- [x] **Commit** — `feat: add StockMovement append-only signed ledger`.
 
 `qty` is the signed effect: `+` raises stock, `−` lowers it. `kind` labels intent; the controller derives the sign from `kind` + magnitude so the two never disagree (Task 6).
 
@@ -135,11 +135,11 @@ backend/
 
 **Files:** `app/Services/StockService.php`, test `tests/Unit/StockServiceTest.php`
 
-- [ ] **`onHandFor(RawMaterial): string`** — `Σ qty` via `selectRaw('coalesce(sum(qty),0)::text')` (exact, no float), scale 3.
-- [ ] **`belowReorder(RawMaterial): bool`** — `reorder_level !== null && onHand < reorder_level` (bccomp).
-- [ ] **`ledgerFor(RawMaterial): Collection`** — movements ordered by `movement_date` then `created_at`, each with a running on-hand whose last value equals `onHandFor`.
-- [ ] **Test** — on-hand sums signed movements exactly (in − out); negative on-hand is allowed and reported; below-reorder flag flips at the threshold; ledger running total ends at on-hand. → PASS.
-- [ ] **Commit** — `feat: add StockService with exact-decimal on-hand and reorder flag`.
+- [x] **`onHandFor(RawMaterial): string`** — `Σ qty` via `selectRaw('coalesce(sum(qty),0)::text')` (exact, no float), scale 3.
+- [x] **`belowReorder(RawMaterial): bool`** — `reorder_level !== null && onHand < reorder_level` (bccomp).
+- [x] **`ledgerFor(RawMaterial): Collection`** — movements ordered by `movement_date` then `created_at`, each with a running on-hand whose last value equals `onHandFor`.
+- [x] **Test** — on-hand sums signed movements exactly (in − out); negative on-hand is allowed and reported; below-reorder flag flips at the threshold; ledger running total ends at on-hand. → PASS.
+- [x] **Commit** — `feat: add StockService with exact-decimal on-hand and reorder flag`.
 
 ---
 
@@ -147,8 +147,8 @@ backend/
 
 **Files:** `app/Policies/StockPolicy.php` (test via Task 12 RBAC)
 
-- [ ] **`manage(): bool`** → `in_array(app('tenant.role'), ['owner','admin'], true)`. Used by **every** stock and production endpoint, reads included (PRD §7). Mirrors `CatalogPolicy`.
-- [ ] **Commit** — `feat: add StockPolicy gating stock and production to owner/admin`.
+- [x] **`manage(): bool`** → `in_array(app('tenant.role'), ['owner','admin'], true)`. Used by **every** stock and production endpoint, reads included (PRD §7). Mirrors `CatalogPolicy`.
+- [x] **Commit** — `feat: add StockPolicy gating stock and production to owner/admin`.
 
 ---
 
@@ -156,10 +156,10 @@ backend/
 
 **Files:** `RawMaterialController.php`, routes, test `RawMaterialCrudTest.php`
 
-- [ ] Mirrors `CustomerController` (idempotent create by `uuid`) but gated on `StockPolicy::manage()`. Validate `uuid?`, `name` (required), `unit` (required, in a small whitelist), `reorder_level?` (numeric ≥ 0). `findOrFail` → cross-tenant 404; `DELETE` archives.
-- [ ] Routes `raw-materials` (store/update/destroy/restore) under `require.tenant`.
-- [ ] Test — create stamps tenant; **salesman and accountant both 403** (the key RBAC difference); idempotent uuid replay; cross-tenant 404. → PASS.
-- [ ] **Commit** — `feat: add raw material CRUD with idempotent create`.
+- [x] Mirrors `CustomerController` (idempotent create by `uuid`) but gated on `StockPolicy::manage()`. Validate `uuid?`, `name` (required), `unit` (required, in a small whitelist), `reorder_level?` (numeric ≥ 0). `findOrFail` → cross-tenant 404; `DELETE` archives.
+- [x] Routes `raw-materials` (store/update/destroy/restore) under `require.tenant`.
+- [x] Test — create stamps tenant; **salesman and accountant both 403** (the key RBAC difference); idempotent uuid replay; cross-tenant 404. → PASS.
+- [x] **Commit** — `feat: add raw material CRUD with idempotent create`.
 
 ---
 
@@ -167,10 +167,10 @@ backend/
 
 **Files:** `StockMovementController.php`, routes, test `StockMovementTest.php`
 
-- [ ] **`store`** — `StockPolicy::manage()`. Validate `uuid` (required), `raw_material_id` (required uuid), `movement_date` (required date), `kind` (required in `in|out|adjust`), `qty` (required numeric; `gt:0` for in/out, any non-zero for adjust), `note?`. Derive signed stored qty: `in` → `+qty`, `out` → `−qty`, `adjust` → `qty` as given (reject 0). Idempotent replay on `uuid`. `findOrFail` the material (cross-tenant 404). Stamp `created_by`.
-- [ ] Route `POST stock-movements`.
-- [ ] Test — an `in` raises on-hand, an `out` lowers it, `adjust` applies a signed delta; on-hand can go negative; idempotent replay; `out` with `qty ≤ 0` is 422; cross-tenant material 404; salesman 403. → PASS.
-- [ ] **Commit** — `feat: add stock movement recording with signed kinds`.
+- [x] **`store`** — `StockPolicy::manage()`. Validate `uuid` (required), `raw_material_id` (required uuid), `movement_date` (required date), `kind` (required in `in|out|adjust`), `qty` (required numeric; `gt:0` for in/out, any non-zero for adjust), `note?`. Derive signed stored qty: `in` → `+qty`, `out` → `−qty`, `adjust` → `qty` as given (reject 0). Idempotent replay on `uuid`. `findOrFail` the material (cross-tenant 404). Stamp `created_by`.
+- [x] Route `POST stock-movements`.
+- [x] Test — an `in` raises on-hand, an `out` lowers it, `adjust` applies a signed delta; on-hand can go negative; idempotent replay; `out` with `qty ≤ 0` is 422; cross-tenant material 404; salesman 403. → PASS.
+- [x] **Commit** — `feat: add stock movement recording with signed kinds`.
 
 ---
 
@@ -178,10 +178,10 @@ backend/
 
 **Files:** `StockController.php`, routes, test `StockReadTest.php`
 
-- [ ] **`index`** `GET /stock` — every non-archived material with `on_hand`, `reorder_level`, `below_reorder` (`?include_archived=1` for the full view). Gated `manage()`.
-- [ ] **`show`** `GET /stock/{id}` — material + movement ledger (running on-hand) + `on_hand`. `findOrFail` → 404.
-- [ ] Test — on-hand matches Σ movements; below-reorder flag correct; ledger ordered with running total; cross-tenant 404; salesman/accountant 403. → PASS.
-- [ ] **Commit** — `feat: add stock summary and per-material ledger reads`.
+- [x] **`index`** `GET /stock` — every non-archived material with `on_hand`, `reorder_level`, `below_reorder` (`?include_archived=1` for the full view). Gated `manage()`.
+- [x] **`show`** `GET /stock/{id}` — material + movement ledger (running on-hand) + `on_hand`. `findOrFail` → 404.
+- [x] Test — on-hand matches Σ movements; below-reorder flag correct; ledger ordered with running total; cross-tenant 404; salesman/accountant 403. → PASS.
+- [x] **Commit** — `feat: add stock summary and per-material ledger reads`.
 
 ---
 
@@ -189,12 +189,12 @@ backend/
 
 **Files:** migrations `…100003…`, `…100004…`, `…100005_add_production_batch_id_to_stock_movements…`; models `ProductionBatch.php`, `MaterialConsumption.php`; factories; test folded into `ProductionTest` (Task 9).
 
-- [ ] **`production_batches` migration** — `id`; `business_id` FK; `uuid`; `product_id` FK → `products` (the finished good); `batch_date` date; `output_kg` decimal(12,3); `created_by` foreignId; `version`; `sync_seq`; timestamps. `unique(['business_id','uuid'])`; `index(['business_id','sync_seq'])`. RLS.
-- [ ] **`material_consumptions` migration** — `id`; `business_id` FK; `production_batch_id` FK → `production_batches` cascade; `raw_material_id` FK → `raw_materials`; `qty` decimal(12,3) (positive amount consumed); `version`; `sync_seq`; timestamps. `index(['business_id','production_batch_id'])`; `index(['business_id','sync_seq'])`. No `uuid` (child of the batch). RLS.
-- [ ] **`add_production_batch_id_to_stock_movements` migration** — add nullable `production_batch_id` + FK → `production_batches`, and `index(['business_id','production_batch_id'])`. (Runs after `production_batches` exists.)
-- [ ] **Models** — `ProductionBatch`: traits; `$fillable = ['business_id','uuid','product_id','batch_date','output_kg'];` casts `output_kg`→decimal:3; `product(): BelongsTo`, `consumptions(): HasMany`. `MaterialConsumption`: traits (BelongsToTenant, HasFactory, HasSyncSequence, HasUuids, HasVersion); `$fillable = ['business_id','production_batch_id','raw_material_id','qty'];` `batch()`, `rawMaterial()`.
-- [ ] **Factories** — `afterMaking` for `created_by`/`output_kg` on batch.
-- [ ] **Commit** — `feat: add ProductionBatch and MaterialConsumption models`.
+- [x] **`production_batches` migration** — `id`; `business_id` FK; `uuid`; `product_id` FK → `products` (the finished good); `batch_date` date; `output_kg` decimal(12,3); `created_by` foreignId; `version`; `sync_seq`; timestamps. `unique(['business_id','uuid'])`; `index(['business_id','sync_seq'])`. RLS.
+- [x] **`material_consumptions` migration** — `id`; `business_id` FK; `production_batch_id` FK → `production_batches` cascade; `raw_material_id` FK → `raw_materials`; `qty` decimal(12,3) (positive amount consumed); `version`; `sync_seq`; timestamps. `index(['business_id','production_batch_id'])`; `index(['business_id','sync_seq'])`. No `uuid` (child of the batch). RLS.
+- [x] **`add_production_batch_id_to_stock_movements` migration** — add nullable `production_batch_id` + FK → `production_batches`, and `index(['business_id','production_batch_id'])`. (Runs after `production_batches` exists.)
+- [x] **Models** — `ProductionBatch`: traits; `$fillable = ['business_id','uuid','product_id','batch_date','output_kg'];` casts `output_kg`→decimal:3; `product(): BelongsTo`, `consumptions(): HasMany`. `MaterialConsumption`: traits (BelongsToTenant, HasFactory, HasSyncSequence, HasUuids, HasVersion); `$fillable = ['business_id','production_batch_id','raw_material_id','qty'];` `batch()`, `rawMaterial()`.
+- [x] **Factories** — `afterMaking` for `created_by`/`output_kg` on batch.
+- [x] **Commit** — `feat: add ProductionBatch and MaterialConsumption models`.
 
 ---
 
@@ -202,11 +202,11 @@ backend/
 
 **Files:** `app/Services/ProductionWriter.php`, `ProductionController.php`, routes, test `ProductionTest.php`
 
-- [ ] **`ProductionWriter::createBatch(array $data): array`** (returns `[batch, created]`) — idempotent by `uuid`. In one transaction: create the `ProductionBatch`; for each consumption line create a `MaterialConsumption` (`findOrFail` the material → cross-tenant 404) **and** a `StockMovement` with `kind='out'`, `qty = −consumed`, `production_batch_id = batch.id`, `created_by` stamped. So finishing a batch draws stock down through the same ledger `GET /stock` reads. Extracted into a service (like `LedgerWriter`) so it is reusable and testable.
-- [ ] **`ProductionController::store`** — `StockPolicy::manage()`, validate (`uuid`, `product_id`, `batch_date`, `output_kg` > 0, `consumptions[]` each `{raw_material_id, qty>0}`), delegate to the writer, 201/200.
-- [ ] Route `POST production`.
-- [ ] Test — creating a batch records consumptions **and** lowers each material's on-hand by the consumed qty (assert via `StockService`); the `out` movements carry `production_batch_id`; idempotent replay creates nothing; over-consuming drives on-hand negative (allowed); cross-tenant material/product 404; salesman 403. → PASS.
-- [ ] **Commit** — `feat: add production batch create that draws stock down`.
+- [x] **`ProductionWriter::createBatch(array $data): array`** (returns `[batch, created]`) — idempotent by `uuid`. In one transaction: create the `ProductionBatch`; for each consumption line create a `MaterialConsumption` (`findOrFail` the material → cross-tenant 404) **and** a `StockMovement` with `kind='out'`, `qty = −consumed`, `production_batch_id = batch.id`, `created_by` stamped. So finishing a batch draws stock down through the same ledger `GET /stock` reads. Extracted into a service (like `LedgerWriter`) so it is reusable and testable.
+- [x] **`ProductionController::store`** — `StockPolicy::manage()`, validate (`uuid`, `product_id`, `batch_date`, `output_kg` > 0, `consumptions[]` each `{raw_material_id, qty>0}`), delegate to the writer, 201/200.
+- [x] Route `POST production`.
+- [x] Test — creating a batch records consumptions **and** lowers each material's on-hand by the consumed qty (assert via `StockService`); the `out` movements carry `production_batch_id`; idempotent replay creates nothing; over-consuming drives on-hand negative (allowed); cross-tenant material/product 404; salesman 403. → PASS.
+- [x] **Commit** — `feat: add production batch create that draws stock down`.
 
 ---
 
@@ -214,10 +214,10 @@ backend/
 
 **Files:** `ProductionController.php` (index, show), routes, test folded into `ProductionTest.php`
 
-- [ ] **`index`** `GET /production` — batches (newest first) with product, date, output_kg. **`show`** `GET /production/{id}` — batch + its consumptions (material, qty). Gated `manage()`; `findOrFail` → 404.
-- [ ] Routes `GET production`, `GET production/{id}`.
-- [ ] Test — list returns the tenant's batches; show returns consumptions; cross-tenant 404; salesman 403. → PASS.
-- [ ] **Commit** — `feat: add production batch reads`.
+- [x] **`index`** `GET /production` — batches (newest first) with product, date, output_kg. **`show`** `GET /production/{id}` — batch + its consumptions (material, qty). Gated `manage()`; `findOrFail` → 404.
+- [x] Routes `GET production`, `GET production/{id}`.
+- [x] Test — list returns the tenant's batches; show returns consumptions; cross-tenant 404; salesman 403. → PASS.
+- [x] **Commit** — `feat: add production batch reads`.
 
 ---
 
@@ -225,9 +225,9 @@ backend/
 
 **Files:** `SyncController.php` (pull), test `SyncPullStockTest.php`
 
-- [ ] Extend `pull` to include `raw_materials`, `stock_movements`, `production_batches`, `material_consumptions` in the delta (each has `sync_seq`), folding their max into the cursor. RLS scopes each to the tenant.
-- [ ] Test — initial pull returns the tenant's stock/production rows; a delta after one new movement returns only it; a neighbour's rows never appear. → PASS.
-- [ ] **Commit** — `feat: stream stock and production rows in the delta pull`.
+- [x] Extend `pull` to include `raw_materials`, `stock_movements`, `production_batches`, `material_consumptions` in the delta (each has `sync_seq`), folding their max into the cursor. RLS scopes each to the tenant.
+- [x] Test — initial pull returns the tenant's stock/production rows; a delta after one new movement returns only it; a neighbour's rows never appear. → PASS.
+- [x] **Commit** — `feat: stream stock and production rows in the delta pull`.
 
 > Push support for these types is deferred (see Scope); pull is extended now so an offline client can display stock/production.
 
@@ -237,8 +237,8 @@ backend/
 
 **Files:** test `StockProductionRbacTest.php`
 
-- [ ] Table-driven: for **every** stock/production endpoint (raw-material create, stock-movement record, production create, `GET /stock`, `GET /production`), owner ✓ / admin ✓ / salesman ✗ (403) / accountant ✗ (403). This is the whole-module gate — the one place the "no salesman/accountant access at all" rule is proven. → PASS.
-- [ ] **Commit** — `test: cover stock/production RBAC (owner/admin only)`.
+- [x] Table-driven: for **every** stock/production endpoint (raw-material create, stock-movement record, production create, `GET /stock`, `GET /production`), owner ✓ / admin ✓ / salesman ✗ (403) / accountant ✗ (403). This is the whole-module gate — the one place the "no salesman/accountant access at all" rule is proven. → PASS.
+- [x] **Commit** — `test: cover stock/production RBAC (owner/admin only)`.
 
 ---
 
@@ -246,8 +246,8 @@ backend/
 
 **Files:** test `Tenancy/StockRlsTest.php`
 
-- [ ] Mirror `KhataRlsTest` (query builder, app layer bypassed): a neighbour's `raw_materials`/`stock_movements`/`production_batches`/`material_consumptions` are invisible under `switchTo(mine)`; a mismatched-`business_id` insert is rejected by `WITH CHECK`; a tenant sees its own rows. → PASS.
-- [ ] **Commit** — `test: prove stock/production RLS with the app layer bypassed`.
+- [x] Mirror `KhataRlsTest` (query builder, app layer bypassed): a neighbour's `raw_materials`/`stock_movements`/`production_batches`/`material_consumptions` are invisible under `switchTo(mine)`; a mismatched-`business_id` insert is rejected by `WITH CHECK`; a tenant sees its own rows. → PASS.
+- [x] **Commit** — `test: prove stock/production RLS with the app layer bypassed`.
 
 ---
 
@@ -255,8 +255,8 @@ backend/
 
 **Files:** `Tenancy/CrossTenantLeakTest.php` (modified)
 
-- [ ] Append: B's stock never in A's `GET /stock`; A recording a movement for B's material → 404; A creating a batch consuming B's material → 404 and B's stock provably unchanged (`withoutGlobalScopes()` — the request pins tenant to A). → PASS.
-- [ ] **Commit** — `test: extend cross-tenant leak suite with stock/production cases`.
+- [x] Append: B's stock never in A's `GET /stock`; A recording a movement for B's material → 404; A creating a batch consuming B's material → 404 and B's stock provably unchanged (`withoutGlobalScopes()` — the request pins tenant to A). → PASS.
+- [x] **Commit** — `test: extend cross-tenant leak suite with stock/production cases`.
 
 ---
 
@@ -264,10 +264,10 @@ backend/
 
 **Files:** `backend/README.md`, this plan.
 
-- [ ] **Full suite** — `php artisan test`: green. Baseline entering this slice is **171** (end of khata); every task only adds tests.
-- [ ] **README** — a "Stock & Production API" section: route/role table (owner/admin only), the signed-movement/on-hand rule, the append-only + `adjust`-to-correct rule, the batch-draws-stock-down behaviour and the `production_batch_id` trace link, negative-stock-allowed, and idempotency by `(business_id, uuid)`.
-- [ ] **Close-out** — tick every checkbox, add a status table (task → commit) and a Known Gaps section (offline push for these types, batch void, production cost write-back, packed inventory — all deferred by design; PgBouncer unchanged).
-- [ ] **Commit** — `docs: document the stock & production API and close out the plan`.
+- [x] **Full suite** — `php artisan test`: green. Baseline entering this slice is **171** (end of khata); every task only adds tests.
+- [x] **README** — a "Stock & Production API" section: route/role table (owner/admin only), the signed-movement/on-hand rule, the append-only + `adjust`-to-correct rule, the batch-draws-stock-down behaviour and the `production_batch_id` trace link, negative-stock-allowed, and idempotency by `(business_id, uuid)`.
+- [x] **Close-out** — tick every checkbox, add a status table (task → commit) and a Known Gaps section (offline push for these types, batch void, production cost write-back, packed inventory — all deferred by design; PgBouncer unchanged).
+- [x] **Commit** — `docs: document the stock & production API and close out the plan`.
 
 ---
 
@@ -286,4 +286,52 @@ backend/
 **Known risk unchanged:** PgBouncer is not configured; the suite proves RLS/`SET LOCAL` against Postgres directly, not transaction pooling in situ.
 
 **Test-count target:** 171 (baseline) + roughly 3+4+4+4+4+5+3+5+3+4+3+4 across Tasks 1–14 → **~220 passing**. A materially lower number means tasks were skipped.
-```
+
+---
+
+## Close-out (2026-07-18) — COMPLETE
+
+All 15 tasks landed; **231 tests pass** (535 assertions). Baseline entering this
+slice was 174 (khata + Task 1's RawMaterial model); the slice added 57.
+
+| Task | Description | Commit |
+|---|---|---|
+| 1 | RawMaterial model, migration, factory | `897b732` |
+| 2 | StockMovement append-only signed ledger | `5418336` |
+| 3 | StockService (exact on-hand, reorder flag) | `8529f23` |
+| 4 | StockPolicy (owner/admin gate) | `4ed0366` |
+| 5 | RawMaterial CRUD + archive/restore | `a30491a` |
+| 6 | StockMovement record (signed kinds) | `ea58c33` |
+| 7 | Stock reads (summary + ledger) | `73f783c` |
+| 8 | ProductionBatch + MaterialConsumption models | `468909d` |
+| 9 | Production batch create (draws stock down) | `a1fec99` |
+| 10 | Production reads | `2d2d61d` |
+| 11 | Sync pull streams stock & production | `4e29241` |
+| 12 | RBAC coverage (owner/admin only) | `6c5537a` |
+| 13 | DB-level RLS proof | `2e173e5` |
+| 14 | Cross-tenant leak cases | `b880ff0` |
+| 15 | Full suite, docs, close-out | this commit |
+
+**One deviation from the plan, by design.** Task 11 said the pull scopes the four
+new tables by RLS/tenant only. Shipped stricter: the stock/production slice of the
+pull is also gated on `StockPolicy::manage()`, so a salesman's/accountant's pull
+withholds those rows (khata rows still flow). Streaming stock to a role with no
+stock access would contradict PRD §7's "reads included" and the project's
+defense-in-depth rule, so the app layer withholds by role over RLS's tenant scope.
+Covered by `SyncPullStockTest::it withholds stock rows from a salesman pull`.
+
+## Known Gaps (deferred by design)
+
+- **Offline `sync/push` for `stock_movement`/`production_batch`** — these are
+  owner/admin facility operations, typically online. Pull carries the deltas now;
+  the `uuid` columns exist so push drops in cleanly later (as the catalog did).
+- **Voiding/correcting a production batch** — a batch is create-only in v1. A stock
+  miscount is fixed with an `adjust` movement; reversing a wrong batch's consumption
+  + output is deferred.
+- **Actual cost-per-kg write-back from production** (PRD Phase 3) —
+  `products.base_cost_per_kg` stays the catalog reference; production does not yet
+  compute or write back a cost.
+- **Finished-goods packed inventory** (PRD Phase 3) — a batch records `output_kg`;
+  it does not create packed stock.
+- **PgBouncer unchanged** — still not configured; the suite proves RLS/`SET LOCAL`
+  against Postgres directly (port 5432), not transaction pooling in situ.

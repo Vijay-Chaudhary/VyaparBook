@@ -226,3 +226,51 @@ every insert/update via `HasSyncSequence`). `pull` returns rows with `sync_seq >
 since` ordered by `sync_seq`, plus the new cursor; RLS guarantees the response
 holds only the caller's tenant. Archived rows ride the delta so the client learns
 to hide them.
+
+## Stock & Production API
+
+Raw-material **stock** (a signed-movement ledger) and **production** (batches that
+consume materials and draw stock down). Same tenant-isolated, append-only,
+sync-ready foundation as the khata. All routes require a selected tenant
+(`auth:api` + `tenant.context` + `require.tenant`).
+
+**Owner/admin only — reads included.** Unlike the catalog and khata (open reads),
+*every* stock and production endpoint is gated by `StockPolicy::manage()`.
+Salesman and accountant have no access at all, GETs included (PRD §7). This is the
+one module that departs from the open-reads rule.
+
+| Route | Roles | Notes |
+|---|---|---|
+| `GET /api/v1/stock` | owner, admin | Every material with `on_hand`, `reorder_level`, `below_reorder`; `?include_archived=1` for the full view |
+| `GET /api/v1/stock/{id}` | owner, admin | One material's movement ledger with a running on-hand |
+| `POST\|PATCH\|DELETE /api/v1/raw-materials/{id}` | owner, admin | `DELETE` archives; idempotent create by `uuid` |
+| `POST /api/v1/stock-movements` | owner, admin | Record an `in`/`out`/`adjust`; idempotent by `uuid` |
+| `POST /api/v1/production` | owner, admin | Create a batch; consumes materials + draws stock down; idempotent by `uuid` |
+| `GET /api/v1/production` | owner, admin | Batches newest first |
+| `GET /api/v1/production/{id}` | owner, admin | One batch with its material consumptions |
+| `GET /api/v1/sync/pull?since=` | owner, admin (stock rows) | The four stock/production tables ride the delta; withheld by role for salesman/accountant |
+
+Rules that look surprising and are deliberate:
+
+- **Stock on hand is `Σ qty`, never a stored number.** `stock_movements.qty` is the
+  *signed* effect on stock. The API takes a `kind` and a positive magnitude and
+  derives the sign — `in` → `+qty`, `out` → `−qty` — while `adjust` takes a signed
+  delta directly. So `Σ qty` is the on-hand total and an `out` can never raise
+  stock. On-hand is always recomputable, exact via bcmath at scale 3.
+- **The ledger is append-only; correct with an `adjust`.** A movement is immutable.
+  A physical recount is a *new* `adjust` movement, not an edit — history and offline
+  replay are preserved, exactly as the khata voids with a reversing row.
+- **Completing a batch draws stock down through the same ledger.** `POST /production`
+  writes, in one transaction, a `MaterialConsumption` per line *and* an `out`
+  `StockMovement` (signed negative) tagged with `production_batch_id`. So on-hand
+  drops through the very ledger `GET /stock` reads — never a separate number that
+  can drift — and each draw-down is traceable back to its batch.
+- **Negative stock is allowed.** Over-consumption is recorded and flagged
+  (`below_reorder` / a negative `on_hand`), never blocked — "soft-block, never data
+  loss" (PRD §8). Hard-blocking would also break offline.
+- **Every top-level write is idempotent by `(business_id, uuid)`.** A retried
+  material, movement or batch posts exactly once; the replay returns the existing
+  row (`200`) instead of a duplicate (`201`), and a batch replay performs no second
+  draw-down. `material_consumptions` is a child of its batch (no `uuid`), like
+  `sale_lines`.
+- **A cross-tenant reference returns 404, not 403** (RLS hides the row).

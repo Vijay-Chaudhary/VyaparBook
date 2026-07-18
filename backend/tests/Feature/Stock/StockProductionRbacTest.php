@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
 // accountant have no access at all, reads included (PRD §7). This is the one
 // place that rule is proven end to end, across every stock/production endpoint.
 
-function rbacToken(Business $business, string $role): string
+function stockRbacToken(Business $business, string $role): string
 {
     $user = User::factory()->create();
     $membership = Membership::on('pgsql_migrate')->create([
@@ -26,7 +26,7 @@ function rbacToken(Business $business, string $role): string
 /**
  * @return array{0: Business, 1: RawMaterial, 2: Product}
  */
-function rbacFixtures(): array
+function stockRbacFixtures(): array
 {
     $business = Business::factory()->create();
     $material = RawMaterial::on('pgsql_migrate')->create([
@@ -78,8 +78,8 @@ dataset('stock endpoints', [
 
 it('lets owner and admin reach every stock/production endpoint', function (string $method, Closure $url, Closure $body) {
     foreach (['owner', 'admin'] as $role) {
-        [$business, $material, $product] = rbacFixtures();
-        $token = rbacToken($business, $role);
+        [$business, $material, $product] = stockRbacFixtures();
+        $token = stockRbacToken($business, $role);
 
         $response = $this->withHeader('Authorization', "Bearer {$token}")
             ->json($method, $url($material, $product), $body($material, $product) ?? []);
@@ -90,8 +90,8 @@ it('lets owner and admin reach every stock/production endpoint', function (strin
 
 it('forbids salesman and accountant on every stock/production endpoint', function (string $method, Closure $url, Closure $body) {
     foreach (['salesman', 'accountant'] as $role) {
-        [$business, $material, $product] = rbacFixtures();
-        $token = rbacToken($business, $role);
+        [$business, $material, $product] = stockRbacFixtures();
+        $token = stockRbacToken($business, $role);
 
         $this->withHeader('Authorization', "Bearer {$token}")
             ->json($method, $url($material, $product), $body($material, $product) ?? [])
