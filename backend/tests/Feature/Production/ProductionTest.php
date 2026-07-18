@@ -178,3 +178,70 @@ it('blocks a salesman from creating a batch', function () {
         ])
         ->assertStatus(403);
 });
+
+it('lists the tenant batches newest first', function () {
+    $business = Business::factory()->create();
+    $user = User::factory()->create();
+    $token = productionToken($business);
+    $product = productionProduct($business);
+    $besan = productionMaterial($business);
+    seedStock($besan, $user, '500.000');
+
+    foreach (['2026-07-10', '2026-07-15'] as $date) {
+        $this->withHeader('Authorization', "Bearer {$token}")
+            ->postJson('/api/v1/production', [
+                'uuid' => (string) Str::uuid(), 'product_id' => $product->id,
+                'batch_date' => $date, 'output_kg' => '30.000',
+                'consumptions' => [['raw_material_id' => $besan->id, 'qty' => '5.000']],
+            ])->assertStatus(201);
+    }
+
+    $response = $this->withHeader('Authorization', "Bearer {$token}")
+        ->getJson('/api/v1/production')->assertOk();
+
+    $dates = collect($response->json('batches'))->pluck('batch_date')->all();
+    expect($dates[0])->toStartWith('2026-07-15'); // newest first
+    expect($response->json('batches'))->toHaveCount(2);
+});
+
+it('shows a batch with its consumptions', function () {
+    $business = Business::factory()->create();
+    $user = User::factory()->create();
+    $token = productionToken($business);
+    $product = productionProduct($business);
+    $besan = productionMaterial($business, 'Besan');
+    seedStock($besan, $user, '100.000');
+
+    $created = $this->withHeader('Authorization', "Bearer {$token}")
+        ->postJson('/api/v1/production', [
+            'uuid' => (string) Str::uuid(), 'product_id' => $product->id,
+            'batch_date' => '2026-07-15', 'output_kg' => '30.000',
+            'consumptions' => [['raw_material_id' => $besan->id, 'qty' => '25.000']],
+        ])->assertStatus(201);
+
+    $response = $this->withHeader('Authorization', "Bearer {$token}")
+        ->getJson("/api/v1/production/{$created->json('id')}")->assertOk();
+
+    expect($response->json('consumptions'))->toHaveCount(1);
+    expect($response->json('consumptions.0.raw_material_name'))->toBe('Besan');
+    expect($response->json('consumptions.0.qty'))->toBe('25.000');
+});
+
+it('returns 404 showing a batch in another business', function () {
+    $mine = Business::factory()->create();
+    $theirs = Business::factory()->create();
+    $token = productionToken($mine);
+
+    $foreign = new ProductionBatch([
+        'business_id' => $theirs->id, 'uuid' => (string) Str::uuid(),
+        'product_id' => productionProduct($theirs)->id,
+        'batch_date' => '2026-07-15', 'output_kg' => '30.000',
+    ]);
+    $foreign->setConnection('pgsql_migrate');
+    $foreign->created_by = User::factory()->create()->id;
+    $foreign->save();
+
+    $this->withHeader('Authorization', "Bearer {$token}")
+        ->getJson("/api/v1/production/{$foreign->id}")
+        ->assertStatus(404);
+});
