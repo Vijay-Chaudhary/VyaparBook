@@ -1,0 +1,180 @@
+<?php
+// tests/Feature/Production/ProductionTest.php
+
+use App\Models\Business;
+use App\Models\Membership;
+use App\Models\Product;
+use App\Models\ProductionBatch;
+use App\Models\RawMaterial;
+use App\Models\StockMovement;
+use App\Models\User;
+use App\Services\StockService;
+use App\Services\TokenService;
+use Illuminate\Support\Str;
+
+function productionToken(Business $business, string $role = 'owner'): string
+{
+    $user = User::factory()->create();
+    $membership = Membership::on('pgsql_migrate')->create([
+        'user_id' => $user->id,
+        'business_id' => $business->id,
+        'role' => $role,
+    ]);
+
+    return (new TokenService())->issue($user, $membership);
+}
+
+function productionProduct(Business $business): Product
+{
+    return Product::on('pgsql_migrate')->create([
+        'business_id' => $business->id, 'name_hi' => 'सेव',
+    ]);
+}
+
+function productionMaterial(Business $business, string $name = 'Besan'): RawMaterial
+{
+    return RawMaterial::on('pgsql_migrate')->create([
+        'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
+        'name' => $name, 'unit' => 'kg', 'reorder_level' => '10.000',
+    ]);
+}
+
+function seedStock(RawMaterial $m, User $u, string $qty): void
+{
+    $movement = new StockMovement([
+        'business_id' => $m->business_id, 'uuid' => (string) Str::uuid(),
+        'raw_material_id' => $m->id, 'movement_date' => '2026-07-01', 'kind' => 'in', 'qty' => $qty,
+    ]);
+    $movement->setConnection('pgsql_migrate');
+    $movement->created_by = $u->id;
+    $movement->save();
+}
+
+it('creates a batch that records consumptions and draws stock down', function () {
+    $business = Business::factory()->create();
+    $user = User::factory()->create();
+    $token = productionToken($business);
+    $product = productionProduct($business);
+    $besan = productionMaterial($business, 'Besan');
+    $oil = productionMaterial($business, 'Oil');
+
+    seedStock($besan, $user, '100.000');
+    seedStock($oil, $user, '40.000');
+
+    $response = $this->withHeader('Authorization', "Bearer {$token}")
+        ->postJson('/api/v1/production', [
+            'uuid' => (string) Str::uuid(),
+            'product_id' => $product->id,
+            'batch_date' => '2026-07-15',
+            'output_kg' => '30.000',
+            'consumptions' => [
+                ['raw_material_id' => $besan->id, 'qty' => '25.000'],
+                ['raw_material_id' => $oil->id, 'qty' => '8.000'],
+            ],
+        ])
+        ->assertStatus(201);
+
+    $stock = new StockService();
+    expect($stock->onHandFor($besan))->toBe('75.000'); // 100 - 25
+    expect($stock->onHandFor($oil))->toBe('32.000');   // 40 - 8
+
+    // consumptions recorded on the batch
+    $batch = ProductionBatch::on('pgsql_migrate')->find($response->json('id'));
+    expect($batch->consumptions()->count())->toBe(2);
+
+    // the out movements carry the batch id (traceable draw-down)
+    $tagged = StockMovement::on('pgsql_migrate')
+        ->where('production_batch_id', $batch->id)->get();
+    expect($tagged)->toHaveCount(2);
+    expect($tagged->every(fn ($m) => $m->kind === 'out'))->toBeTrue();
+});
+
+it('replays a batch on a repeated uuid without a second draw-down', function () {
+    $business = Business::factory()->create();
+    $user = User::factory()->create();
+    $token = productionToken($business);
+    $product = productionProduct($business);
+    $besan = productionMaterial($business);
+    seedStock($besan, $user, '100.000');
+    $uuid = (string) Str::uuid();
+
+    $payload = [
+        'uuid' => $uuid, 'product_id' => $product->id, 'batch_date' => '2026-07-15',
+        'output_kg' => '30.000',
+        'consumptions' => [['raw_material_id' => $besan->id, 'qty' => '25.000']],
+    ];
+
+    $first = $this->withHeader('Authorization', "Bearer {$token}")
+        ->postJson('/api/v1/production', $payload)->assertStatus(201);
+    $second = $this->withHeader('Authorization', "Bearer {$token}")
+        ->postJson('/api/v1/production', $payload)->assertStatus(200); // replay
+
+    expect($second->json('id'))->toBe($first->json('id'));
+    expect((new StockService())->onHandFor($besan))->toBe('75.000'); // drawn down once, not twice
+    expect(ProductionBatch::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(1);
+});
+
+it('lets over-consumption drive on hand negative', function () {
+    $business = Business::factory()->create();
+    $user = User::factory()->create();
+    $token = productionToken($business);
+    $product = productionProduct($business);
+    $besan = productionMaterial($business);
+    seedStock($besan, $user, '10.000');
+
+    $this->withHeader('Authorization', "Bearer {$token}")
+        ->postJson('/api/v1/production', [
+            'uuid' => (string) Str::uuid(), 'product_id' => $product->id,
+            'batch_date' => '2026-07-15', 'output_kg' => '30.000',
+            'consumptions' => [['raw_material_id' => $besan->id, 'qty' => '25.000']],
+        ])
+        ->assertStatus(201);
+
+    expect((new StockService())->onHandFor($besan))->toBe('-15.000'); // 10 - 25
+});
+
+it('returns 404 consuming another business material', function () {
+    $mine = Business::factory()->create();
+    $theirs = Business::factory()->create();
+    $token = productionToken($mine);
+    $product = productionProduct($mine);
+    $foreign = productionMaterial($theirs);
+
+    $this->withHeader('Authorization', "Bearer {$token}")
+        ->postJson('/api/v1/production', [
+            'uuid' => (string) Str::uuid(), 'product_id' => $product->id,
+            'batch_date' => '2026-07-15', 'output_kg' => '30.000',
+            'consumptions' => [['raw_material_id' => $foreign->id, 'qty' => '5.000']],
+        ])
+        ->assertStatus(404);
+});
+
+it('returns 404 producing another business product', function () {
+    $mine = Business::factory()->create();
+    $theirs = Business::factory()->create();
+    $token = productionToken($mine);
+    $foreignProduct = productionProduct($theirs);
+    $besan = productionMaterial($mine);
+
+    $this->withHeader('Authorization', "Bearer {$token}")
+        ->postJson('/api/v1/production', [
+            'uuid' => (string) Str::uuid(), 'product_id' => $foreignProduct->id,
+            'batch_date' => '2026-07-15', 'output_kg' => '30.000',
+            'consumptions' => [['raw_material_id' => $besan->id, 'qty' => '5.000']],
+        ])
+        ->assertStatus(404);
+});
+
+it('blocks a salesman from creating a batch', function () {
+    $business = Business::factory()->create();
+    $product = productionProduct($business);
+    $besan = productionMaterial($business);
+
+    $this->withHeader('Authorization', 'Bearer ' . productionToken($business, 'salesman'))
+        ->postJson('/api/v1/production', [
+            'uuid' => (string) Str::uuid(), 'product_id' => $product->id,
+            'batch_date' => '2026-07-15', 'output_kg' => '30.000',
+            'consumptions' => [['raw_material_id' => $besan->id, 'qty' => '5.000']],
+        ])
+        ->assertStatus(403);
+});
