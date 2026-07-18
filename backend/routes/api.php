@@ -49,6 +49,21 @@ Route::prefix('v1')->group(function () {
             Route::get('khata', [\App\Http\Controllers\Api\V1\KhataController::class, 'index']);
             Route::get('khata/{id}', [\App\Http\Controllers\Api\V1\KhataController::class, 'show']);
 
+            // Stock & production — owner/admin only (gated in each controller via
+            // StockPolicy::manage(), reads included; PRD §7).
+            Route::post('raw-materials', [\App\Http\Controllers\Api\V1\RawMaterialController::class, 'store']);
+            Route::patch('raw-materials/{id}', [\App\Http\Controllers\Api\V1\RawMaterialController::class, 'update']);
+            Route::delete('raw-materials/{id}', [\App\Http\Controllers\Api\V1\RawMaterialController::class, 'destroy']);
+            Route::post('raw-materials/{id}/restore', [\App\Http\Controllers\Api\V1\RawMaterialController::class, 'restore']);
+
+            Route::post('stock-movements', [\App\Http\Controllers\Api\V1\StockMovementController::class, 'store']);
+            Route::get('stock', [\App\Http\Controllers\Api\V1\StockController::class, 'index']);
+            Route::get('stock/{id}', [\App\Http\Controllers\Api\V1\StockController::class, 'show']);
+
+            Route::post('production', [\App\Http\Controllers\Api\V1\ProductionController::class, 'store']);
+            Route::get('production', [\App\Http\Controllers\Api\V1\ProductionController::class, 'index']);
+            Route::get('production/{id}', [\App\Http\Controllers\Api\V1\ProductionController::class, 'show']);
+
             Route::post('sync/push', [\App\Http\Controllers\Api\V1\SyncController::class, 'push']);
             Route::get('sync/pull', [\App\Http\Controllers\Api\V1\SyncController::class, 'pull']);
         });
