@@ -275,6 +275,48 @@ Rules that look surprising and are deliberate:
   `sale_lines`.
 - **A cross-tenant reference returns 404, not 403** (RLS hides the row).
 
+## Billing & Subscription API
+
+Every tenant has one **subscription** (Free/Pro) with a **14-day trial** and a
+status. Plan limits are enforced **server-side as a soft-block** — a `402` upgrade
+prompt, never data loss (PRD §8). v1 is manual/UPI (no gateway). Billing is
+**owner only** (PRD §7) — stricter than stock/production; admin is excluded too.
+
+| Route | Roles | Notes |
+|---|---|---|
+| `GET /api/v1/billing` | owner | Effective plan, status, trial, limits, live usage, over-limit flags, payment history |
+| `POST /api/v1/billing/payments` | owner | Record a manual/UPI payment as `pending`; idempotent by `(business_id, uuid)`; 18% GST computed via bcmath |
+
+Both sit **outside** the read-only write gate — an owner in dunning must still be
+able to view billing and pay.
+
+**Plans (in code, `PlanCatalog` — not a table):** `free` → 50 customers / 1 user /
+no stock; `pro` → unlimited customers / 5 users / `stock_production`. A `null` limit
+means unlimited. A live **trial grants Pro entitlement**; `effectivePlan()` is the
+single resolver (trial → Pro, anything lapsed → Free floor).
+
+Rules that are deliberate:
+
+- **Trial provisioned on business creation.** `BusinessController::store` calls
+  `SubscriptionService::provisionTrial()` in the same transaction as the owner
+  membership — every new business starts on a 14-day Pro trial.
+- **Soft-block, three enforcement points.** Over the customer cap → `402`
+  (`resource: customers`); past the user seats → `402` (`resource: users`); stock/
+  production without the feature → `402` (`resource: stock_production`). All share
+  the `PlanGuard` `{code: plan_limit, resource, upgrade: true}` shape.
+- **Idempotent replays are never blocked.** A retried customer create with an
+  existing `uuid` creates nothing, so it passes even on a maxed plan.
+- **Read-only (dunning) gate.** When a subscription is `read_only`, the `plan.gate`
+  middleware pauses domain **writes** with `402 {code: read_only}` while GET reads
+  (and billing view/pay) still flow.
+- **Fail-open resolution.** A tenant with no subscription row (legacy/pre-billing)
+  is treated as a fresh trial, never hard-locked — billing must not take core
+  operations down over a missing row. New businesses always get a real row.
+- **Payments are an append-only ledger.** A wrong payment is `rejected` and a new
+  one recorded, never edited — like the khata/stock ledgers. Verification (`pending`
+  → `verified`, which activates the plan via `SubscriptionService::activateFromPayment()`)
+  is deferred to the Superadmin console; the service seam is built and tested here.
+
 ## Tenant Import (Excel/CSV onboarding)
 
 An operator-run Artisan command that ingests a shop's **customers** (with opening
