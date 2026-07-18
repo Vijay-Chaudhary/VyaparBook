@@ -256,3 +256,80 @@ it('rejects a sync push mutation stamped with business Bs tenant_id and writes n
     expect($response->json('results.0.reason'))->toBe('tenant_mismatch');
     expect(\App\Models\Payment::on('pgsql_migrate')->count())->toBe(0);
 });
+
+it('never returns business Bs stock to business A', function () {
+    [$ownerA, $businessA, $tokenA] = ownerContext();
+    [$ownerB, $businessB] = ownerContext();
+
+    \App\Models\RawMaterial::on('pgsql_migrate')->create([
+        'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(),
+        'name' => 'Their Besan', 'unit' => 'kg', 'reorder_level' => '10.000',
+    ]);
+
+    $this->withHeader('Authorization', "Bearer {$tokenA}")
+        ->getJson('/api/v1/stock')
+        ->assertOk()
+        ->assertJsonCount(0, 'materials');
+});
+
+it('rejects business As owner recording a movement for business Bs material', function () {
+    [$ownerA, $businessA, $tokenA] = ownerContext();
+    [$ownerB, $businessB] = ownerContext();
+
+    $foreignMaterial = \App\Models\RawMaterial::on('pgsql_migrate')->create([
+        'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(),
+        'name' => 'Theirs', 'unit' => 'kg',
+    ]);
+
+    // 404, not 403: RLS hides B's material, so findOrFail genuinely finds nothing.
+    $this->withHeader('Authorization', "Bearer {$tokenA}")
+        ->postJson('/api/v1/stock-movements', [
+            'uuid' => (string) Str::uuid(), 'raw_material_id' => $foreignMaterial->id,
+            'movement_date' => '2026-07-17', 'kind' => 'in', 'qty' => '10.000',
+        ])
+        ->assertStatus(404);
+
+    // And no movement leaked onto B's material. withoutGlobalScopes(): the request
+    // pinned app('tenant.id') to A, so a scoped read would filter this B row out.
+    expect(\App\Models\StockMovement::on('pgsql_migrate')->withoutGlobalScopes()
+        ->where('raw_material_id', $foreignMaterial->id)->count())->toBe(0);
+});
+
+it('rejects business As batch consuming business Bs material and leaves Bs stock untouched', function () {
+    [$ownerA, $businessA, $tokenA] = ownerContext();
+    [$ownerB, $businessB] = ownerContext();
+
+    // A's own product (only the consumed material is cross-tenant).
+    $product = Product::on('pgsql_migrate')->create(['business_id' => $businessA->id, 'name_hi' => 'सेव']);
+
+    $foreignMaterial = \App\Models\RawMaterial::on('pgsql_migrate')->create([
+        'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(),
+        'name' => 'Theirs', 'unit' => 'kg',
+    ]);
+    // Seed B's stock so we can prove it is unchanged.
+    $seed = new \App\Models\StockMovement([
+        'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(),
+        'raw_material_id' => $foreignMaterial->id, 'movement_date' => '2026-07-01',
+        'kind' => 'in', 'qty' => '100.000',
+    ]);
+    $seed->setConnection('pgsql_migrate');
+    $seed->created_by = $ownerB->id;
+    $seed->save();
+
+    $this->withHeader('Authorization', "Bearer {$tokenA}")
+        ->postJson('/api/v1/production', [
+            'uuid' => (string) Str::uuid(), 'product_id' => $product->id,
+            'batch_date' => '2026-07-17', 'output_kg' => '30.000',
+            'consumptions' => [['raw_material_id' => $foreignMaterial->id, 'qty' => '25.000']],
+        ])
+        ->assertStatus(404);
+
+    // B's stock is exactly the seeded 100 — no draw-down leaked, no batch created.
+    // withoutGlobalScopes() because the request pinned the tenant to A.
+    $onHand = (string) \App\Models\StockMovement::on('pgsql_migrate')->withoutGlobalScopes()
+        ->where('raw_material_id', $foreignMaterial->id)
+        ->selectRaw('coalesce(sum(qty), 0)::text as agg')->value('agg');
+    expect($onHand)->toBe('100.000');
+    expect(\App\Models\ProductionBatch::on('pgsql_migrate')->withoutGlobalScopes()
+        ->where('business_id', $businessA->id)->count())->toBe(0);
+});
