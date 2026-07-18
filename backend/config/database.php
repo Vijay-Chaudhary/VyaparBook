@@ -95,6 +95,22 @@ return [
             'sslmode' => 'prefer',
         ],
 
+        // Cross-tenant reads for the platform (Superadmin) console. Clones pgsql
+        // but logs in as the SELECT-only BYPASSRLS role, so it can read across
+        // every tenant without a tenant GUC — and cannot mutate anything.
+        'pgsql_platform' => [
+            'driver' => 'pgsql',
+            'host' => env('DB_HOST', '127.0.0.1'),
+            'port' => env('DB_PORT', '6432'),
+            'database' => env('DB_DATABASE', 'vyaparbook'),
+            'username' => env('DB_PLATFORM_USERNAME', 'vyapar_platform_ro'),
+            'password' => env('DB_PLATFORM_PASSWORD', 'platform_ro_pw'),
+            'charset' => 'utf8',
+            'prefix' => '',
+            'schema' => 'public',
+            'sslmode' => 'prefer',
+        ],
+
         'pgsql_migrate' => [
             'driver' => 'pgsql',
             'host' => env('DB_MIGRATE_HOST', '127.0.0.1'),
