@@ -274,3 +274,47 @@ Rules that look surprising and are deliberate:
   draw-down. `material_consumptions` is a child of its batch (no `uuid`), like
   `sale_lines`.
 - **A cross-tenant reference returns 404, not 403** (RLS hides the row).
+
+## Tenant Import (Excel/CSV onboarding)
+
+An operator-run Artisan command that ingests a shop's **customers** (with opening
+outstanding) and **raw materials** (with current stock) from a CSV into one tenant,
+so its khata continues seamlessly from day one. This is a migration tool, not a
+self-serve upload — it runs on the box, against a business id you already have.
+
+```bash
+php artisan tenant:import {business_id} {type} {path} [--dry-run]
+#   type = customers | raw-materials
+php artisan tenant:import 0f9e… customers     /tmp/customers.csv
+php artisan tenant:import 0f9e… raw-materials /tmp/materials.csv --dry-run
+```
+
+**Expected CSV columns** (header row required; column order is free):
+
+| type | columns |
+|---|---|
+| `customers` | `name` (required), `village`, `phone`, `opening_balance` (≥ 0, default 0) |
+| `raw-materials` | `name` (required), `unit` (one of kg, litre, piece, gram, ml, packet; default kg), `reorder_level` (≥ 0), `opening_stock` (≥ 0) |
+
+Rules that are deliberate:
+
+- **Opening balance seeds the खाता.** `opening_balance` lands on `Customer.opening_balance`,
+  so `outstanding = opening_balance + Σ sales − Σ payments` carries the shop's बाकी
+  forward from the first day.
+- **Opening stock is one correctable movement.** A material's `opening_stock` becomes a
+  single `in` `StockMovement` (`note = "Opening stock (import)"`). Re-importing with a new
+  figure **corrects that one movement** rather than stacking another `in` — so a miscount
+  is fixed by re-running, never double-counted.
+- **Re-runs are safe (idempotent).** Every row derives a deterministic UUIDv5 natural key
+  from the business id + a normalised name (+ village for customers). A second import of
+  the same sheet **updates in place** via the existing `(business_id, uuid)` unique — no
+  duplicates, no schema change.
+- **Continue on error, non-zero exit.** Invalid rows are reported (`Row N: <reason>`) and
+  skipped; the valid rows still apply; the command exits **1** when any row failed so a
+  wrapping script notices. A clean run exits **0**.
+- **`--dry-run` validates and tallies without persisting** — the whole import runs inside a
+  transaction that is rolled back, so you see the `Created/Updated/Skipped` report and every
+  error with zero writes.
+- **Single-tenant, RLS-scoped.** The importer opens one transaction, switches both the
+  Postgres tenant GUC and the app-level `tenant.id` scope in (the `TenantAwareJob` pattern),
+  then commits — writes are confined to the target tenant by RLS *and* the app scope.
