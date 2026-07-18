@@ -5,10 +5,15 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\Customer;
+use App\Models\MaterialConsumption;
 use App\Models\Payment;
+use App\Models\ProductionBatch;
+use App\Models\RawMaterial;
 use App\Models\Sale;
 use App\Models\SaleLine;
+use App\Models\StockMovement;
 use App\Policies\KhataPolicy;
+use App\Policies\StockPolicy;
 use App\Services\LedgerWriter;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
@@ -43,7 +48,22 @@ class SyncController extends Controller
         $saleLines = $delta(SaleLine::class);
         $payments = $delta(Payment::class);
 
-        $maxSeqs = collect([$customers, $sales, $saleLines, $payments])
+        // Stock & production is owner/admin only (PRD §7), reads included — so a
+        // salesman's/accountant's pull must not stream those rows to their device.
+        // Defense in depth over RLS's tenant scope: the app layer withholds them
+        // by role. Non-managers get empty arrays; the response shape stays stable.
+        $canSeeStock = (new StockPolicy())->manage();
+        $stockDelta = fn (string $model) => $canSeeStock ? $delta($model) : collect();
+
+        $rawMaterials = $stockDelta(RawMaterial::class);
+        $stockMovements = $stockDelta(StockMovement::class);
+        $productionBatches = $stockDelta(ProductionBatch::class);
+        $materialConsumptions = $stockDelta(MaterialConsumption::class);
+
+        $maxSeqs = collect([
+            $customers, $sales, $saleLines, $payments,
+            $rawMaterials, $stockMovements, $productionBatches, $materialConsumptions,
+        ])
             ->map(fn ($rows) => $rows->max('sync_seq'))
             ->filter(fn ($v) => $v !== null);
 
@@ -53,6 +73,10 @@ class SyncController extends Controller
             'sales' => $sales,
             'sale_lines' => $saleLines,
             'payments' => $payments,
+            'raw_materials' => $rawMaterials,
+            'stock_movements' => $stockMovements,
+            'production_batches' => $productionBatches,
+            'material_consumptions' => $materialConsumptions,
         ]);
     }
 
