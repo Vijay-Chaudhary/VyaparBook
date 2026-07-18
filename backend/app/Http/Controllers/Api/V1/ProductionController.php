@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\ProductionBatch;
 use App\Policies\StockPolicy;
+use App\Services\PlanGuard;
 use App\Services\ProductionWriter;
 use Illuminate\Http\Request;
 
@@ -15,6 +16,10 @@ class ProductionController extends Controller
     {
         if (! (new StockPolicy())->manage()) {
             return $this->denied();
+        }
+
+        if ($blocked = app(PlanGuard::class)->stockFeatureBlock()) {
+            return $blocked;
         }
 
         $data = $request->validate(ProductionWriter::rulesForBatch());
@@ -34,6 +39,10 @@ class ProductionController extends Controller
     {
         if (! (new StockPolicy())->manage()) {
             return $this->denied();
+        }
+
+        if ($blocked = app(PlanGuard::class)->stockFeatureBlock()) {
+            return $blocked;
         }
 
         $batches = ProductionBatch::query()
@@ -62,6 +71,10 @@ class ProductionController extends Controller
     {
         if (! (new StockPolicy())->manage()) {
             return $this->denied();
+        }
+
+        if ($blocked = app(PlanGuard::class)->stockFeatureBlock()) {
+            return $blocked;
         }
 
         $batch = ProductionBatch::with(['product', 'consumptions.rawMaterial'])->findOrFail($id);

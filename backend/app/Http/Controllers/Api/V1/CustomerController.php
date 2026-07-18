@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Customer;
 use App\Policies\KhataPolicy;
 use App\Services\LedgerWriter;
+use App\Services\PlanGuard;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 
@@ -19,6 +20,17 @@ class CustomerController extends Controller
         }
 
         $data = $request->validate(LedgerWriter::rulesForCustomer());
+
+        // Enforce the customer cap as a soft-block — but never an idempotent replay:
+        // an existing uuid creates nothing, so it must pass even on a maxed plan.
+        $uuid = $data['uuid'] ?? null;
+        $isReplay = $uuid !== null && Customer::where('uuid', $uuid)->exists();
+        if (! $isReplay) {
+            $guard = app(PlanGuard::class);
+            if ($guard->isOverLimit($guard->resolve(), 'customers')) {
+                return $guard->overLimitResponse('customers');
+            }
+        }
 
         // Idempotent create through the shared writer: a retried outbox mutation
         // with the same uuid replays the existing row (200) instead of creating

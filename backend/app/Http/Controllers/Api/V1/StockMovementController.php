@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\RawMaterial;
 use App\Models\StockMovement;
 use App\Policies\StockPolicy;
+use App\Services\PlanGuard;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
@@ -16,6 +17,10 @@ class StockMovementController extends Controller
     {
         if (! (new StockPolicy())->manage()) {
             return $this->denied();
+        }
+
+        if ($blocked = app(PlanGuard::class)->stockFeatureBlock()) {
+            return $blocked;
         }
 
         $data = $request->validate([

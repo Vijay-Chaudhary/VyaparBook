@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\RawMaterial;
 use App\Policies\StockPolicy;
+use App\Services\PlanGuard;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -22,6 +23,10 @@ class RawMaterialController extends Controller
     {
         if (! (new StockPolicy())->manage()) {
             return $this->denied();
+        }
+
+        if ($blocked = app(PlanGuard::class)->stockFeatureBlock()) {
+            return $blocked;
         }
 
         $data = $request->validate([
@@ -58,6 +63,10 @@ class RawMaterialController extends Controller
             return $this->denied();
         }
 
+        if ($blocked = app(PlanGuard::class)->stockFeatureBlock()) {
+            return $blocked;
+        }
+
         // findOrFail under RLS: another tenant's material is invisible → 404,
         // never a 403 that would leak its existence.
         $material = RawMaterial::findOrFail($id);
@@ -79,6 +88,10 @@ class RawMaterialController extends Controller
             return $this->denied();
         }
 
+        if ($blocked = app(PlanGuard::class)->stockFeatureBlock()) {
+            return $blocked;
+        }
+
         // Archive, never delete: the stock ledger references this material.
         // archived_at is not fillable, so it is assigned directly.
         $material = RawMaterial::findOrFail($id);
@@ -92,6 +105,10 @@ class RawMaterialController extends Controller
     {
         if (! (new StockPolicy())->manage()) {
             return $this->denied();
+        }
+
+        if ($blocked = app(PlanGuard::class)->stockFeatureBlock()) {
+            return $blocked;
         }
 
         $material = RawMaterial::findOrFail($id);

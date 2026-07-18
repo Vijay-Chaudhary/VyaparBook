@@ -6,6 +6,7 @@ namespace App\Http\Controllers\Api\V1;
 use App\Http\Controllers\Controller;
 use App\Models\RawMaterial;
 use App\Policies\StockPolicy;
+use App\Services\PlanGuard;
 use App\Services\StockService;
 use Illuminate\Http\Request;
 
@@ -21,6 +22,10 @@ class StockController extends Controller
     {
         if (! (new StockPolicy())->manage()) {
             return $this->denied();
+        }
+
+        if ($blocked = app(PlanGuard::class)->stockFeatureBlock()) {
+            return $blocked;
         }
 
         $includeArchived = $request->boolean('include_archived');
@@ -52,6 +57,10 @@ class StockController extends Controller
     {
         if (! (new StockPolicy())->manage()) {
             return $this->denied();
+        }
+
+        if ($blocked = app(PlanGuard::class)->stockFeatureBlock()) {
+            return $blocked;
         }
 
         $material = RawMaterial::findOrFail($id);
