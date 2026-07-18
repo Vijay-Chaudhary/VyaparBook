@@ -33,12 +33,21 @@ class BusinessController extends Controller
             // the RLS WITH CHECK only admits a membership for the transaction's
             // current tenant, and the caller's tid (if any) is a different business.
             TenantContext::switchTo($business->id);
+            // Bind the app-level tenant too so the BelongsToTenant scope on the
+            // Subscription below is coherent with the switched-in tenant (Membership
+            // is not tenant-scoped, so it needed only the GUC).
+            app()->bind('tenant.id', fn () => $business->id);
 
-            return Membership::create([
+            $membership = Membership::create([
                 'user_id' => $userId,
                 'business_id' => $business->id,
                 'role' => 'owner',
             ]);
+
+            // Every new business starts on a 14-day trial (Pro entitlement).
+            app(\App\Services\SubscriptionService::class)->provisionTrial($business->id);
+
+            return $membership;
         });
 
         $user = User::find($userId);
