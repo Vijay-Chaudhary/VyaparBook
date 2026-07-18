@@ -6,6 +6,8 @@ use App\Models\Customer;
 use App\Models\Membership;
 use App\Models\Product;
 use App\Models\Sale;
+use App\Models\Subscription;
+use App\Models\SubscriptionPayment;
 use App\Models\User;
 use App\Services\TokenService;
 use Illuminate\Support\Str;
@@ -332,4 +334,70 @@ it('rejects business As batch consuming business Bs material and leaves Bs stock
     expect($onHand)->toBe('100.000');
     expect(\App\Models\ProductionBatch::on('pgsql_migrate')->withoutGlobalScopes()
         ->where('business_id', $businessA->id)->count())->toBe(0);
+});
+
+it('never shows business Bs subscription payments in business As billing', function () {
+    [$ownerA, $businessA, $tokenA] = ownerContext();
+    [$ownerB, $businessB] = ownerContext();
+
+    // A needs its own subscription for the billing endpoint to resolve.
+    Subscription::on('pgsql_migrate')->create([
+        'business_id' => $businessA->id, 'plan' => 'free',
+        'status' => 'trialing', 'trial_ends_at' => now()->addDays(14),
+    ]);
+    $aPayment = SubscriptionPayment::on('pgsql_migrate')->create([
+        'business_id' => $businessA->id, 'uuid' => (string) Str::uuid(),
+        'plan' => 'pro', 'amount' => '499.00', 'gst_amount' => '89.82',
+        'mode' => 'upi', 'period_months' => 1, 'status' => 'pending',
+    ]);
+    $bPayment = SubscriptionPayment::on('pgsql_migrate')->create([
+        'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(),
+        'plan' => 'pro', 'amount' => '999.00', 'gst_amount' => '179.82',
+        'mode' => 'upi', 'period_months' => 1, 'status' => 'pending',
+    ]);
+
+    $response = $this->withHeader('Authorization', "Bearer {$tokenA}")
+        ->getJson('/api/v1/billing')
+        ->assertOk();
+
+    $ids = collect($response->json('payments'))->pluck('id');
+    expect($ids)->toContain($aPayment->id);
+    expect($ids)->not->toContain($bPayment->id);
+});
+
+it('stamps a recorded payment with the callers tenant, ignoring a supplied business_id', function () {
+    [$ownerA, $businessA, $tokenA] = ownerContext();
+    [$ownerB, $businessB] = ownerContext();
+
+    Subscription::on('pgsql_migrate')->create([
+        'business_id' => $businessA->id, 'plan' => 'free',
+        'status' => 'trialing', 'trial_ends_at' => now()->addDays(14),
+    ]);
+
+    $this->withHeader('Authorization', "Bearer {$tokenA}")
+        ->postJson('/api/v1/billing/payments', [
+            'business_id' => $businessB->id, // ignored — never trusted from the payload
+            'plan' => 'pro', 'amount' => '499.00', 'mode' => 'upi', 'period_months' => 1,
+        ])
+        ->assertCreated();
+
+    $payment = SubscriptionPayment::on('pgsql_migrate')->withoutGlobalScopes()
+        ->latest('created_at')->first();
+    expect($payment->business_id)->toBe($businessA->id);
+    expect($payment->business_id)->not->toBe($businessB->id);
+});
+
+it('never lets business Bs read_only status gate business As writes', function () {
+    [$ownerA, $businessA, $tokenA] = ownerContext();
+    [$ownerB, $businessB] = ownerContext();
+
+    // B is in dunning (read_only); A carries on normally on its own fail-open trial.
+    Subscription::on('pgsql_migrate')->create([
+        'business_id' => $businessB->id, 'plan' => 'pro', 'status' => 'read_only',
+        'trial_ends_at' => now()->subDays(30), 'current_period_end' => now()->subDay(),
+    ]);
+
+    $this->withHeader('Authorization', "Bearer {$tokenA}")
+        ->postJson('/api/v1/customers', ['name' => 'A Customer'])
+        ->assertCreated();
 });
