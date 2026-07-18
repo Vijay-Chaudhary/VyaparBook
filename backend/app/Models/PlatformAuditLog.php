@@ -23,4 +23,15 @@ class PlatformAuditLog extends Model
     protected $casts = [
         'metadata' => 'array',
     ];
+
+    protected static function booted(): void
+    {
+        // created_at is the only timestamp and is not fillable, so stamp it here —
+        // covers the helper, factories and any direct create uniformly.
+        static::creating(function (self $log) {
+            if ($log->created_at === null) {
+                $log->created_at = now();
+            }
+        });
+    }
 }
