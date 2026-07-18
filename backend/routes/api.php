@@ -66,6 +66,12 @@ Route::prefix('v1')->group(function () {
 
             Route::post('sync/push', [\App\Http\Controllers\Api\V1\SyncController::class, 'push']);
             Route::get('sync/pull', [\App\Http\Controllers\Api\V1\SyncController::class, 'pull']);
+
+            // Billing — owner only (gated in the controller via BillingPolicy).
+            // Kept OUT of the read-only plan.gate group: an owner in read_only
+            // (dunning) must still be able to view billing and record a payment.
+            Route::get('billing', [\App\Http\Controllers\Api\V1\BillingController::class, 'show']);
+            Route::post('billing/payments', [\App\Http\Controllers\Api\V1\BillingController::class, 'recordPayment']);
         });
 
         Route::get('whoami', function () {
