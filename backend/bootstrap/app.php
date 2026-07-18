@@ -15,6 +15,7 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'tenant.context' => \App\Http\Middleware\SetTenantContext::class,
             'require.tenant' => \App\Http\Middleware\RequireTenant::class,
+            'plan.gate' => \App\Http\Middleware\EnforceActivePlan::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
