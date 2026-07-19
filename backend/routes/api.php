@@ -94,5 +94,6 @@ Route::prefix('v1')->group(function () {
     Route::middleware(['auth:api', 'require.platform_admin'])->prefix('admin')->group(function () {
         Route::get('tenants', [\App\Http\Controllers\Api\V1\Admin\TenantController::class, 'index']);
         Route::get('tenants/{id}', [\App\Http\Controllers\Api\V1\Admin\TenantController::class, 'show']);
+        Route::post('tenants/{id}/payments/{paymentId}/verify', [\App\Http\Controllers\Api\V1\Admin\PaymentController::class, 'verify']);
     });
 });
