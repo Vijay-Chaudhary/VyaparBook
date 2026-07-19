@@ -45,3 +45,46 @@ function something()
 {
     // ..
 }
+
+/*
+|--------------------------------------------------------------------------
+| Platform (Superadmin) console test helpers
+|--------------------------------------------------------------------------
+|
+| Shared across tests/Feature/Admin/*. Defined here (not per file) because Pest
+| loads every test file into the same scope — a duplicated function would fatal.
+*/
+
+/** A tid-less JWT for a fresh platform admin user. */
+function platformAdminToken(): string
+{
+    $admin = \App\Models\User::factory()->create(['is_platform_admin' => true]);
+
+    return (new \App\Services\TokenService())->issue($admin);
+}
+
+/**
+ * Seed a tenant (business + owner membership + subscription) and return the
+ * business plus an owner-scoped token, so a test can act as the tenant's owner.
+ *
+ * @return array{0: \App\Models\Business, 1: string}
+ */
+function seedTenantWithOwner(string $status = 'trialing', string $plan = 'free'): array
+{
+    $business = \App\Models\Business::factory()->create();
+    $user = \App\Models\User::factory()->create();
+    $membership = \App\Models\Membership::on('pgsql_migrate')->create([
+        'user_id' => $user->id,
+        'business_id' => $business->id,
+        'role' => 'owner',
+    ]);
+    \App\Models\Subscription::on('pgsql_migrate')->create([
+        'business_id' => $business->id,
+        'plan' => $plan,
+        'status' => $status,
+        'trial_ends_at' => $status === 'trialing' ? now()->addDays(14) : now()->subDay(),
+        'current_period_end' => in_array($status, ['active', 'read_only'], true) ? now()->addMonth() : null,
+    ]);
+
+    return [$business, (new \App\Services\TokenService())->issue($user, $membership)];
+}

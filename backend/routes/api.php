@@ -87,4 +87,11 @@ Route::prefix('v1')->group(function () {
             ]);
         });
     });
+
+    // Platform (Superadmin) console — gated on the live is_platform_admin flag,
+    // NOT a tenant membership. Deliberately OUTSIDE the tenant.context group:
+    // these routes are cross-tenant and carry no tenant GUC.
+    Route::middleware(['auth:api', 'require.platform_admin'])->prefix('admin')->group(function () {
+        Route::get('ping', fn () => response()->json(['ok' => true])); // temporary probe (replaced in S6)
+    });
 });

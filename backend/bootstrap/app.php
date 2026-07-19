@@ -16,6 +16,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'tenant.context' => \App\Http\Middleware\SetTenantContext::class,
             'require.tenant' => \App\Http\Middleware\RequireTenant::class,
             'plan.gate' => \App\Http\Middleware\EnforceActivePlan::class,
+            'require.platform_admin' => \App\Http\Middleware\RequirePlatformAdmin::class,
         ]);
     })
     ->withExceptions(function (Exceptions $exceptions) {
