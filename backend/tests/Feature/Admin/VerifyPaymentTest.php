@@ -4,32 +4,9 @@
 use App\Models\PlatformAuditLog;
 use App\Models\Subscription;
 use App\Models\SubscriptionPayment;
-use App\Models\User;
-use App\Services\TokenService;
 use Illuminate\Support\Str;
 
-/** A pending pro payment lodged (out-of-band) for a business. */
-function pendingPayment(string $businessId, string $plan = 'pro'): SubscriptionPayment
-{
-    return SubscriptionPayment::on('pgsql_migrate')->create([
-        'business_id' => $businessId,
-        'uuid' => (string) Str::uuid(),
-        'plan' => $plan,
-        'amount' => '999.00',
-        'gst_amount' => '179.82',
-        'mode' => 'upi',
-        'period_months' => 1,
-        'status' => 'pending',
-    ]);
-}
-
-/** A platform admin plus the user id, so tests can assert verified_by. */
-function platformAdmin(): array
-{
-    $admin = User::factory()->create(['is_platform_admin' => true]);
-
-    return [$admin, (new TokenService())->issue($admin)];
-}
+// pendingPayment() and platformAdmin() are shared helpers defined in tests/Pest.php.
 
 it('verifies a pending payment: activates the plan and stamps the admin', function () {
     [$business] = seedTenantWithOwner('trialing', 'free');

@@ -84,4 +84,22 @@ class SubscriptionService
             return $sub;
         });
     }
+
+    /**
+     * Reject a pending payment — a terminal state; the correcting payment is a
+     * fresh row, never an edit (mirrors the ledger's append-only rule). Idempotent
+     * on replay. verified_at/verified_by stay null: they mean "verified" only, and
+     * the reject decision's who/when/why is the platform audit trail's job.
+     */
+    public function rejectPayment(SubscriptionPayment $payment): SubscriptionPayment
+    {
+        if ($payment->status === 'rejected') {
+            return $payment;
+        }
+
+        $payment->status = 'rejected';
+        $payment->save();
+
+        return $payment;
+    }
 }

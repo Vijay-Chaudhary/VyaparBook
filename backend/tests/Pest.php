@@ -88,3 +88,26 @@ function seedTenantWithOwner(string $status = 'trialing', string $plan = 'free')
 
     return [$business, (new \App\Services\TokenService())->issue($user, $membership)];
 }
+
+/** A platform admin plus an admin-scoped token, so tests can assert on the user id. */
+function platformAdmin(): array
+{
+    $admin = \App\Models\User::factory()->create(['is_platform_admin' => true]);
+
+    return [$admin, (new \App\Services\TokenService())->issue($admin)];
+}
+
+/** A pending manual/UPI payment lodged (out-of-band) for a business. */
+function pendingPayment(string $businessId, string $plan = 'pro'): \App\Models\SubscriptionPayment
+{
+    return \App\Models\SubscriptionPayment::on('pgsql_migrate')->create([
+        'business_id' => $businessId,
+        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'plan' => $plan,
+        'amount' => '999.00',
+        'gst_amount' => '179.82',
+        'mode' => 'upi',
+        'period_months' => 1,
+        'status' => 'pending',
+    ]);
+}
