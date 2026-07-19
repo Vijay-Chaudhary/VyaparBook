@@ -96,5 +96,7 @@ Route::prefix('v1')->group(function () {
         Route::get('tenants/{id}', [\App\Http\Controllers\Api\V1\Admin\TenantController::class, 'show']);
         Route::post('tenants/{id}/payments/{paymentId}/verify', [\App\Http\Controllers\Api\V1\Admin\PaymentController::class, 'verify']);
         Route::post('tenants/{id}/payments/{paymentId}/reject', [\App\Http\Controllers\Api\V1\Admin\PaymentController::class, 'reject']);
+        Route::post('tenants/{id}/suspend', [\App\Http\Controllers\Api\V1\Admin\SubscriptionController::class, 'suspend']);
+        Route::post('tenants/{id}/reactivate', [\App\Http\Controllers\Api\V1\Admin\SubscriptionController::class, 'reactivate']);
     });
 });

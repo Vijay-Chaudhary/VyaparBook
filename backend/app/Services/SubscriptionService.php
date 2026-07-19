@@ -102,4 +102,55 @@ class SubscriptionService
 
         return $payment;
     }
+
+    /**
+     * Put a tenant into read_only (dunning): writes are soft-blocked, reads flow.
+     * Idempotent — already read_only is a no-op. Dates are left intact so a later
+     * reactivate can recompute the natural status.
+     */
+    public function suspend(Subscription $sub): Subscription
+    {
+        if ($sub->status === 'read_only') {
+            return $sub;
+        }
+
+        $sub->status = 'read_only';
+        $sub->save();
+
+        return $sub;
+    }
+
+    /**
+     * Lift a suspension. Only a read_only subscription changes — and it returns to
+     * the status its own dates imply, never a blind 'active': a still-open paid
+     * period → active, a live trial → trialing, otherwise past_due (writes flow,
+     * floored to Free, so the tenant can pay). An expired trial is never resurrected.
+     */
+    public function reactivate(Subscription $sub): Subscription
+    {
+        if ($sub->status !== 'read_only') {
+            return $sub;
+        }
+
+        $sub->status = $this->naturalStatus($sub);
+        $sub->save();
+
+        return $sub;
+    }
+
+    /** The status a subscription's dates imply right now, ignoring its stored status. */
+    private function naturalStatus(Subscription $sub): string
+    {
+        $now = Carbon::now();
+
+        if ($sub->current_period_end !== null && $sub->current_period_end->gte($now)) {
+            return 'active';
+        }
+
+        if ($sub->trial_ends_at !== null && $sub->trial_ends_at->gte($now)) {
+            return 'trialing';
+        }
+
+        return 'past_due';
+    }
 }
