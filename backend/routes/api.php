@@ -93,5 +93,6 @@ Route::prefix('v1')->group(function () {
     // these routes are cross-tenant and carry no tenant GUC.
     Route::middleware(['auth:api', 'require.platform_admin'])->prefix('admin')->group(function () {
         Route::get('tenants', [\App\Http\Controllers\Api\V1\Admin\TenantController::class, 'index']);
+        Route::get('tenants/{id}', [\App\Http\Controllers\Api\V1\Admin\TenantController::class, 'show']);
     });
 });

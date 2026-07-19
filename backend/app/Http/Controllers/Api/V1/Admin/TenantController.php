@@ -75,4 +75,55 @@ class TenantController extends Controller
             ],
         ]);
     }
+
+    /**
+     * Single-tenant drill-down: the business, its billing state, its members
+     * and recent subscription payments. All reads on the BYPASSRLS connection.
+     */
+    public function show(string $id): JsonResponse
+    {
+        $platform = DB::connection('pgsql_platform');
+
+        $business = $platform->table('businesses')
+            ->where('id', $id)
+            ->first(['id', 'name', 'city', 'gstin', 'default_language', 'plan', 'created_at']);
+
+        if ($business === null) {
+            return response()->json(['message' => 'Tenant not found.'], 404);
+        }
+
+        $subscription = $platform->table('subscriptions')
+            ->where('business_id', $id)
+            ->first(['status', 'plan', 'trial_ends_at', 'current_period_end']);
+
+        $members = $platform->table('memberships as m')
+            ->join('users as u', 'u.id', '=', 'm.user_id')
+            ->where('m.business_id', $id)
+            ->orderBy('u.name')
+            ->get(['u.id as user_id', 'u.name', 'u.email', 'u.phone', 'm.role']);
+
+        $payments = $platform->table('subscription_payments')
+            ->where('business_id', $id)
+            ->orderByDesc('created_at')
+            ->limit(20)
+            ->get(['id', 'uuid', 'plan', 'amount', 'gst_amount', 'mode', 'reference', 'period_months', 'status', 'verified_at', 'created_at']);
+
+        return response()->json([
+            'id' => $business->id,
+            'name' => $business->name,
+            'city' => $business->city,
+            'gstin' => $business->gstin,
+            'default_language' => $business->default_language,
+            'plan' => $business->plan,
+            'created_at' => $business->created_at,
+            'subscription' => $subscription === null ? null : [
+                'status' => $subscription->status,
+                'plan' => $subscription->plan,
+                'trial_ends_at' => $subscription->trial_ends_at,
+                'current_period_end' => $subscription->current_period_end,
+            ],
+            'members' => $members,
+            'payments' => $payments,
+        ]);
+    }
 }
