@@ -8,6 +8,7 @@ use App\Models\User;
 use App\Services\TokenService;
 use App\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
+use Illuminate\Http\Request;
 
 /**
  * The bridge between the two auth halves (docs/frontend-plan.md §2): exchanges
@@ -26,20 +27,33 @@ class ApiTokenController extends Controller
 {
     public function __construct(private readonly TokenService $tokens) {}
 
-    public function store(): JsonResponse
+    public function store(Request $request): JsonResponse
     {
         /** @var User $user */
         $user = auth()->user();
 
-        // Mirrors AuthController::login — a user with exactly one business gets
-        // a tenant-scoped token; anyone with several must choose, and the
-        // client resolves it via /businesses/mine + /businesses/{id}/switch.
-        // Read inside forUser() because memberships are RLS-scoped and no
-        // tenant is set yet.
-        $membership = TenantContext::forUser(
-            $user->id,
-            fn () => $user->memberships()->count() === 1 ? $user->memberships()->first() : null
-        );
+        $requested = $request->query('business');
+
+        // Resolve the membership to scope the token to. Read inside forUser()
+        // because memberships are RLS-scoped and no tenant is set yet.
+        $membership = TenantContext::forUser($user->id, function () use ($user, $requested) {
+            // An explicit ?business=… (the business switcher) scopes to that
+            // business — but only if the caller is genuinely a member, so a
+            // guessed id cannot mint a token into someone else's tenant.
+            if ($requested !== null) {
+                return $user->memberships()->where('business_id', $requested)->first();
+            }
+
+            // No preference: a single-business user is auto-scoped; a
+            // multi-business user gets a tenant-less token and must pick.
+            return $user->memberships()->count() === 1 ? $user->memberships()->first() : null;
+        });
+
+        // Asked for a business they do not belong to: refuse rather than
+        // silently handing back a tenant-less token they did not expect.
+        if ($requested !== null && $membership === null) {
+            return response()->json(['message' => 'Not a member of this business.'], 403);
+        }
 
         return response()->json([
             'token' => $this->tokens->issue($user, $membership),

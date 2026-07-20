@@ -347,20 +347,23 @@ Each phase ends shippable and testable. No phase depends on a later one.
 ### Phase 4 — Onboarding *(Blade, online-only)* ✅ *mostly done*
 - Signup + **DPDP consent** (mandatory — the API rejects signup without it) ✅
 - Create business → choose template → invite staff ✅
-- Business switcher, with the outbox-flush guard from §3.4 — **deferred**: it
-  belongs in the React `/app` header, not Blade, because the flush guard reads
-  the Dexie outbox. Small follow-up; carried into a later slice.
+- Business switcher, with the outbox-flush guard from §3.4 ✅ — in the React
+  `/app` header. Turned out to be **load-bearing, not polish**: a multi-business
+  user gets a tenant-less token, so without a picker the app hung on "loading".
+  `/auth/token?business=` scopes the token to a chosen membership (server
+  verifies it); the switch is refused while the outbox has unsynced work
+  (verified in a browser: the guard fired and the business stayed put).
 
 > Business creation was extracted into `BusinessProvisioner` so the JWT API and
 > the Blade flow share one implementation of the RLS-sensitive
 > business+membership+trial transaction, rather than risking divergence.
 
-### Phase 5 — Stock & Production ✅ *stock done; production deferred*
-- Raw materials + stock movements — done (React, manager-only)
-- **Production batches — deferred** to a follow-up. It is a self-contained
-  sub-feature (record a batch → draw materials down) that reuses the same
-  online-write + role-gate machinery built here; splitting it keeps this slice
-  reviewable.
+### Phase 5 — Stock & Production ✅ *done*
+- Raw materials + stock movements — React, manager-only
+- Production batches — record a batch → server draws materials down; a sync
+  after success pulls both the batch and the stock movements it created, so
+  on-hand updates without a manual refresh. 5th manager-only tab. Verified:
+  POST /production → 201, batch listed, no console errors.
 - Role-gated in three layers, verified in a browser: the nav tab is hidden for
   salesman/accountant, a deep link to /stock is refused, and the server never
   sends them stock rows (0 cached).

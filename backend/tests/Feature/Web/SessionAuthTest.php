@@ -169,3 +169,46 @@ it('throttles Blade login by the same limiter as the API', function () {
     // The Blade form must not be a softer door onto the same credentials.
     $attempt()->assertStatus(429);
 });
+
+/*
+ * The business switcher's server half: /auth/token?business= scopes the minted
+ * token to a chosen business, for a user who belongs to more than one.
+ */
+
+it('scopes the token to a requested business the user belongs to', function () {
+    $user = User::factory()->create();
+
+    $a = Business::factory()->create();
+    $b = Business::factory()->create();
+    foreach ([$a, $b] as $business) {
+        Membership::on('pgsql_migrate')->create([
+            'user_id' => $user->id,
+            'business_id' => $business->id,
+            'role' => 'owner',
+        ]);
+    }
+
+    // With two memberships and no preference, the token is tenant-less …
+    $this->actingAs($user)->getJson('/auth/token')->assertJsonPath('tenant_id', null);
+
+    // … but asking for one of them scopes to it.
+    $this->actingAs($user)->getJson('/auth/token?business='.$b->id)
+        ->assertOk()
+        ->assertJsonPath('tenant_id', $b->id)
+        ->assertJsonPath('role', 'owner');
+});
+
+it('refuses to scope the token to a business the user does not belong to', function () {
+    $user = User::factory()->create();
+    Membership::on('pgsql_migrate')->create([
+        'user_id' => $user->id,
+        'business_id' => Business::factory()->create()->id,
+        'role' => 'owner',
+    ]);
+
+    $stranger = Business::factory()->create();
+
+    // A guessed id must not mint a token into someone else's tenant.
+    $this->actingAs($user)->getJson('/auth/token?business='.$stranger->id)
+        ->assertStatus(403);
+});

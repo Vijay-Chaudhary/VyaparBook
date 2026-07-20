@@ -14,6 +14,42 @@ let token = null;
 let expiresAt = null; // epoch ms
 let inFlight = null; // de-dupes concurrent refreshes
 
+/*
+ * The business the token should be scoped to, for a user who belongs to more
+ * than one. Persisted (localStorage) so the choice survives a reload — it is
+ * only a business id the user is a member of, never a credential, so it is safe
+ * on disk. A single-business user leaves this null and is auto-scoped.
+ */
+const ACTIVE_KEY = 'vb_active_business';
+let activeBusinessId = readActiveBusiness();
+
+function readActiveBusiness() {
+    try {
+        return localStorage.getItem(ACTIVE_KEY) || null;
+    } catch {
+        return null; // storage disabled (private mode) — degrade to "must pick each load"
+    }
+}
+
+export function getActiveBusiness() {
+    return activeBusinessId;
+}
+
+/** Record the chosen business and drop the cached token so the next getToken
+ *  re-scopes to it. */
+export function setActiveBusiness(id) {
+    activeBusinessId = id;
+    token = null;
+    expiresAt = null;
+
+    try {
+        if (id) localStorage.setItem(ACTIVE_KEY, id);
+        else localStorage.removeItem(ACTIVE_KEY);
+    } catch {
+        /* non-persistent is acceptable; the in-memory value still works this session */
+    }
+}
+
 /** Refresh a minute early, so a request never races its own expiry. */
 const EXPIRY_MARGIN_MS = 60_000;
 
@@ -36,11 +72,24 @@ export async function getToken() {
     if (isFresh()) return token;
     if (inFlight) return inFlight;
 
-    inFlight = fetch('/auth/token', {
+    // Scope to the chosen business if one is set. The server verifies membership
+    // and 403s a business the user does not belong to.
+    const url = activeBusinessId
+        ? `/auth/token?business=${encodeURIComponent(activeBusinessId)}`
+        : '/auth/token';
+
+    inFlight = fetch(url, {
         headers: { Accept: 'application/json' },
         credentials: 'same-origin', // send the session cookie
     })
         .then(async (response) => {
+            if (response.status === 403) {
+                // The stored business is no longer ours (access revoked, or a
+                // stale localStorage id). Clear it so the next load re-picks.
+                setActiveBusiness(null);
+                return null;
+            }
+
             if (!response.ok) {
                 // 401 = session gone; 429 = throttled. Both mean "no token now".
                 // Neither justifies destroying unsynced local work.

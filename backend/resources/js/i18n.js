@@ -100,6 +100,16 @@ const strings = {
         online_only: 'स्टॉक बदलने के लिए ऑनलाइन होना ज़रूरी है।',
         needs_upgrade: 'यह सुविधा आपके प्लान में नहीं है।',
         try_again_online: 'ऑनलाइन होने पर फिर कोशिश करें।',
+
+        record_batch: 'बैच दर्ज करें',
+        new_batch: 'नया बैच',
+        no_batches: 'अभी कोई बैच नहीं',
+        no_products: 'कोई उत्पाद नहीं — पहले उत्पाद सूची जोड़ें।',
+        add_consumption: 'और सामग्री जोड़ें',
+
+        choose_business: 'दुकान चुनें',
+        switch_business: 'दुकान बदलें',
+        sync_before_switch: 'दुकान बदलने से पहले सिंक करें — कुछ प्रविष्टियाँ बाकी हैं।',
     },
 
     en: {
@@ -192,6 +202,16 @@ const strings = {
         online_only: 'You must be online to change stock.',
         needs_upgrade: 'This feature is not in your plan.',
         try_again_online: 'Try again when you are connected.',
+
+        record_batch: 'Record batch',
+        new_batch: 'New batch',
+        no_batches: 'No batches yet',
+        no_products: 'No products — add a product list first.',
+        add_consumption: 'Add material',
+
+        choose_business: 'Choose a shop',
+        switch_business: 'Switch shop',
+        sync_before_switch: 'Sync before switching shop — some entries are still queued.',
     },
 };
 

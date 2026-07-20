@@ -16,6 +16,7 @@ const TABS = [
     // Manager-only. Hidden for salesman/accountant, matching StockPolicy and
     // what sync/pull actually sends them — never render a tab that 403s.
     { route: '/stock', key: 'stock', icon: BoxIcon, managerOnly: true },
+    { route: '/production', key: 'production', icon: FlaskIcon, managerOnly: true },
 ];
 
 export function BottomNav({ path, canManageStock = false }) {
@@ -106,6 +107,49 @@ export function SyncBar({ online, queued, syncing, error, onSync }) {
     );
 }
 
+/**
+ * Switch business (PRD §15). Only rendered for a user in more than one.
+ *
+ * The guard (PRD §9): switching is refused while the outbox has unsynced work,
+ * or that work would be stranded in a cache about to be closed. onSwitch runs
+ * assertSafeToSwitch and throws with a message if not safe.
+ */
+export function BusinessSwitcher({ current, memberships, onSwitch }) {
+    if (memberships.length < 2) return null;
+
+    const change = async (event) => {
+        const id = event.target.value;
+
+        if (id === current) return;
+
+        try {
+            await onSwitch(id);
+        } catch (error) {
+            // Reset the select to the current business and surface why.
+            event.target.value = current;
+            alert(error.message); // eslint-disable-line no-alert -- deliberate hard stop
+        }
+    };
+
+    return (
+        <label className="flex items-center gap-1 border-b border-hairline bg-canvas px-4 py-1.5 text-sm">
+            <span className="sr-only">{t('switch_business')}</span>
+            <select
+                value={current ?? ''}
+                onChange={change}
+                className="min-h-tap max-w-full bg-transparent font-medium text-ink"
+                data-testid="business-switcher"
+            >
+                {memberships.map(({ business }) => (
+                    <option key={business.id} value={business.id}>
+                        {business.name}
+                    </option>
+                ))}
+            </select>
+        </label>
+    );
+}
+
 export function StalenessBanner({ staleness }) {
     if (staleness === 'ok') return null;
 
@@ -187,6 +231,16 @@ function PlusIcon({ filled }) {
              fill={filled ? 'currentColor' : 'none'} fillOpacity={filled ? 0.12 : 0}>
             <circle cx="12" cy="12" r="9" />
             <path d="M12 8v8M8 12h8" />
+        </svg>
+    );
+}
+
+function FlaskIcon({ filled }) {
+    return (
+        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" {...stroke}
+             fill={filled ? 'currentColor' : 'none'} fillOpacity={filled ? 0.12 : 0}>
+            <path d="M9 3h6M10 3v6l-5 9a2 2 0 0 0 1.8 3h10.4a2 2 0 0 0 1.8-3l-5-9V3" />
+            <path d="M7.5 14h9" />
         </svg>
     );
 }
