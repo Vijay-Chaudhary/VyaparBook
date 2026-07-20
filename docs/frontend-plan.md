@@ -253,7 +253,14 @@ Active state must be indicated by **weight + color + indicator**, never color al
 
 **Decision: full React**, not Preact — compatibility is worth more than the bytes, and `preact/compat` failures tend to be obscure and late-surfacing.
 
-That costs ~45KB gzipped for `react` + `react-dom` before a line of app code, so the budget is set honestly around it rather than pretending otherwise:
+> **Measured, Phase 1 (correcting the estimate above):** React 19 + react-dom is
+> **60.5KB gzipped**, not the ~45KB quoted when Preact was declined — that figure
+> was React 18. The vendor budget below was set at 60KB and is already marginally
+> exceeded by the runtime alone. Not a crisis (it is one cacheable chunk, loaded
+> only under `/app/*`), but the Preact question is live again and should be
+> re-decided at Phase 3 against a measured bundle rather than an estimate.
+
+That costs ~60KB gzipped for `react` + `react-dom` before a line of app code, so the budget is set honestly around it rather than pretending otherwise:
 
 | Target | Budget (gzipped) |
 |---|---|
