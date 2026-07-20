@@ -13,9 +13,14 @@ const TABS = [
     { route: '/', key: 'home', icon: HomeIcon },
     { route: '/khata', key: 'khata', icon: BookIcon },
     { route: '/sale', key: 'sales', icon: PlusIcon },
+    // Manager-only. Hidden for salesman/accountant, matching StockPolicy and
+    // what sync/pull actually sends them — never render a tab that 403s.
+    { route: '/stock', key: 'stock', icon: BoxIcon, managerOnly: true },
 ];
 
-export function BottomNav({ path }) {
+export function BottomNav({ path, canManageStock = false }) {
+    const tabs = TABS.filter((tab) => !tab.managerOnly || canManageStock);
+
     return (
         <nav
             aria-label={t('khata')}
@@ -24,7 +29,7 @@ export function BottomNav({ path }) {
                        pb-[env(safe-area-inset-bottom)]"
         >
             <ul className="mx-auto flex max-w-md">
-                {TABS.map(({ route, key, icon: Icon }) => {
+                {tabs.map(({ route, key, icon: Icon }) => {
                     const active = route === '/' ? path === '/' : path.startsWith(route);
 
                     return (
@@ -182,6 +187,16 @@ function PlusIcon({ filled }) {
              fill={filled ? 'currentColor' : 'none'} fillOpacity={filled ? 0.12 : 0}>
             <circle cx="12" cy="12" r="9" />
             <path d="M12 8v8M8 12h8" />
+        </svg>
+    );
+}
+
+function BoxIcon({ filled }) {
+    return (
+        <svg width="22" height="22" viewBox="0 0 24 24" aria-hidden="true" {...stroke}
+             fill={filled ? 'currentColor' : 'none'} fillOpacity={filled ? 0.12 : 0}>
+            <path d="M3 8l9-5 9 5v8l-9 5-9-5z" />
+            <path d="M3 8l9 5 9-5M12 13v8" />
         </svg>
     );
 }

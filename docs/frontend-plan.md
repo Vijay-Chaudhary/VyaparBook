@@ -355,9 +355,21 @@ Each phase ends shippable and testable. No phase depends on a later one.
 > the Blade flow share one implementation of the RLS-sensitive
 > business+membership+trial transaction, rather than risking divergence.
 
-### Phase 5 — Stock & Production
-- Raw materials, stock movements, production batches
-- Role-gated: hidden for salesman/accountant, matching the server
+### Phase 5 — Stock & Production ✅ *stock done; production deferred*
+- Raw materials + stock movements — done (React, manager-only)
+- **Production batches — deferred** to a follow-up. It is a self-contained
+  sub-feature (record a batch → draw materials down) that reuses the same
+  online-write + role-gate machinery built here; splitting it keeps this slice
+  reviewable.
+- Role-gated in three layers, verified in a browser: the nav tab is hidden for
+  salesman/accountant, a deep link to /stock is refused, and the server never
+  sends them stock rows (0 cached).
+
+> Stock is **online-only** by design: sync/push accepts only customer/sale/
+> payment, and stock is a back-office task, not counter work done mid-outage.
+> Reads are cached (managers receive stock rows via sync/pull) so the list and
+> on-hand work offline; writes go straight to the REST API and report the
+> server's verdict (402 → upgrade prompt, offline → try-again).
 
 ### Phase 6 — Billing & Plan *(Blade, online-only)*
 - Plan display, record payment, dunning banner

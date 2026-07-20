@@ -1,9 +1,11 @@
 import { createRoot } from 'react-dom/client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getToken } from './api/token';
+import { apiWrite } from './api/write';
 import { openTenantDb } from './offline/db';
 import { enqueue, pendingCount, stalenessState } from './offline/outbox';
 import { khataList, ledgerFor, outstandingFor } from './offline/khata';
+import { movementsFor, stockList } from './offline/stock';
 import { sync } from './offline/sync';
 import { registerServiceWorker } from './offline/register-sw';
 import { setLocale, t, today } from './i18n';
@@ -13,6 +15,8 @@ import { Home } from './screens/Home';
 import { KhataList } from './screens/KhataList';
 import { CustomerLedger } from './screens/CustomerLedger';
 import { NewCustomer, RecordPayment, RecordSale } from './screens/Forms';
+import { StockList } from './screens/StockList';
+import { MaterialDetail, NewMaterial, RecordMovement } from './screens/StockForms';
 
 const ROUTES = {
     '/': 'home',
@@ -22,7 +26,14 @@ const ROUTES = {
     '/payment/:uuid': 'payment',
     '/sale/:uuid': 'sale',
     '/sale': 'pick-customer',
+    '/stock': 'stock',
+    '/stock/:id': 'material',
+    '/material/new': 'new-material',
+    '/movement/:id': 'movement',
 };
+
+/** Roles that may see and manage stock (PRD §7). */
+const STOCK_MANAGERS = ['owner', 'admin'];
 
 function useOnline() {
     const [online, setOnline] = useState(navigator.onLine);
@@ -52,7 +63,9 @@ function App({ userName, locale }) {
 
     const [db, setDb] = useState(null);
     const [tenantId, setTenantId] = useState(null);
+    const [role, setRole] = useState(null);
     const [customers, setCustomers] = useState([]);
+    const [materials, setMaterials] = useState([]);
     const [packs, setPacks] = useState([]);
     const [queued, setQueued] = useState(0);
     const [staleness, setStaleness] = useState('ok');
@@ -76,6 +89,7 @@ function App({ userName, locale }) {
             if (cancelled || !identity.tenant_id) return;
 
             setTenantId(identity.tenant_id);
+            setRole(identity.role);
             setDb(openTenantDb(identity.tenant_id));
         })();
 
@@ -84,15 +98,24 @@ function App({ userName, locale }) {
         };
     }, []);
 
-    /* --- reload everything the screens read ------------------------ */
-    const refresh = useCallback(async (database) => {
-        if (!database) return;
+    const canManageStock = STOCK_MANAGERS.includes(role);
 
-        setCustomers(await khataList(database));
-        setPacks(await database.product_packs.toArray());
-        setQueued(await pendingCount(database));
-        setStaleness(await stalenessState(database));
-    }, []);
+    /* --- reload everything the screens read ------------------------ */
+    const refresh = useCallback(
+        async (database) => {
+            if (!database) return;
+
+            setCustomers(await khataList(database));
+            setPacks(await database.product_packs.toArray());
+            setQueued(await pendingCount(database));
+            setStaleness(await stalenessState(database));
+
+            // Only managers hold stock rows (sync/pull withholds them from
+            // others), so only they compute the stock list.
+            if (canManageStock) setMaterials(await stockList(database));
+        },
+        [canManageStock]
+    );
 
     useEffect(() => {
         refresh(db);
@@ -192,6 +215,47 @@ function App({ userName, locale }) {
         if (online) runSync();
     };
 
+    /* --- material detail for the open material --------------------- */
+    const activeMaterial = useMemo(
+        () => materials.find((m) => m.id === route.params.id) ?? null,
+        [materials, route.params.id]
+    );
+
+    const [materialMovements, setMaterialMovements] = useState([]);
+
+    useEffect(() => {
+        if (!db || !activeMaterial) {
+            setMaterialMovements([]);
+            return;
+        }
+
+        let cancelled = false;
+
+        (async () => {
+            const rows = await movementsFor(db, activeMaterial);
+            if (!cancelled) setMaterialMovements(rows);
+        })();
+
+        return () => {
+            cancelled = true;
+        };
+    }, [db, activeMaterial]);
+
+    /* --- stock writes: online-only, straight to the API ------------ */
+    const saveMaterial = async (body) => {
+        const result = await apiWrite('/raw-materials', body);
+        // A successful write returns the row; pull it (and its movements) into
+        // the cache so the list reflects it without waiting for the next sync.
+        if (result.ok && online) await runSync();
+        return result;
+    };
+
+    const saveMovement = async (body) => {
+        const result = await apiWrite('/stock-movements', body);
+        if (result.ok && online) await runSync();
+        return result;
+    };
+
     /* --- today's entries for Home ---------------------------------- */
     const [entriesToday, setEntriesToday] = useState([]);
 
@@ -258,6 +322,32 @@ function App({ userName, locale }) {
                 // picker, so send them there rather than inventing a second one.
                 return <KhataList customers={customers} />;
 
+            case 'stock':
+            case 'material':
+            case 'new-material':
+            case 'movement':
+                // Defence in depth: the tab is already hidden for non-managers,
+                // but a salesman deep-linking to /stock must also be refused —
+                // and they hold no stock rows anyway.
+                if (!canManageStock) return <Home userName={userName} customers={customers} entriesToday={entriesToday} />;
+
+                if (route.name === 'material') {
+                    return (
+                        <MaterialDetail
+                            material={activeMaterial}
+                            movements={materialMovements}
+                            online={online}
+                        />
+                    );
+                }
+                if (route.name === 'new-material') return <NewMaterial onSave={saveMaterial} />;
+                if (route.name === 'movement') {
+                    return activeMaterial ? (
+                        <RecordMovement material={activeMaterial} onSave={saveMovement} />
+                    ) : null;
+                }
+                return <StockList materials={materials} online={online} />;
+
             default:
                 return <Home userName={userName} customers={customers} entriesToday={entriesToday} />;
         }
@@ -274,7 +364,7 @@ function App({ userName, locale }) {
             />
             <StalenessBanner staleness={staleness} />
             {screen()}
-            <BottomNav path={path} />
+            <BottomNav path={path} canManageStock={canManageStock} />
         </>
     );
 }
