@@ -6,6 +6,7 @@ namespace App\Http\Middleware;
 use App\Models\User;
 use Closure;
 use Illuminate\Http\Request;
+use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
 use Symfony\Component\HttpFoundation\Response;
 
 /**
@@ -28,6 +29,15 @@ class RequirePlatformAdmin
 
         if ($user === null || ! $user->is_platform_admin) {
             abort(403, 'Platform admin only.');
+        }
+
+        // An impersonation token belongs to a real admin, so the flag check above
+        // passes — but it is scoped to one tenant and read-only by construction.
+        // Letting it back into the console would hand it every console mutation
+        // (suspend, verify payment) under the guise of a read-only session. The
+        // admin's ordinary token is the only key to this surface.
+        if (JWTAuth::parseToken()->getPayload()->get('imp') !== null) {
+            abort(403, 'Impersonation tokens cannot access the platform console.');
         }
 
         return $next($request);
