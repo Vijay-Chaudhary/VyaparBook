@@ -4,11 +4,17 @@ use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
     Route::post('auth/register', [\App\Http\Controllers\Api\V1\AuthController::class, 'register']);
-    Route::post('auth/login', [\App\Http\Controllers\Api\V1\AuthController::class, 'login']);
+    // Credential-stuffing defence: no tenant exists yet, so this is keyed per
+    // email+IP rather than per tenant.
+    Route::post('auth/login', [\App\Http\Controllers\Api\V1\AuthController::class, 'login'])
+        ->middleware('throttle:login');
     Route::post('auth/otp/request', [\App\Http\Controllers\Api\V1\OtpController::class, 'request']);
     Route::post('auth/otp/verify', [\App\Http\Controllers\Api\V1\OtpController::class, 'verify']);
 
-    Route::middleware(['auth:api', 'tenant.context'])->group(function () {
+    // 'throttle:tenant' sits INSIDE tenant.context so app('tenant.id') is already
+    // resolved when the limiter builds its key — throttling before the tenant is
+    // known would silently collapse every tenant into one shared bucket.
+    Route::middleware(['auth:api', 'tenant.context', 'throttle:tenant'])->group(function () {
         Route::post('businesses', [\App\Http\Controllers\Api\V1\BusinessController::class, 'store']);
         Route::get('businesses/mine', [\App\Http\Controllers\Api\V1\BusinessController::class, 'mine']);
         Route::post('businesses/{id}/switch', [\App\Http\Controllers\Api\V1\BusinessController::class, 'switch']);
@@ -75,8 +81,12 @@ Route::prefix('v1')->group(function () {
             Route::get('production', [\App\Http\Controllers\Api\V1\ProductionController::class, 'index']);
             Route::get('production/{id}', [\App\Http\Controllers\Api\V1\ProductionController::class, 'show']);
 
-            Route::post('sync/push', [\App\Http\Controllers\Api\V1\SyncController::class, 'push']);
-            Route::get('sync/pull', [\App\Http\Controllers\Api\V1\SyncController::class, 'pull']);
+            // Sync is batched — few requests each carrying many rows — so it gets
+            // its own bucket instead of competing with interactive work.
+            Route::middleware(['throttle:sync'])->group(function () {
+                Route::post('sync/push', [\App\Http\Controllers\Api\V1\SyncController::class, 'push']);
+                Route::get('sync/pull', [\App\Http\Controllers\Api\V1\SyncController::class, 'pull']);
+            });
         });
 
         // DPDP consent (PRD §13). Outside require.tenant and the plan gate:
@@ -97,7 +107,7 @@ Route::prefix('v1')->group(function () {
     // Platform (Superadmin) console — gated on the live is_platform_admin flag,
     // NOT a tenant membership. Deliberately OUTSIDE the tenant.context group:
     // these routes are cross-tenant and carry no tenant GUC.
-    Route::middleware(['auth:api', 'require.platform_admin'])->prefix('admin')->group(function () {
+    Route::middleware(['auth:api', 'require.platform_admin', 'throttle:platform'])->prefix('admin')->group(function () {
         Route::get('tenants', [\App\Http\Controllers\Api\V1\Admin\TenantController::class, 'index']);
         Route::get('tenants/{id}', [\App\Http\Controllers\Api\V1\Admin\TenantController::class, 'show']);
         Route::post('tenants/{id}/payments/{paymentId}/verify', [\App\Http\Controllers\Api\V1\Admin\PaymentController::class, 'verify']);
