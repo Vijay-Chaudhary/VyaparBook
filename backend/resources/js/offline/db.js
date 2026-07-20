@@ -60,6 +60,46 @@ export function openTenantDb(tenantId) {
         outbox: '++seq, uuid, status, created_at',
     });
 
+    /*
+     * v2 adds the catalog.
+     *
+     * The catalog is NOT part of sync/pull — that endpoint carries only the
+     * ledger tables. But recording a sale needs product_pack_id, so without a
+     * local copy an offline sale could not be described at all. It is cached
+     * wholesale from GET /catalog on each successful sync instead of by delta:
+     * it is small, changes rarely, and a stale price would be frozen onto a
+     * sale, so the simplest correct thing is to replace it outright.
+     */
+    db.version(2).stores({
+        products: 'id, name_hi',
+        product_packs: 'id, product_id',
+    });
+
+    /*
+     * v3/v4 fix a schema bug: sale_lines and material_consumptions were keyed on
+     * `uuid`, but neither table HAS a uuid column — they are child rows the
+     * server identifies by `id` alone, and clients never create them directly
+     * (a sale's lines are built server-side from its `lines` payload).
+     *
+     * The consequence was severe and silent: bulkPut threw on the missing
+     * primary key, which rolled back the whole pull transaction, so NOTHING was
+     * ever cached — not customers, not sales, not the cursor. The app looked
+     * like it synced and stayed permanently empty.
+     *
+     * Dexie cannot change a primary key in place, so the stores are dropped and
+     * recreated. Losing their cached contents is harmless: both are pure server
+     * data and the next pull refetches them from cursor 0.
+     */
+    db.version(3).stores({
+        sale_lines: null,
+        material_consumptions: null,
+    });
+
+    db.version(4).stores({
+        sale_lines: 'id, sale_id, sync_seq',
+        material_consumptions: 'id, production_batch_id, sync_seq',
+    });
+
     current = db;
     currentTenantId = tenantId;
 

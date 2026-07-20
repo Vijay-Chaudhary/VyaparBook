@@ -337,11 +337,12 @@ Each phase ends shippable and testable. No phase depends on a later one.
 
 > This phase is deliberately **before** any UI. If offline sync is going to be wrong, it should be wrong while there are five files to change, not fifty.
 
-### Phase 3 — Khata (the core loop)
+### Phase 3 — Khata (the core loop) ✅ *done*
 - Home / today summary
 - Customer list + search, customer ledger with running balance
 - Record sale, record payment — **fully offline**
-- **Verify:** entire loop with the network disabled start to finish
+- **Verified:** the entire loop with the network disabled, and client/server
+  balances reconciled to the paisa (both independently computed ₹489.50)
 
 ### Phase 4 — Onboarding *(Blade, online-only)*
 - Signup + **DPDP consent** (mandatory — the API now rejects signup without it)

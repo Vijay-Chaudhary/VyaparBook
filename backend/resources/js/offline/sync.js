@@ -1,6 +1,6 @@
 import { getToken } from '../api/token';
 import { CURSOR_KEY, LAST_SYNC_KEY, getMeta, setMeta } from './db';
-import { applyResults, pending, recordFailure } from './outbox';
+import { applyResults, pending, recordFailure, resolveDependencies } from './outbox';
 
 /**
  * The sync engine (docs/frontend-plan.md §3.3).
@@ -85,6 +85,14 @@ export async function sync(db, deps = {}) {
         return new SyncResult({ pushed, parked: parkedTotal, reason: `pull_failed: ${error.message}` });
     }
 
+    // Best-effort: a stale catalog still lets the shop work, so a failure here
+    // must not fail the sync that already moved the ledger.
+    try {
+        await refreshCatalog(db, doFetch, token);
+    } catch {
+        /* keep the previous catalog */
+    }
+
     await setMeta(db, LAST_SYNC_KEY, Date.now());
 
     return new SyncResult({ pushed, parked: parkedTotal, pulled, cursor });
@@ -101,8 +109,17 @@ async function push(db, doFetch, token) {
     let parkedTotal = 0;
 
     for (;;) {
-        const batch = (await pending(db)).slice(0, PUSH_BATCH_SIZE);
+        const queued = (await pending(db)).slice(0, PUSH_BATCH_SIZE);
 
+        if (queued.length === 0) break;
+
+        // Swap local customer references for server ids, holding back anything
+        // whose customer has not synced yet (see resolveDependencies).
+        const { ready: batch } = await resolveDependencies(db, queued);
+
+        // Everything is waiting on a customer that is itself still queued —
+        // which can only happen if that customer failed to apply. Stop rather
+        // than spin.
         if (batch.length === 0) break;
 
         const body = {
@@ -191,6 +208,37 @@ async function pull(db, doFetch, token) {
     });
 
     return { pulled, cursor: payload.cursor ?? since };
+}
+
+/**
+ * Replace the cached catalog from GET /catalog.
+ *
+ * Wholesale replacement, not a delta: the catalog is small and rarely changes,
+ * and the endpoint has no cursor. Replacing outright also means an archived
+ * product genuinely disappears locally rather than lingering because no
+ * tombstone was sent.
+ */
+async function refreshCatalog(db, doFetch, token) {
+    const response = await doFetch('/api/v1/catalog', {
+        headers: { Accept: 'application/json', Authorization: `Bearer ${token}` },
+    });
+
+    if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+    const { products = [] } = await response.json();
+
+    // Flatten the nested packs into their own store so sale entry can look one
+    // up by id without walking every product.
+    const packs = products.flatMap((product) =>
+        (product.packs ?? []).map((pack) => ({ ...pack, product_id: product.id }))
+    );
+
+    await db.transaction('rw', db.products, db.product_packs, async () => {
+        await db.products.clear();
+        await db.product_packs.clear();
+        await db.products.bulkPut(products.map(({ packs: _ignored, ...rest }) => rest));
+        await db.product_packs.bulkPut(packs);
+    });
 }
 
 /**

@@ -15,7 +15,13 @@ const mutation = (uuid) => ({
 });
 
 /** Minimal fake of the two sync endpoints, recording call order. */
-function fakeServer({ pushResults = () => [], pullBody = {}, pushStatus = 200, pullStatus = 200 } = {}) {
+function fakeServer({
+    pushResults = () => [],
+    pullBody = {},
+    pushStatus = 200,
+    pullStatus = 200,
+    catalogProducts = [],
+} = {}) {
     const calls = [];
 
     const doFetch = vi.fn(async (url, options = {}) => {
@@ -36,6 +42,14 @@ function fakeServer({ pushResults = () => [], pullBody = {}, pushStatus = 200, p
                 status: 200,
                 json: async () => ({ results: pushResults(body.mutations) }),
             };
+        }
+
+        // The catalog is fetched separately from the delta pull (it has no
+        // cursor), so it is its own endpoint here rather than a second 'pull'.
+        if (url.startsWith('/api/v1/catalog')) {
+            calls.push({ endpoint: 'catalog', url });
+
+            return { ok: true, status: 200, json: async () => ({ products: catalogProducts }) };
         }
 
         calls.push({ endpoint: 'pull', url });
@@ -73,7 +87,8 @@ describe('ordering', () => {
 
         await sync(db, withToken(doFetch));
 
-        expect(calls.map((c) => c.endpoint)).toEqual(['push', 'pull']);
+        // Catalog is a separate concern; the ordering that matters is push→pull.
+        expect(calls.map((c) => c.endpoint).filter((e) => e !== 'catalog')).toEqual(['push', 'pull']);
     });
 
     it('still pulls when the outbox is empty', async () => {
@@ -81,7 +96,7 @@ describe('ordering', () => {
 
         const result = await sync(db, withToken(doFetch));
 
-        expect(calls.map((c) => c.endpoint)).toEqual(['pull']);
+        expect(calls.map((c) => c.endpoint).filter((e) => e !== 'catalog')).toEqual(['pull']);
         expect(result.ok).toBe(true);
     });
 });
@@ -309,5 +324,92 @@ describe('tenant switching', () => {
         await sync(db, withToken(doFetch));
 
         await expect(assertSafeToSwitch(db)).resolves.toBeUndefined();
+    });
+});
+
+/**
+ * The most natural first thing a shop does offline: add a customer, then
+ * immediately record their sale.
+ *
+ * A sale's customer_id must be the customer's SERVER id (LedgerWriter does
+ * findOrFail on the primary key, not the client uuid). A customer created
+ * offline has no server id yet, so without resolution the sale would push a
+ * reference the server has never seen, be rejected as not_found, and get
+ * permanently parked — losing a real sale.
+ */
+describe('offline customer dependencies', () => {
+    async function queueCustomerThenSale() {
+        await db.customers.put({ uuid: 'local-cust', name: 'नया ग्राहक', opening_balance: '0.00' });
+
+        await enqueue(db, {
+            type: 'customer',
+            tenantId: TENANT,
+            uuid: 'local-cust',
+            payload: { name: 'नया ग्राहक' },
+        });
+
+        await enqueue(db, {
+            type: 'sale',
+            tenantId: TENANT,
+            uuid: 'sale-1',
+            payload: { customer_id: 'local-cust', sale_date: '2026-07-20', lines: [] },
+            dependsOnUuid: 'local-cust',
+        });
+    }
+
+    it('holds the sale back until the customer has a server id', async () => {
+        await queueCustomerThenSale();
+
+        const { doFetch, calls } = fakeServer({
+            pushResults: (m) => m.map((x) => ({ uuid: x.uuid, status: 'applied', id: `srv-${x.uuid}` })),
+        });
+
+        await sync(db, withToken(doFetch));
+
+        const pushes = calls.filter((c) => c.endpoint === 'push');
+
+        // First push carries only the customer — the sale cannot be described
+        // yet. The second carries the sale, now pointing at the real id.
+        expect(pushes[0].mutations.map((m) => m.uuid)).toEqual(['local-cust']);
+        expect(pushes[1].mutations.map((m) => m.uuid)).toEqual(['sale-1']);
+        expect(pushes[1].mutations[0].payload.customer_id).toBe('srv-local-cust');
+
+        expect(await pending(db)).toHaveLength(0);
+    });
+
+    it('rewrites the queued sale rather than sending a local reference', async () => {
+        await queueCustomerThenSale();
+
+        const { doFetch } = fakeServer({
+            pushResults: (m) => m.map((x) => ({ uuid: x.uuid, status: 'applied', id: `srv-${x.uuid}` })),
+        });
+
+        await sync(db, withToken(doFetch));
+
+        // The customer row now carries the server id, so later work resolves
+        // immediately instead of deferring again.
+        expect((await db.customers.get('local-cust')).id).toBe('srv-local-cust');
+    });
+
+    it('keeps the sale queued if the customer never syncs', async () => {
+        await queueCustomerThenSale();
+
+        // Customer is rejected, so its id never arrives.
+        const { doFetch } = fakeServer({
+            pushResults: (m) =>
+                m.map((x) =>
+                    x.uuid === 'local-cust'
+                        ? { uuid: x.uuid, status: 'rejected', reason: 'invalid' }
+                        : { uuid: x.uuid, status: 'applied' }
+                ),
+        });
+
+        await sync(db, withToken(doFetch));
+
+        // The sale must NOT be sent with a dangling reference, and must not be
+        // silently discarded — it stays queued for the user to resolve.
+        const stillQueued = await pending(db);
+        expect(stillQueued.map((e) => e.uuid)).toEqual(['sale-1']);
+        expect((await parked(db)).map((e) => e.uuid)).toEqual(['local-cust']);
     });
 });

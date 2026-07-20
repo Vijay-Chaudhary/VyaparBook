@@ -61,7 +61,7 @@ export async function stalenessState(db, now = Date.now()) {
  * @param {{type: string, tenantId: string, uuid: string, payload: object}} mutation
  * @returns {Promise<number>} the outbox sequence number
  */
-export async function enqueue(db, { type, tenantId, uuid, payload }) {
+export async function enqueue(db, { type, tenantId, uuid, payload, dependsOnUuid = null }) {
     if (!PUSHABLE_TYPES.includes(type)) {
         // Fail loudly at the call site rather than queueing something the
         // server will reject forever.
@@ -79,11 +79,73 @@ export async function enqueue(db, { type, tenantId, uuid, payload }) {
         type,
         tenant_id: tenantId,
         payload,
+        // Set when this mutation references a customer that exists only on this
+        // device. See resolveDependencies() for why that needs handling.
+        depends_on_uuid: dependsOnUuid,
         status: PENDING,
         attempts: 0,
         last_error: null,
         created_at: Date.now(),
     });
+}
+
+/**
+ * Rewrite local customer references to server ids, and hold back anything not
+ * yet resolvable.
+ *
+ * A sale's `customer_id` must be the customer's SERVER id: LedgerWriter does
+ * `Customer::findOrFail($data['customer_id'])`, which looks up the primary key,
+ * not the client `uuid`. A customer created offline has no server id until it
+ * syncs — so "add a customer, then record their sale" (the most natural first
+ * thing a shop does) would push a sale referencing an id the server has never
+ * seen and be rejected as not_found, permanently parked.
+ *
+ * So before each push: swap in the server id if the customer has synced, and
+ * otherwise defer this mutation to a later round. The customer is ahead of it
+ * in the queue, so one round later the id exists.
+ *
+ * @returns {Promise<{ready: Array, deferred: number}>}
+ */
+export async function resolveDependencies(db, entries) {
+    const ready = [];
+    let deferred = 0;
+
+    for (const entry of entries) {
+        if (!entry.depends_on_uuid) {
+            ready.push(entry);
+            continue;
+        }
+
+        const customer = await db.customers.get(entry.depends_on_uuid);
+
+        if (customer?.id) {
+            const payload = { ...entry.payload, customer_id: customer.id };
+
+            await db.outbox.update(entry.seq, { payload, depends_on_uuid: null });
+            ready.push({ ...entry, payload, depends_on_uuid: null });
+            continue;
+        }
+
+        // Customer not on the server yet. Stop here rather than skipping ahead:
+        // later entries may depend on this one, and reordering a ledger risks
+        // a payment landing before the sale it settles.
+        deferred += 1;
+        break;
+    }
+
+    return { ready, deferred };
+}
+
+/**
+ * Record the server id a customer was assigned, so queued sales and payments
+ * that reference it locally can be resolved on the next push.
+ */
+export async function linkServerId(db, clientUuid, serverId) {
+    const existing = await db.customers.get(clientUuid);
+
+    if (existing) {
+        await db.customers.update(clientUuid, { id: serverId });
+    }
 }
 
 /** Mutations waiting to be pushed, oldest first — order preserves causality. */
@@ -126,6 +188,7 @@ export async function pendingCount(db) {
 export async function applyResults(db, results) {
     let applied = 0;
     let parkedCount = 0;
+    const newlyLinked = [];
 
     await db.transaction('rw', db.outbox, async () => {
         for (const result of results) {
@@ -134,6 +197,12 @@ export async function applyResults(db, results) {
             if (!entry) continue; // already reconciled; nothing to do
 
             if (SUCCESS.includes(result.status)) {
+                // A customer now has a server id. Record it so queued sales and
+                // payments referencing it locally can resolve on the next push.
+                if (entry.type === 'customer' && result.id) {
+                    newlyLinked.push([entry.uuid, result.id]);
+                }
+
                 await db.outbox.delete(entry.seq);
                 applied += 1;
                 continue;
@@ -148,6 +217,12 @@ export async function applyResults(db, results) {
             }
         }
     });
+
+    // Outside the outbox transaction: Dexie will not let one transaction span
+    // stores it was not opened over.
+    for (const [clientUuid, serverId] of newlyLinked) {
+        await linkServerId(db, clientUuid, serverId);
+    }
 
     return { applied, parked: parkedCount };
 }
