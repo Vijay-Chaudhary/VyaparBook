@@ -3,8 +3,8 @@
 
 namespace App\Console\Commands;
 
-use App\Import\CsvReader;
 use App\Import\ImportReport;
+use App\Import\SheetReaderFactory;
 use App\Import\TenantImporter;
 use App\Models\Business;
 use App\Models\Membership;
@@ -15,15 +15,16 @@ use Illuminate\Support\Str;
 
 /**
  * Operator-run onboarding: ingest a shop's customers or raw materials from a
- * CSV into a tenant. Valid rows are applied; invalid rows are reported and
- * skipped; a non-zero exit flags that some rows failed so a wrapping script
- * notices. --dry-run validates and tallies without persisting anything.
+ * spreadsheet (.xlsx/.xls/.ods) or CSV into a tenant. Valid rows are applied;
+ * invalid rows are reported and skipped; a non-zero exit flags that some rows
+ * failed so a wrapping script notices. --dry-run validates and tallies without
+ * persisting anything.
  */
 class TenantImportCommand extends Command
 {
     protected $signature = 'tenant:import {business_id} {type : customers|raw-materials} {path} {--dry-run}';
 
-    protected $description = 'Import a tenant\'s customers or raw materials from a CSV file.';
+    protected $description = 'Import a tenant\'s customers or raw materials from a spreadsheet or CSV file.';
 
     public function handle(TenantImporter $importer): int
     {
@@ -50,7 +51,7 @@ class TenantImportCommand extends Command
         }
 
         $dryRun = (bool) $this->option('dry-run');
-        $rows = (new CsvReader())->rows($path);
+        $rows = (new SheetReaderFactory())->for($path)->rows($path);
 
         if ($type === 'customers') {
             $report = $importer->importCustomers($business->id, $rows, $dryRun);

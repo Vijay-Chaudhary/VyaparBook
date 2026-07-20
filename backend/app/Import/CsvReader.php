@@ -12,7 +12,7 @@ use RuntimeException;
  * subsequent line is array_combine'd against it so the importer works with
  * ['name' => ..., 'village' => ...] rows regardless of column order.
  */
-class CsvReader
+class CsvReader implements SheetReader
 {
     /**
      * @return iterable<int, array<string, string>>
