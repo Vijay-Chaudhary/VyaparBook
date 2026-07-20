@@ -2,18 +2,16 @@
 
 namespace Tests\Feature;
 
-// use Illuminate\Foundation\Testing\RefreshDatabase;
 use Tests\TestCase;
 
 class ExampleTest extends TestCase
 {
     /**
-     * A basic test example.
+     * `/` no longer renders Laravel's welcome page — it routes the visitor into
+     * the app (see HealthCheckTest for the fuller coverage of that behaviour).
      */
-    public function test_the_application_returns_a_successful_response(): void
+    public function test_the_application_responds_at_the_root(): void
     {
-        $response = $this->get('/');
-
-        $response->assertStatus(200);
+        $this->get('/')->assertRedirect(route('app'));
     }
 }
