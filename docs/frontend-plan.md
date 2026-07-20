@@ -344,10 +344,16 @@ Each phase ends shippable and testable. No phase depends on a later one.
 - **Verified:** the entire loop with the network disabled, and client/server
   balances reconciled to the paisa (both independently computed ₹489.50)
 
-### Phase 4 — Onboarding *(Blade, online-only)*
-- Signup + **DPDP consent** (mandatory — the API now rejects signup without it)
-- Create business → choose template → invite staff
-- Business switcher, with the outbox-flush guard from §3.4
+### Phase 4 — Onboarding *(Blade, online-only)* ✅ *mostly done*
+- Signup + **DPDP consent** (mandatory — the API rejects signup without it) ✅
+- Create business → choose template → invite staff ✅
+- Business switcher, with the outbox-flush guard from §3.4 — **deferred**: it
+  belongs in the React `/app` header, not Blade, because the flush guard reads
+  the Dexie outbox. Small follow-up; carried into a later slice.
+
+> Business creation was extracted into `BusinessProvisioner` so the JWT API and
+> the Blade flow share one implementation of the RLS-sensitive
+> business+membership+trial transaction, rather than risking divergence.
 
 ### Phase 5 — Stock & Production
 - Raw materials, stock movements, production batches

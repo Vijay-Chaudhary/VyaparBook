@@ -2,6 +2,8 @@
 
 use App\Http\Controllers\Web\ApiTokenController;
 use App\Http\Controllers\Web\LoginController;
+use App\Http\Controllers\Web\OnboardingController;
+use App\Http\Controllers\Web\RegisterController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -25,6 +27,23 @@ Route::middleware('guest')->group(function () {
     // Throttled by the same limiter as the API login, so the Blade form is not
     // a softer door onto the same credentials.
     Route::post('login', [LoginController::class, 'store'])->middleware('throttle:login');
+
+    Route::get('register', [RegisterController::class, 'show'])->name('register');
+    // Account creation is a natural credential-stuffing / spam target, so it
+    // rides the same per-email+IP limiter as login.
+    Route::post('register', [RegisterController::class, 'store'])->middleware('throttle:login');
+});
+
+// Onboarding: signed in (session), but a tenant does not exist yet at step 1.
+Route::middleware('auth')->group(function () {
+    Route::get('onboarding/business', [OnboardingController::class, 'business'])->name('onboarding.business');
+    Route::post('onboarding/business', [OnboardingController::class, 'storeBusiness']);
+
+    Route::get('onboarding/template', [OnboardingController::class, 'template'])->name('onboarding.template');
+    Route::post('onboarding/template', [OnboardingController::class, 'storeTemplate']);
+
+    Route::get('onboarding/invite', [OnboardingController::class, 'invite'])->name('onboarding.invite');
+    Route::post('onboarding/invite', [OnboardingController::class, 'storeInvite']);
 });
 
 Route::middleware('auth')->group(function () {

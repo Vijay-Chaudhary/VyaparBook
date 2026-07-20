@@ -66,6 +66,10 @@
         </label>
 
         <button type="submit" class="btn-primary w-full">{{ __('auth.sign_in') }}</button>
+
+        <a href="{{ route('register') }}" class="block py-2 text-center text-sm text-brand">
+            {{ __('onboarding.create_account') }}
+        </a>
     </form>
 </div>
 @endsection

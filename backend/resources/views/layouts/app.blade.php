@@ -36,7 +36,10 @@
         {{ __('ui.skip_to_content') }}
     </a>
 
-    @includeWhen(auth()->check(), 'partials.header')
+    {{-- $bare drops the app chrome — used by onboarding, which has its own
+         minimal frame and must not offer the /app header before a business
+         exists. --}}
+    @includeWhen(auth()->check() && ! ($bare ?? false), 'partials.header')
 
     <main id="main" tabindex="-1">
         @yield('content')

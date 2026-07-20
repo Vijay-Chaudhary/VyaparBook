@@ -3,17 +3,18 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
-use App\Models\Business;
 use App\Models\Membership;
 use App\Models\User;
+use App\Services\BusinessProvisioner;
 use App\Services\TokenService;
-use App\Support\TenantContext;
 use Illuminate\Http\Request;
-use Illuminate\Support\Facades\DB;
 
 class BusinessController extends Controller
 {
-    public function __construct(private readonly TokenService $tokenService) {}
+    public function __construct(
+        private readonly TokenService $tokenService,
+        private readonly BusinessProvisioner $provisioner,
+    ) {}
 
     public function store(Request $request)
     {
@@ -26,29 +27,9 @@ class BusinessController extends Controller
 
         $userId = app('tenant.user_id');
 
-        $membership = DB::transaction(function () use ($data, $userId) {
-            $business = Business::create($data);
-
-            // Re-point app.current_tenant at the new business before the insert:
-            // the RLS WITH CHECK only admits a membership for the transaction's
-            // current tenant, and the caller's tid (if any) is a different business.
-            TenantContext::switchTo($business->id);
-            // Bind the app-level tenant too so the BelongsToTenant scope on the
-            // Subscription below is coherent with the switched-in tenant (Membership
-            // is not tenant-scoped, so it needed only the GUC).
-            app()->bind('tenant.id', fn () => $business->id);
-
-            $membership = Membership::create([
-                'user_id' => $userId,
-                'business_id' => $business->id,
-                'role' => 'owner',
-            ]);
-
-            // Every new business starts on a 14-day trial (Pro entitlement).
-            app(\App\Services\SubscriptionService::class)->provisionTrial($business->id);
-
-            return $membership;
-        });
+        // Business + owner membership + trial in one transaction, shared with
+        // the Blade onboarding flow (BusinessProvisioner).
+        $membership = $this->provisioner->provision($userId, $data);
 
         $user = User::find($userId);
 

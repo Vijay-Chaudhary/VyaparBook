@@ -35,6 +35,27 @@ class CatalogTemplateService
     }
 
     /**
+     * The pickable templates with their display labels, for the onboarding
+     * chooser. 'blank' is included as an explicit "I'll set it up myself" — a
+     * shop with an unusual catalog should not be forced through a vertical.
+     *
+     * @return list<array{slug: string, label: string}>
+     */
+    public function options(): array
+    {
+        return array_map(function (string $slug): array {
+            if ($slug === self::BLANK) {
+                return ['slug' => $slug, 'label' => __('onboarding.blank_catalog')];
+            }
+
+            // The label lives in the template file next to the data it names.
+            $template = require database_path("catalog_templates/{$slug}.php");
+
+            return ['slug' => $slug, 'label' => $template['label'] ?? $slug];
+        }, self::available());
+    }
+
+    /**
      * Insert a template's rows for one business.
      *
      * Runs inside the caller's transaction — SetTenantContext has already opened
