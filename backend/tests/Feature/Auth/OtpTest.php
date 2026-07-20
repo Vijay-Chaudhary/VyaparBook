@@ -7,7 +7,8 @@ it('issues a token after verifying a correct otp', function () {
     $requestResponse = $this->postJson('/api/v1/auth/otp/request', ['phone' => $phone])->assertOk();
     $code = $requestResponse->json('debug_code');
 
-    $this->postJson('/api/v1/auth/otp/verify', ['phone' => $phone, 'code' => $code])
+    // First verify for this phone is a signup, so it carries DPDP consent.
+    $this->postJson('/api/v1/auth/otp/verify', ['phone' => $phone, 'code' => $code, 'consent' => true])
         ->assertOk()
         ->assertJsonStructure(['token']);
 });

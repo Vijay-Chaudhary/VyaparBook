@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\ConsentService;
 use App\Services\OtpService;
 use App\Services\TokenService;
 use App\Support\TenantContext;
@@ -16,6 +17,7 @@ class OtpController extends Controller
     public function __construct(
         private readonly OtpService $otpService,
         private readonly TokenService $tokenService,
+        private readonly ConsentService $consents,
     ) {}
 
     public function request(Request $request)
@@ -46,14 +48,31 @@ class OtpController extends Controller
             'code' => ['required', 'string'],
         ]);
 
+        // This endpoint is both login and signup. Resolve which BEFORE consuming
+        // the code: a new user must give DPDP consent (PRD §13), and failing that
+        // validation after burning their OTP would force them to request another.
+        $user = User::where('phone', $data['phone'])->first();
+        $isSignup = $user === null;
+
+        if ($isSignup) {
+            // 'accepted' requires a literal true — consent cannot be defaulted
+            // server-side. Returning users are not re-prompted.
+            $request->validate(['consent' => ['required', 'accepted']]);
+        }
+
         if (! $this->otpService->verify($data['phone'], $data['code'])) {
             return response()->json(['message' => 'Invalid or expired code.'], 422);
         }
 
-        $user = User::firstOrCreate(
-            ['phone' => $data['phone']],
-            ['name' => $data['phone'], 'password' => bcrypt(str()->random(32))]
-        );
+        if ($isSignup) {
+            $user = User::create([
+                'phone' => $data['phone'],
+                'name' => $data['phone'],
+                'password' => bcrypt(str()->random(32)),
+            ]);
+
+            $this->consents->grant($user, $request);
+        }
 
         $membership = TenantContext::forUser(
             $user->id,

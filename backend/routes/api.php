@@ -79,6 +79,12 @@ Route::prefix('v1')->group(function () {
             Route::get('sync/pull', [\App\Http\Controllers\Api\V1\SyncController::class, 'pull']);
         });
 
+        // DPDP consent (PRD §13). Outside require.tenant and the plan gate:
+        // consent belongs to the person, not a business, and a tenant in dunning
+        // must still be able to withdraw it.
+        Route::get('consent', [\App\Http\Controllers\Api\V1\ConsentController::class, 'show']);
+        Route::post('consent/withdraw', [\App\Http\Controllers\Api\V1\ConsentController::class, 'withdraw']);
+
         Route::get('whoami', function () {
             return response()->json([
                 'user_id' => app('tenant.user_id'),
