@@ -25,7 +25,7 @@ export default defineConfig({
                     // bundled inside that dynamic chunk instead of splitting
                     // it out. Matching on the module path forces it into
                     // `vendor` regardless of who imported it.
-                    if (/node_modules\/(react|react-dom|scheduler)\//.test(id)) {
+                    if (/node_modules\/(react|react-dom|scheduler|dexie)\//.test(id)) {
                         return 'vendor';
                     }
                 },

@@ -160,9 +160,17 @@ Every mutation goes to the outbox first, then to the server. Never the reverse �
 ### 3.3 Sync engine
 
 ```
-pull():  GET /api/v1/sync/pull?since={cursor}  -> upsert rows, advance cursor
-push():  POST /api/v1/sync/push  { changes: [...outbox] }
+pull():  GET  /api/v1/sync/pull?since={cursor}   -> upsert rows, advance cursor
+push():  POST /api/v1/sync/push  { mutations: [ {type, tenant_id, uuid, payload} ] }
+         -> { results: [ {uuid, status, id?, reason?} ] }
 ```
+
+> **Corrected against the server at Phase 2.** The envelope is `mutations`, not
+> `changes`. Results are **per mutation**, so one bad row never blocks the batch:
+> `applied` and `duplicate` both mean durable (delete from outbox); `rejected`
+> is permanent (park it). Only `customer`, `sale` and `payment` are pushable —
+> stock and production have no offline write path, which is fine through Phase 5
+> but must not be assumed otherwise.
 
 Order: **push before pull**, so local work reaches the server before remote state overwrites the view.
 
@@ -253,12 +261,27 @@ Active state must be indicated by **weight + color + indicator**, never color al
 
 **Decision: full React**, not Preact — compatibility is worth more than the bytes, and `preact/compat` failures tend to be obscure and late-surfacing.
 
-> **Measured, Phase 1 (correcting the estimate above):** React 19 + react-dom is
-> **60.5KB gzipped**, not the ~45KB quoted when Preact was declined — that figure
-> was React 18. The vendor budget below was set at 60KB and is already marginally
-> exceeded by the runtime alone. Not a crisis (it is one cacheable chunk, loaded
-> only under `/app/*`), but the Preact question is live again and should be
-> re-decided at Phase 3 against a measured bundle rather than an estimate.
+> **Measured, Phase 1–2 (correcting the estimate above).** The vendor chunk is
+> **93.3KB gzipped**, against a 60KB budget — 55% over:
+>
+> | | gzipped |
+> |---|---|
+> | React 19 + react-dom | 60.5KB |
+> | Dexie | ~32.8KB |
+> | **vendor total** | **93.3KB** |
+> | app shell (`main`) | 3.3KB |
+> | every-page JS (`app`) | 0.8KB |
+> | CSS | 6.9KB |
+>
+> The ~45KB React figure quoted when Preact was declined was React 18. App code
+> is tiny; essentially the entire payload is two libraries.
+>
+> **Decision needed at Phase 3**, on measured evidence rather than estimates:
+> `preact/compat` saves ~35KB and swapping Dexie for `idb` (~2KB) saves ~30KB —
+> together taking vendor from 93KB to roughly 28KB. That is the difference
+> between a 3-second and a 10-second first load on a slow rural connection.
+> Dropping Dexie costs real ergonomics (its transaction and query API is doing
+> genuine work in `sync.js`), so this is a trade, not free.
 
 That costs ~60KB gzipped for `react` + `react-dom` before a line of app code, so the budget is set honestly around it rather than pretending otherwise:
 
@@ -298,14 +321,14 @@ Strings live in one place per locale from day one. Retrofitting extraction after
 
 Each phase ends shippable and testable. No phase depends on a later one.
 
-### Phase 1 — Foundations *(no user-visible screens)*
+### Phase 1 — Foundations ✅ *done*
 - Vite + Tailwind wired to the design tokens above; Preact alias
 - Blade layout, session auth (`web` guard), login/logout
 - `GET /api/v1/auth/token` (session → JWT exchange)
 - Self-hosted fonts; i18n scaffolding with `hi` default
 - **Verify:** log in via Blade, receive a working JWT, `/api/v1/whoami` responds
 
-### Phase 2 — Offline core *(still no screens — this is the risky part, do it early)*
+### Phase 2 — Offline core ✅ *done*
 - Dexie schema, per-tenant namespacing
 - Outbox with idempotent `uuid`, backoff, 4xx parking
 - Sync engine (push-then-pull, cursor persistence)

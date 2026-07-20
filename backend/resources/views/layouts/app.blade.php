@@ -14,6 +14,10 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <meta name="theme-color" content="#1D4ED8">
 
+    <link rel="manifest" href="/manifest.webmanifest">
+    <link rel="icon" href="/icon-192.png" sizes="192x192" type="image/png">
+    <link rel="apple-touch-icon" href="/icon-192.png">
+
     <title>@yield('title', config('app.name', 'VyaparBook'))</title>
 
     {{-- Preload the Devanagari face: it is the default language's font and
