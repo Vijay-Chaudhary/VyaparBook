@@ -380,9 +380,12 @@ Each phase ends shippable and testable. No phase depends on a later one.
 - Reached from the React app via an **owner-only** "Plan & billing" link on Home (a real link out of the SPA, carrying `?business=` so a multi-shop owner lands on the shop they're viewing). ✅
 - Read-only (402) **soft-prompts, never blocks data entry** — inherent to the offline-first design: khata writes always land in the local outbox; a read_only tenant's `sync/push` returns 402 and the entry stays queued, never lost (PRD §15). Owner-only gating mirrors the JWT `BillingController` (resolves the caller's *owned* business, never a request-supplied one). ✅
 
-### Phase 7 — Platform console *(Blade, online-only)*
-- Tenant directory, drill-down, verify/reject payment, suspend/reactivate, impersonate
-- Every endpoint already exists and is tested
+### Phase 7 — Platform console *(Blade, online-only)* ✅ *done*
+- Tenant directory (search + pagination), drill-down (business, subscription, members, recent payments), verify/reject payment, suspend/reactivate, impersonate. ✅
+- Session-gated on the **live** `is_platform_admin` flag (`platform_admin.web`), the server-rendered twin of the JWT `require.platform_admin`. Cross-tenant by design: reads on the BYPASSRLS connection, writes pinned to the target tenant through RLS (`PlatformTenantContext`). ✅
+- **No logic fork:** the Blade actions reuse the exact same seams as the API (`SubscriptionService`, `PlatformTenantContext`, `PlatformAudit`, `TokenService`) — the web layer only chooses redirect+flash over JSON. Every mutation writes the same audit trail. ✅
+- Login routes a platform admin to the console rather than `/app` (they hold no membership, so the shopkeeper app would stall). ✅
+- Impersonation mints the short-lived read-only token and flashes it to the drill-down for the operator to use as a bearer credential (faithful to the API contract, never in a URL). *Follow-up:* a one-click "view as tenant" that injects the token straight into `/app` — needs a token-injection path into the SPA boot; deferred to Phase 8 integration.
 
 ### Phase 8 — Hardening
 - Lighthouse PWA + a11y pass; contrast audit in sunlight conditions

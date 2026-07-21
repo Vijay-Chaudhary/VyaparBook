@@ -28,6 +28,15 @@ it('signs a user in and starts a session', function () {
     $this->assertAuthenticatedAs($user);
 });
 
+it('sends a platform admin to the console, not the shopkeeper app', function () {
+    User::factory()->create(['email' => 'ops@example.com', 'is_platform_admin' => true]);
+
+    // A platform admin holds no membership, so /app would stall — login lands
+    // them on the console instead.
+    $this->post('/login', ['email' => 'ops@example.com', 'password' => 'password'])
+        ->assertRedirect(route('admin.console'));
+});
+
 it('rejects bad credentials without revealing whether the account exists', function () {
     User::factory()->create(['email' => 'owner@example.com']);
 

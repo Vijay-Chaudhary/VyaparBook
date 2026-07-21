@@ -47,7 +47,13 @@ class LoginController extends Controller
         // Rotates the session id, so a session fixed before login is useless.
         $request->session()->regenerate();
 
-        return redirect()->intended(route('app'));
+        // A platform admin is not a shopkeeper — they usually hold no membership,
+        // so /app would stall on an empty business picker. Send them to the console.
+        // An explicit intended() target (e.g. a deep link they were bounced from)
+        // still wins for everyone.
+        $fallback = $request->user()->is_platform_admin ? route('admin.console') : route('app');
+
+        return redirect()->intended($fallback);
     }
 
     public function destroy(Request $request): RedirectResponse

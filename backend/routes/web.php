@@ -1,5 +1,7 @@
 <?php
 
+use App\Http\Controllers\Web\Admin\ConsoleController;
+use App\Http\Controllers\Web\Admin\TenantActionController;
 use App\Http\Controllers\Web\ApiTokenController;
 use App\Http\Controllers\Web\BillingController;
 use App\Http\Controllers\Web\LoginController;
@@ -74,4 +76,23 @@ Route::middleware('auth')->group(function () {
     Route::get('/app/{path?}', fn () => view('app'))
         ->where('path', '.*')
         ->name('app');
+});
+
+/*
+ | Platform (Superadmin) console (docs/frontend-plan.md §7 Phase 7) — Blade,
+ | online-only. Gated on the LIVE is_platform_admin flag (platform_admin.web),
+ | NOT a tenant membership: the console is cross-tenant and carries no tenant
+ | GUC. Reads run on the BYPASSRLS connection; writes pin the target tenant and
+ | go through RLS (PlatformTenantContext). The server-rendered twin of the JWT
+ | /api/v1/admin/* surface, sharing the same service seams.
+ */
+Route::middleware(['auth', 'platform_admin.web'])->prefix('admin')->name('admin.')->group(function () {
+    Route::get('console', [ConsoleController::class, 'index'])->name('console');
+    Route::get('console/{id}', [ConsoleController::class, 'show'])->name('console.show');
+
+    Route::post('console/{id}/suspend', [TenantActionController::class, 'suspend'])->name('console.suspend');
+    Route::post('console/{id}/reactivate', [TenantActionController::class, 'reactivate'])->name('console.reactivate');
+    Route::post('console/{id}/payments/{paymentId}/verify', [TenantActionController::class, 'verifyPayment'])->name('console.payment.verify');
+    Route::post('console/{id}/payments/{paymentId}/reject', [TenantActionController::class, 'rejectPayment'])->name('console.payment.reject');
+    Route::post('console/{id}/impersonate', [TenantActionController::class, 'impersonate'])->name('console.impersonate');
 });
