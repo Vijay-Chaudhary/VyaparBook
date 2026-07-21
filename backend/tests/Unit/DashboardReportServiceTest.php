@@ -77,7 +77,7 @@ it('totals customer outstanding as Σ of KhataService, and isolates tenants', fu
     $khata = new KhataService();
     $expectedTotal = bcadd($khata->outstandingFor($c1), $khata->outstandingFor($c2), 2);
 
-    $summary = inTenant($a->id, fn () => (new DashboardReportService(new KhataService(), new App\Services\StockService()))
+    $summary = inTenant($a->id, fn () => (new DashboardReportService(new App\Services\StockService()))
         ->customerOutstanding($a->id));
 
     expect($summary->totalRupees)->toBe($expectedTotal)   // '1628.50'

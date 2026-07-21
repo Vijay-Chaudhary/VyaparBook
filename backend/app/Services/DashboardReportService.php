@@ -22,7 +22,6 @@ use App\Reports\OutstandingSummary;
 class DashboardReportService
 {
     public function __construct(
-        private readonly KhataService $khata,
         private readonly StockService $stock,
     ) {}
 
