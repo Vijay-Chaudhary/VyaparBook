@@ -54,3 +54,4 @@ Label: `ui`
 Not UI, but surfaced during the same app-run discovery pass — tracked here for completeness:
 
 - **`default_language_to_en` migration failed** with `must be owner of table businesses` (bare `DB::statement` ran as the non-owner app role). Fixed in `7d6f311`; tracked as [#2](https://github.com/Vijay-Chaudhary/VyaparBook/issues/2) (closed).
+- **`DemoDataSeeder` seeded stock out-movements unsigned** (`+12.000` instead of `-12.000`), inflating on-hand to 112 vs 88 — stock qty is stored signed (`in +`, `out −`). Seed-data only; app logic is correct. Fixed in `e45f211`; tracked as [#3](https://github.com/Vijay-Chaudhary/VyaparBook/issues/3) (closed).
