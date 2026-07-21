@@ -44,5 +44,9 @@ class DatabaseSeeder extends Seeder
         );
 
         $this->command->info("Seeded owner@vyaparbook.test / password123 (business: {$business->id})");
+
+        // Rich, all-module demo data (catalog, khata, stock, production, billing,
+        // consent, platform admin) for local development.
+        $this->call(DemoDataSeeder::class);
     }
 }
