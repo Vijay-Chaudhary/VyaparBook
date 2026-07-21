@@ -1,0 +1,112 @@
+name: CI
+
+# Two independent jobs: the frontend gate (build + bundle budget + Vitest) and
+# the backend suite (Pest against a real Postgres). They share no state and run
+# in parallel.
+#
+# NOTE ON VALIDATION: the `frontend` job is verified locally (npm run build:check
+# and npm test both pass). The `backend` job is constructed from the project's
+# real connection config and role-provisioning migrations, but a workflow can
+# only truly be confirmed by running in CI — check the first run and adjust the
+# Postgres/role setup here if it trips, rather than assuming it is green.
+
+on:
+  push:
+    branches: [master, main]
+  pull_request:
+
+defaults:
+  run:
+    working-directory: backend
+
+jobs:
+  frontend:
+    name: Frontend (bundle budget + Vitest)
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 20
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+
+      - run: npm ci
+
+      # Fails the build if the gzipped bundle exceeds its budget (frontend-plan
+      # §5) — bundle creep is invisible on a dev machine and only hurts the
+      # shopkeeper on a slow connection.
+      - name: Build + bundle budget
+        run: npm run build:check
+
+      - name: Unit tests (offline money/qty/khata/outbox/sync)
+        run: npm test
+
+  backend:
+    name: Backend (Pest)
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_DB: vyaparbook_test
+          # trust: the app role (vyaparbook_app) is created by a migration with
+          # LOGIN and no password, and the platform RO role's password is ignored
+          # under trust — so both connect without secrets in CI. RLS still applies:
+          # neither role owns the tables (the superuser migrator does), and only
+          # the platform role carries BYPASSRLS.
+          POSTGRES_HOST_AUTH_METHOD: trust
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 5
+
+    env:
+      # No PgBouncer in CI: point both the app and migrate connections straight
+      # at Postgres. The roles themselves are provisioned by create_app_role and
+      # create_platform_read_role during migrate:fresh.
+      DB_HOST: 127.0.0.1
+      DB_PORT: 5432
+      DB_USERNAME: vyaparbook_app
+      DB_PASSWORD: ''
+      DB_MIGRATE_HOST: 127.0.0.1
+      DB_MIGRATE_PORT: 5432
+      DB_MIGRATE_USERNAME: postgres
+      DB_MIGRATE_PASSWORD: ''
+      DB_PLATFORM_USERNAME: vyapar_platform_ro
+      DB_PLATFORM_PASSWORD: platform_ro_pw
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up PHP 8.3
+        uses: shivammathur/setup-php@v2
+        with:
+          php-version: '8.3'
+          extensions: pdo_pgsql, bcmath, mbstring, intl
+          coverage: none
+
+      - name: Cache Composer packages
+        uses: actions/cache@v4
+        with:
+          path: backend/vendor
+          key: composer-${{ hashFiles('backend/composer.lock') }}
+          restore-keys: composer-
+
+      - run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare app env
+        run: |
+          cp .env.example .env
+          php artisan key:generate
+          php artisan jwt:secret --force
+
+      # migrate:fresh (which the test trait runs once) provisions the app and
+      # platform roles, so no manual role SQL is needed here.
+      - name: Run Pest
+        run: php artisan test

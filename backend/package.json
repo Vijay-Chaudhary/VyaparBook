@@ -5,7 +5,9 @@
         "build": "vite build",
         "dev": "vite",
         "test": "vitest run",
-        "test:watch": "vitest"
+        "test:watch": "vitest",
+        "size": "node scripts/check-bundle-size.mjs",
+        "build:check": "vite build && node scripts/check-bundle-size.mjs"
     },
     "devDependencies": {
         "@vitejs/plugin-react": "^4.7.0",
