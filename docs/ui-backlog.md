@@ -25,7 +25,7 @@ Label: `bug`
 
 | ID | Status | Area | Summary | Issue |
 |----|--------|------|---------|-------|
-| B-01 | todo | shell/home | `Home.jsx:24` hardcodes the Hindi greeting `नमस्ते, ${userName}` instead of `t()` — shows Hindi even in English mode (the app's default locale). Every sibling string on the screen uses `t()`; this one string leaks. Fix: add a `greeting` dictionary key and render `` `${t('greeting')}, ${userName}` ``. | — |
+| B-01 | done | shell/home | `Home.jsx:24` hardcoded the Hindi greeting `नमस्ते, ${userName}` instead of `t()` — showed Hindi even in English mode. Fixed: added a `greeting` key to both locales (`en: 'Namaste'`, `hi: 'नमस्ते'`) and render `` `${t('greeting')}, ${userName}` ``. | — |
 
 ---
 
@@ -45,4 +45,4 @@ Label: `ui`
 
 | ID | Status | Area | Summary | Issue |
 |----|--------|------|---------|-------|
-| U-01 | todo | khata/forms | New-customer form: the "Opening balance" hint duplicates its own label verbatim in English. Two keys exist — `opening_balance` (label) and `opening` (hint) — and Hindi differentiates them (`पुराना बकाया` vs `शुरुआती बकाया`), but both English strings (`i18n.js:139` & `:157`) are `'Opening balance'`. Fix: give the English `opening` hint distinct copy, e.g. "Amount owed before you started using VyaparBook". | — |
+| U-01 | done | khata/forms | New-customer form: the "Opening balance" hint duplicated its own label verbatim in English (Hindi differentiated `पुराना बकाया` vs `शुरुआती बकाया`, but both English `opening_balance` and `opening` were `'Opening balance'`). Fixed: English `opening` hint is now `'Amount owed before you started using VyaparBook'` (`i18n.js:157`). | — |

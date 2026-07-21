@@ -21,7 +21,7 @@ export function Home({ userName, customers, entriesToday, isOwner = false, tenan
         .reduce((sum, e) => sum + Math.abs(e.deltaPaise), 0);
 
     return (
-        <Screen title={`नमस्ते, ${userName}`}>
+        <Screen title={`${t('greeting')}, ${userName}`}>
             <div className="mb-3 grid grid-cols-2 gap-2">
                 <div className="card">
                     <p className="text-sm text-ink-muted">{t('sales')}</p>

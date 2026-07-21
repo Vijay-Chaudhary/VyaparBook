@@ -12,6 +12,7 @@
 
 const strings = {
     hi: {
+        greeting: 'नमस्ते',
         home: 'होम',
         khata: 'खाता',
         sales: 'बिक्री',
@@ -121,6 +122,7 @@ const strings = {
     },
 
     en: {
+        greeting: 'Namaste',
         home: 'Home',
         khata: 'Khata',
         sales: 'Sales',
@@ -154,7 +156,7 @@ const strings = {
 
         ledger: 'Statement',
         no_entries: 'No entries yet',
-        opening: 'Opening balance',
+        opening: 'Amount owed before you started using VyaparBook',
         balance: 'Balance',
         sale: 'Sale',
         payment: 'Payment',
