@@ -58,7 +58,8 @@ class DemoDataSeeder extends Seeder
     {
         $this->platformAdmin();
 
-        $this->seedTenant([
+        $owners = [];
+        $owners[] = $this->seedTenant([
             'name' => 'Demo Namkeen Bhandar',
             'city' => 'Indore',
             'language' => 'en',
@@ -68,7 +69,7 @@ class DemoDataSeeder extends Seeder
             'payment' => ['plan' => 'pro', 'amount' => '499.00', 'gst' => '89.82', 'status' => 'verified'],
         ]);
 
-        $this->seedTenant([
+        $owners[] = $this->seedTenant([
             'name' => 'Demo Sweets House',
             'city' => 'Ujjain',
             'language' => 'hi',
@@ -78,7 +79,9 @@ class DemoDataSeeder extends Seeder
             'payment' => ['plan' => 'pro', 'amount' => '499.00', 'gst' => '89.82', 'status' => 'pending'],
         ]);
 
-        $this->command->info('Demo data seeded. Owners: owner@demo-namkeen.test / owner@demo-sweets.test (password123). Superadmin: admin@vyaparbook.test.');
+        $this->command->info('Demo data seeded. All passwords: password123.');
+        $this->command->info('  Owners: '.implode(' / ', $owners));
+        $this->command->info('  Superadmin: admin@vyaparbook.test');
     }
 
     private function platformAdmin(): void
@@ -88,8 +91,11 @@ class DemoDataSeeder extends Seeder
         $admin->save();
     }
 
-    /** @param array<string, mixed> $spec */
-    private function seedTenant(array $spec): void
+    /**
+     * @param  array<string, mixed>  $spec
+     * @return string  the owner's login email (for the run() summary)
+     */
+    private function seedTenant(array $spec): string
     {
         $business = Business::on(self::CONNECTION)->updateOrCreate(
             ['name' => $spec['name']],
@@ -97,7 +103,8 @@ class DemoDataSeeder extends Seeder
         );
 
         $slug = Str::slug($spec['name']);
-        $owner = $this->staff($business, "owner@{$slug}.test", 'Demo Owner', 'owner');
+        $ownerEmail = "owner@{$slug}.test";
+        $owner = $this->staff($business, $ownerEmail, 'Demo Owner', 'owner');
         $this->staff($business, "admin@{$slug}.test", 'Demo Admin', 'admin');
         $this->staff($business, "salesman@{$slug}.test", 'Demo Salesman', 'salesman');
         $this->staff($business, "accountant@{$slug}.test", 'Demo Accountant', 'accountant');
@@ -109,7 +116,7 @@ class DemoDataSeeder extends Seeder
         if (Customer::on(self::CONNECTION)->where('business_id', $business->id)->exists()) {
             $this->command->info("  {$spec['name']}: already populated — skipping transactional data.");
 
-            return;
+            return $ownerEmail;
         }
 
         $packs = $this->applyCatalogTemplate($spec['template'], $business->id);
@@ -119,6 +126,8 @@ class DemoDataSeeder extends Seeder
         $this->production($business, $owner->id, $packs, $materials);
 
         $this->command->info("  {$spec['name']}: seeded catalog, ".count($customers).' customers, sales, payments, stock and production.');
+
+        return $ownerEmail;
     }
 
     private function staff(Business $business, string $email, string $name, string $role): User
@@ -347,7 +356,10 @@ class DemoDataSeeder extends Seeder
                 'raw_material_id' => $material->id,
                 'movement_date' => Carbon::now()->subDays(3)->toDateString(),
                 'kind' => 'out',
-                'qty' => '12.000',
+                // qty is stored SIGNED (in +, out −), so on-hand is a plain Σ qty.
+                // An out row must be negative or it would *raise* stock. See
+                // StockService and the offline stock.js reducer.
+                'qty' => '-12.000',
                 'note' => 'Kitchen issue',
             ]), ['created_by' => $ownerId]);
 
