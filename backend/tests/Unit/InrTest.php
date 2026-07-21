@@ -8,6 +8,7 @@ it('formats with Indian grouping and two decimals', function () {
     expect(Inr::format('107963'))->toBe('₹1,07,963.00');
     expect(Inr::format('999.5'))->toBe('₹999.50');
     expect(Inr::format('0'))->toBe('₹0.00');
+    expect(Inr::format('1234'))->toBe('₹1,234.00');
 });
 
 it('shows negatives with a leading minus, not parentheses', function () {

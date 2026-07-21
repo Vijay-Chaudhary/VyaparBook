@@ -24,6 +24,9 @@ class Inr
         // Normalise to exactly two decimals via bcadd at scale 2 (truncates,
         // matching the server's bcmath discipline — never rounds up).
         $normalised = bcadd($abs === '' ? '0' : $abs, '0', 2);
+        if ($normalised === '0.00') {
+            $negative = false;
+        }
         [$whole, $frac] = explode('.', $normalised);
 
         $grouped = self::groupIndian($whole);
