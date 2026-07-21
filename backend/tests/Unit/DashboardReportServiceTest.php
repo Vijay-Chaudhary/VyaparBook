@@ -8,7 +8,20 @@ use App\Models\Sale;
 use App\Models\User;
 use App\Services\DashboardReportService;
 use App\Services\KhataService;
+use App\Support\TenantContext;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+
+/** Run $fn inside a tenant-pinned transaction, as the controller does in prod. */
+function inTenant(string $businessId, callable $fn): mixed
+{
+    return DB::transaction(function () use ($businessId, $fn) {
+        TenantContext::switchTo($businessId);
+        app()->bind('tenant.id', fn () => $businessId);
+
+        return $fn();
+    });
+}
 
 function dashCustomer(Business $b, string $name, string $opening = '0.00', ?string $village = null): Customer
 {
@@ -64,8 +77,8 @@ it('totals customer outstanding as Σ of KhataService, and isolates tenants', fu
     $khata = new KhataService();
     $expectedTotal = bcadd($khata->outstandingFor($c1), $khata->outstandingFor($c2), 2);
 
-    $summary = (new DashboardReportService(new KhataService(), new App\Services\StockService()))
-        ->customerOutstanding($a->id);
+    $summary = inTenant($a->id, fn () => (new DashboardReportService(new KhataService(), new App\Services\StockService()))
+        ->customerOutstanding($a->id));
 
     expect($summary->totalRupees)->toBe($expectedTotal)   // '1628.50'
         ->and($summary->totalRupees)->toBe('1628.50');
