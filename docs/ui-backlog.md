@@ -46,3 +46,11 @@ Label: `ui`
 | ID | Status | Area | Summary | Issue |
 |----|--------|------|---------|-------|
 | U-01 | done | khata/forms | New-customer form: the "Opening balance" hint duplicated its own label verbatim in English (Hindi differentiated `पुराना बकाया` vs `शुरुआती बकाया`, but both English `opening_balance` and `opening` were `'Opening balance'`). Fixed: English `opening` hint is now `'Amount owed before you started using VyaparBook'` (`i18n.js:157`). | — |
+
+---
+
+## Related (backend)
+
+Not UI, but surfaced during the same app-run discovery pass — tracked here for completeness:
+
+- **`default_language_to_en` migration failed** with `must be owner of table businesses` (bare `DB::statement` ran as the non-owner app role). Fixed in `7d6f311`; tracked as [#2](https://github.com/Vijay-Chaudhary/VyaparBook/issues/2) (closed).
