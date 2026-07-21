@@ -9,7 +9,7 @@ import { Screen } from '../components/Chrome';
  * Deliberately thin: the shopkeeper opens the app to record something or to
  * check who owes, not to read a dashboard.
  */
-export function Home({ userName, customers, entriesToday, isOwner = false, tenantId = null }) {
+export function Home({ userName, customers, entriesToday, isOwner = false, tenantId = null, readOnly = false }) {
     const totalDue = customers.reduce((sum, c) => sum + Math.max(0, c.outstandingPaise), 0);
 
     const salesTodayPaise = entriesToday
@@ -52,15 +52,17 @@ export function Home({ userName, customers, entriesToday, isOwner = false, tenan
                 <span className="text-sm text-brand">{t('khata')} →</span>
             </button>
 
-            <div className="flex gap-2">
-                <button
-                    type="button"
-                    className="btn-primary flex-1"
-                    onClick={() => navigate('/customer/new')}
-                >
-                    {t('add_customer')}
-                </button>
-            </div>
+            {!readOnly && (
+                <div className="flex gap-2">
+                    <button
+                        type="button"
+                        className="btn-primary flex-1"
+                        onClick={() => navigate('/customer/new')}
+                    >
+                        {t('add_customer')}
+                    </button>
+                </div>
+            )}
 
             {/*
               * Billing lives in the Blade half (online-only), so this is a real
@@ -69,7 +71,7 @@ export function Home({ userName, customers, entriesToday, isOwner = false, tenan
               * else is shown the door. The current business is passed through so
               * a multi-shop owner lands on the shop they are looking at.
               */}
-            {isOwner && (
+            {isOwner && !readOnly && (
                 <a
                     href={tenantId ? `/billing?business=${tenantId}` : '/billing'}
                     className="btn-secondary mt-2 w-full"

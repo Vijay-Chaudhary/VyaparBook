@@ -112,6 +112,11 @@ const strings = {
         sync_before_switch: 'दुकान बदलने से पहले सिंक करें — कुछ प्रविष्टियाँ बाकी हैं।',
 
         plan_billing: 'प्लान और बिलिंग',
+
+        impersonating: 'सहायता दृश्य',
+        read_only: 'केवल-पढ़ें',
+        exit_support_view: 'बाहर निकलें',
+        read_only_support: 'यह केवल-पढ़ने वाला सहायता दृश्य है — बदलाव नहीं कर सकते।',
     },
 
     en: {
@@ -216,6 +221,11 @@ const strings = {
         sync_before_switch: 'Sync before switching shop — some entries are still queued.',
 
         plan_billing: 'Plan & billing',
+
+        impersonating: 'Support view',
+        read_only: 'read-only',
+        exit_support_view: 'Exit',
+        read_only_support: 'This is a read-only support view — you cannot make changes.',
     },
 };
 

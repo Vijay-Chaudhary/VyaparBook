@@ -95,4 +95,8 @@ Route::middleware(['auth', 'platform_admin.web'])->prefix('admin')->name('admin.
     Route::post('console/{id}/payments/{paymentId}/verify', [TenantActionController::class, 'verifyPayment'])->name('console.payment.verify');
     Route::post('console/{id}/payments/{paymentId}/reject', [TenantActionController::class, 'rejectPayment'])->name('console.payment.reject');
     Route::post('console/{id}/impersonate', [TenantActionController::class, 'impersonate'])->name('console.impersonate');
+
+    // Ends a "view as tenant" session. POSTed from the /app impersonation banner
+    // (after the client wipes the tenant's local cache), then back to the console.
+    Route::post('impersonation/exit', [TenantActionController::class, 'exitImpersonation'])->name('impersonation.exit');
 });

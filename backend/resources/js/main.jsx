@@ -1,8 +1,8 @@
 import { createRoot } from 'react-dom/client';
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { getActiveBusiness, getToken, setActiveBusiness } from './api/token';
+import { getActiveBusiness, getImpersonation, getToken, setActiveBusiness } from './api/token';
 import { apiWrite } from './api/write';
-import { closeTenantDb, openTenantDb } from './offline/db';
+import { closeTenantDb, deleteTenantDb, openTenantDb } from './offline/db';
 import { enqueue, pendingCount, stalenessState } from './offline/outbox';
 import { khataList, ledgerFor, outstandingFor } from './offline/khata';
 import { movementsFor, stockList } from './offline/stock';
@@ -10,7 +10,7 @@ import { assertSafeToSwitch, sync } from './offline/sync';
 import { registerServiceWorker } from './offline/register-sw';
 import { setLocale, t, today } from './i18n';
 import { matchRoute, navigate, useRoute } from './router';
-import { BottomNav, BusinessSwitcher, StalenessBanner, SyncBar } from './components/Chrome';
+import { BottomNav, BusinessSwitcher, ImpersonationBanner, StalenessBanner, SyncBar } from './components/Chrome';
 import { Home } from './screens/Home';
 import { KhataList } from './screens/KhataList';
 import { CustomerLedger } from './screens/CustomerLedger';
@@ -68,6 +68,9 @@ function App({ userName, locale }) {
     const [db, setDb] = useState(null);
     const [tenantId, setTenantId] = useState(null);
     const [role, setRole] = useState(null);
+    // Non-null when a platform admin launched a read-only "view as tenant" from
+    // the console. Drives the banner and blocks every write path.
+    const [impersonation, setImpersonation] = useState(null);
     const [memberships, setMemberships] = useState([]);
     const [needsPick, setNeedsPick] = useState(false);
     const [customers, setCustomers] = useState([]);
@@ -90,6 +93,10 @@ function App({ userName, locale }) {
         (async () => {
             const token = await getToken();
             if (!token || cancelled) return; // offline with no session; nothing to open
+
+            // Captured as a side effect of getToken(): non-null iff this is a
+            // read-only support view launched from the platform console.
+            setImpersonation(getImpersonation());
 
             const identity = await (
                 await fetch('/api/v1/whoami', {
@@ -178,6 +185,49 @@ function App({ userName, locale }) {
     );
 
     const canManageStock = STOCK_MANAGERS.includes(role);
+    const readOnly = impersonation !== null;
+
+    /**
+     * Central write block for a read-only support view. The server rejects writes
+     * on the impersonation token anyway (SetTenantContext bars unsafe methods),
+     * but stopping them here keeps a failed write out of the outbox entirely and
+     * tells the operator why. Write CTAs are also hidden, so this is a backstop.
+     */
+    const blockedByImpersonation = useCallback(() => {
+        if (!readOnly) return false;
+        // eslint-disable-next-line no-alert -- deliberate hard stop for a support view
+        alert(t('read_only_support'));
+        return true;
+    }, [readOnly]);
+
+    /**
+     * Leave the support view: wipe the tenant's cache off THIS device first (it
+     * is not the operator's data to keep), then POST to end the session server-side
+     * and land back on the console. A form POST carries CSRF; a GET must not end a
+     * session.
+     */
+    const exitImpersonation = useCallback(async () => {
+        const exitUrl = impersonation?.exit_url;
+        if (!exitUrl) return;
+
+        if (tenantId) {
+            closeTenantDb();
+            await deleteTenantDb(tenantId);
+        }
+
+        const form = document.createElement('form');
+        form.method = 'POST';
+        form.action = exitUrl;
+
+        const token = document.createElement('input');
+        token.type = 'hidden';
+        token.name = '_token';
+        token.value = document.querySelector('meta[name="csrf-token"]')?.content ?? '';
+        form.appendChild(token);
+
+        document.body.appendChild(form);
+        form.submit();
+    }, [impersonation, tenantId]);
 
     /* --- reload everything the screens read ------------------------ */
     const refresh = useCallback(
@@ -265,6 +315,8 @@ function App({ userName, locale }) {
 
     /* --- writes: outbox first, always ------------------------------ */
     const saveCustomer = async (values) => {
+        if (blockedByImpersonation()) return;
+
         const uuid = crypto.randomUUID();
 
         // Write to the local cache AND the outbox: the customer must appear in
@@ -283,6 +335,8 @@ function App({ userName, locale }) {
     };
 
     const savePayment = async ({ customer, amount, mode, payment_date }) => {
+        if (blockedByImpersonation()) return;
+
         await enqueue(db, {
             type: 'payment',
             tenantId,
@@ -297,6 +351,8 @@ function App({ userName, locale }) {
     };
 
     const saveSale = async ({ customer, sale_date, lines, total }) => {
+        if (blockedByImpersonation()) return;
+
         await enqueue(db, {
             type: 'sale',
             tenantId,
@@ -339,6 +395,8 @@ function App({ userName, locale }) {
 
     /* --- stock writes: online-only, straight to the API ------------ */
     const saveMaterial = async (body) => {
+        if (blockedByImpersonation()) return { ok: false, status: 0 };
+
         const result = await apiWrite('/raw-materials', body);
         // A successful write returns the row; pull it (and its movements) into
         // the cache so the list reflects it without waiting for the next sync.
@@ -347,12 +405,16 @@ function App({ userName, locale }) {
     };
 
     const saveMovement = async (body) => {
+        if (blockedByImpersonation()) return { ok: false, status: 0 };
+
         const result = await apiWrite('/stock-movements', body);
         if (result.ok && online) await runSync();
         return result;
     };
 
     const saveBatch = async (body) => {
+        if (blockedByImpersonation()) return { ok: false, status: 0 };
+
         // A batch draws its consumptions out of stock server-side, so a sync
         // after success pulls both the new batch and the stock movements it
         // created — the on-hand figures update without a manual refresh.
@@ -401,7 +463,7 @@ function App({ userName, locale }) {
     const screen = () => {
         switch (route.name) {
             case 'khata':
-                return <KhataList customers={customers} />;
+                return <KhataList customers={customers} readOnly={readOnly} />;
 
             case 'ledger':
                 return (
@@ -411,6 +473,7 @@ function App({ userName, locale }) {
                         // null, not 0: showing ₹0.00 before the real balance
                         // loads is a wrong number a shopkeeper could act on.
                         outstandingPaise={ledger ? ledger.outstanding : null}
+                        readOnly={readOnly}
                     />
                 );
 
@@ -430,11 +493,11 @@ function App({ userName, locale }) {
             case 'pick-customer':
                 // "Sales" tab with no customer chosen yet: the khata list IS the
                 // picker, so send them there rather than inventing a second one.
-                return <KhataList customers={customers} />;
+                return <KhataList customers={customers} readOnly={readOnly} />;
 
             case 'production':
             case 'new-batch':
-                if (!canManageStock) return <Home userName={userName} customers={customers} entriesToday={entriesToday} isOwner={role === 'owner'} tenantId={tenantId} />;
+                if (!canManageStock) return <Home userName={userName} customers={customers} entriesToday={entriesToday} isOwner={role === 'owner'} tenantId={tenantId} readOnly={readOnly} />;
 
                 if (route.name === 'new-batch') {
                     // Products come from the catalog cache; materials from stock.
@@ -449,7 +512,7 @@ function App({ userName, locale }) {
                 // Defence in depth: the tab is already hidden for non-managers,
                 // but a salesman deep-linking to /stock must also be refused —
                 // and they hold no stock rows anyway.
-                if (!canManageStock) return <Home userName={userName} customers={customers} entriesToday={entriesToday} isOwner={role === 'owner'} tenantId={tenantId} />;
+                if (!canManageStock) return <Home userName={userName} customers={customers} entriesToday={entriesToday} isOwner={role === 'owner'} tenantId={tenantId} readOnly={readOnly} />;
 
                 if (route.name === 'material') {
                     return (
@@ -469,13 +532,17 @@ function App({ userName, locale }) {
                 return <StockList materials={materials} online={online} />;
 
             default:
-                return <Home userName={userName} customers={customers} entriesToday={entriesToday} isOwner={role === 'owner'} tenantId={tenantId} />;
+                return <Home userName={userName} customers={customers} entriesToday={entriesToday} isOwner={role === 'owner'} tenantId={tenantId} readOnly={readOnly} />;
         }
     };
 
     return (
         <>
-            <BusinessSwitcher current={tenantId} memberships={memberships} onSwitch={switchBusiness} />
+            <ImpersonationBanner impersonation={impersonation} onExit={exitImpersonation} />
+            {/* A support view has no business switching businesses. */}
+            {!readOnly && (
+                <BusinessSwitcher current={tenantId} memberships={memberships} onSwitch={switchBusiness} />
+            )}
             <SyncBar
                 online={online}
                 queued={queued}
@@ -485,7 +552,7 @@ function App({ userName, locale }) {
             />
             <StalenessBanner staleness={staleness} />
             {screen()}
-            <BottomNav path={path} canManageStock={canManageStock} />
+            <BottomNav path={path} canManageStock={canManageStock} readOnly={readOnly} />
         </>
     );
 }

@@ -15,6 +15,19 @@ let expiresAt = null; // epoch ms
 let inFlight = null; // de-dupes concurrent refreshes
 
 /*
+ * Impersonation context, when a platform admin launched "view as tenant" from
+ * the console. Non-null means the current token is a READ-ONLY support token for
+ * someone else's tenant — the app shows a banner and blocks writes. Set from the
+ * /auth/token response; the token itself is never persisted (same rule as above).
+ */
+let impersonation = null;
+
+/** The active impersonation context ({ tenant_name, role, exit_url }) or null. */
+export function getImpersonation() {
+    return impersonation;
+}
+
+/*
  * The business the token should be scoped to, for a user who belongs to more
  * than one. Persisted (localStorage) so the choice survives a reload — it is
  * only a business id the user is a member of, never a credential, so it is safe
@@ -101,6 +114,9 @@ export async function getToken() {
             const data = await response.json();
             token = data.token;
             expiresAt = Date.now() + data.expires_in_minutes * 60_000;
+            // Present only while a "view as tenant" session is active; the server
+            // drops it (and returns the operator's own token) once it expires.
+            impersonation = data.impersonation ?? null;
 
             return token;
         })

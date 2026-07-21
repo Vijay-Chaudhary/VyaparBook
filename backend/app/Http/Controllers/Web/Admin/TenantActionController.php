@@ -131,9 +131,12 @@ class TenantActionController extends Controller
     }
 
     /**
-     * Mint a short-lived READ-ONLY impersonation token and flash it to the drill-down
-     * page for the operator to use. Read on the BYPASSRLS connection, role-existence
-     * checked exactly as the API does, and every mint audited.
+     * "View as tenant": mint a short-lived READ-ONLY token, stash it in the
+     * operator's session, and drop them into /app rendered as this tenant. The
+     * token lives ONLY in the server-side session — never a URL, never the DOM —
+     * and the session→JWT bridge (ApiTokenController) hands it to the React layer
+     * on boot. Role-existence is checked on the BYPASSRLS connection exactly as
+     * the API does, and every launch is audited.
      */
     public function impersonate(Request $request, string $id): RedirectResponse
     {
@@ -169,16 +172,34 @@ class TenantActionController extends Controller
             'ttl_minutes' => $ttl,
         ]);
 
-        // Flash to the server-side session (never a URL): the token is a bearer
+        // Session, not a flash or a query string: the token is a bearer
         // credential and must not land in history, logs or a shareable link.
-        return redirect()
-            ->route('admin.console.show', $id)
-            ->with('impersonation', [
-                'token' => $token,
-                'role' => $role,
-                'ttl_minutes' => $ttl,
-                'tenant_name' => $business->name,
-            ]);
+        $request->session()->put('impersonation', [
+            'token' => $token,
+            'tenant_id' => $id,
+            'tenant_name' => $business->name,
+            'role' => $role,
+            'expires_at' => now()->addMinutes($ttl)->toIso8601String(),
+        ]);
+
+        return redirect()->route('app');
+    }
+
+    /**
+     * End a "view as tenant" session: drop the impersonation token and return the
+     * operator to the tenant's drill-down. The local cache is deleted client-side
+     * before this fires (see the app banner), so no tenant data is left behind on
+     * the operator's device.
+     */
+    public function exitImpersonation(Request $request): RedirectResponse
+    {
+        $tenantId = $request->session()->get('impersonation')['tenant_id'] ?? null;
+
+        $request->session()->forget('impersonation');
+
+        return $tenantId !== null
+            ? redirect()->route('admin.console.show', $tenantId)
+            : redirect()->route('admin.console');
     }
 
     /* --- helpers --------------------------------------------------- */

@@ -92,7 +92,6 @@ class ConsoleController extends Controller
             'members' => $members,
             'payments' => $payments,
             'roles' => $roles,
-            'impersonation' => session('impersonation'),
         ]);
     }
 }

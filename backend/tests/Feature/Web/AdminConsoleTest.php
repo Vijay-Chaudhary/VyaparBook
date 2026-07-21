@@ -171,25 +171,60 @@ describe('payments', function () {
     });
 });
 
-describe('impersonation', function () {
-    it('mints a read-only token for an existing role and audits it', function () {
+describe('impersonation (view as tenant)', function () {
+    it('launches into /app, stashing the read-only token in the session, and audits it', function () {
         [$business] = seedTenantWithOwner(); // creates an owner membership
 
-        $response = $this->actingAs(platformAdminUser())
+        $this->actingAs(platformAdminUser())
             ->post(route('admin.console.impersonate', $business->id), ['role' => 'owner', 'reason' => 'support'])
-            ->assertRedirect(route('admin.console.show', $business->id))
+            // Drops the operator straight into the app rendered as the tenant.
+            ->assertRedirect(route('app'))
             ->assertSessionHas('impersonation');
 
         $impersonation = session('impersonation');
         expect($impersonation['role'])->toBe('owner');
+        expect($impersonation['tenant_id'])->toBe($business->id);
         expect($impersonation['token'])->toBeString()->not->toBeEmpty();
+        expect($impersonation['expires_at'])->toBeString(); // 30-min window
 
         expect(PlatformAuditLog::on('pgsql_migrate')
             ->where('action', 'impersonate_tenant')->where('target_business_id', $business->id)->exists())
             ->toBeTrue();
     });
 
-    it('refuses a role no member holds, minting nothing', function () {
+    it('hands the impersonation token to the SPA via the session→JWT bridge', function () {
+        [$business] = seedTenantWithOwner();
+
+        $admin = platformAdminUser();
+        $this->actingAs($admin)
+            ->post(route('admin.console.impersonate', $business->id), ['role' => 'owner']);
+
+        // The same session now drives /auth/token: it returns the impersonation
+        // token (not one for the operator's own memberships) with the context the
+        // app needs to render the read-only banner.
+        $this->actingAs($admin)
+            ->getJson('/auth/token')
+            ->assertOk()
+            ->assertJsonPath('tenant_id', $business->id)
+            ->assertJsonPath('role', 'owner')
+            ->assertJsonPath('impersonation.tenant_name', $business->name)
+            ->assertJsonPath('impersonation.exit_url', route('admin.impersonation.exit'))
+            ->assertJson(fn ($json) => $json->where('token', session('impersonation')['token'])->etc());
+    });
+
+    it('ends the session on exit and returns to the tenant drill-down', function () {
+        [$business] = seedTenantWithOwner();
+        $admin = platformAdminUser();
+
+        $this->actingAs($admin)->post(route('admin.console.impersonate', $business->id), ['role' => 'owner']);
+
+        $this->actingAs($admin)
+            ->post(route('admin.impersonation.exit'))
+            ->assertRedirect(route('admin.console.show', $business->id))
+            ->assertSessionMissing('impersonation');
+    });
+
+    it('refuses a role no member holds, launching nothing', function () {
         [$business] = seedTenantWithOwner(); // only an owner exists
 
         $this->actingAs(platformAdminUser())

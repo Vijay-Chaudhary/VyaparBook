@@ -9,6 +9,7 @@ use App\Services\TokenService;
 use App\Support\TenantContext;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Carbon;
 
 /**
  * The bridge between the two auth halves (docs/frontend-plan.md §2): exchanges
@@ -29,6 +30,38 @@ class ApiTokenController extends Controller
 
     public function store(Request $request): JsonResponse
     {
+        // A platform admin who launched "view as tenant" carries the read-only
+        // impersonation token in their SESSION (server-side, never in the DOM or
+        // a URL). Hand that back instead of minting one for the operator's own
+        // memberships, so the React layer holds it in memory exactly like any
+        // other token — the entire lifecycle (refresh, whoami, sync) flows
+        // through the impersonation token with no client changes to how it is
+        // stored. See Web\Admin\TenantActionController::impersonate.
+        if (($impersonation = $request->session()->get('impersonation')) !== null) {
+            $expiresAt = Carbon::parse($impersonation['expires_at']);
+
+            if ($expiresAt->isFuture()) {
+                return response()->json([
+                    'token' => $impersonation['token'],
+                    'token_type' => 'bearer',
+                    // Real remaining life, not the original TTL, so the client
+                    // refreshes against the true expiry rather than overshooting it.
+                    'expires_in_minutes' => max(1, (int) ceil(Carbon::now()->diffInSeconds($expiresAt) / 60)),
+                    'tenant_id' => $impersonation['tenant_id'],
+                    'role' => $impersonation['role'],
+                    'impersonation' => [
+                        'tenant_name' => $impersonation['tenant_name'],
+                        'role' => $impersonation['role'],
+                        'exit_url' => route('admin.impersonation.exit'),
+                    ],
+                ]);
+            }
+
+            // Expired: end the impersonation and fall through to the operator's
+            // own token. The support window is over; the admin is themselves again.
+            $request->session()->forget('impersonation');
+        }
+
         /** @var User $user */
         $user = auth()->user();
 

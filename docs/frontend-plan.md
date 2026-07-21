@@ -385,7 +385,7 @@ Each phase ends shippable and testable. No phase depends on a later one.
 - Session-gated on the **live** `is_platform_admin` flag (`platform_admin.web`), the server-rendered twin of the JWT `require.platform_admin`. Cross-tenant by design: reads on the BYPASSRLS connection, writes pinned to the target tenant through RLS (`PlatformTenantContext`). ✅
 - **No logic fork:** the Blade actions reuse the exact same seams as the API (`SubscriptionService`, `PlatformTenantContext`, `PlatformAudit`, `TokenService`) — the web layer only chooses redirect+flash over JSON. Every mutation writes the same audit trail. ✅
 - Login routes a platform admin to the console rather than `/app` (they hold no membership, so the shopkeeper app would stall). ✅
-- Impersonation mints the short-lived read-only token and flashes it to the drill-down for the operator to use as a bearer credential (faithful to the API contract, never in a URL). *Follow-up:* a one-click "view as tenant" that injects the token straight into `/app` — needs a token-injection path into the SPA boot; deferred to Phase 8 integration.
+- Impersonation is a one-click **"view as tenant"**: the console stashes the short-lived read-only token in the operator's **server-side session** (never a URL, never the DOM), redirects to `/app`, and the existing session→JWT bridge (`ApiTokenController`) hands that token to the SPA on boot — so it lives in memory exactly like any other token, with no new storage path. The app shows a loud read-only banner, hides every write CTA and blocks all write handlers as a backstop (the server already bars writes on the token), and **Exit wipes the tenant's local cache off the operator's device** before ending the session. The 30-minute token expiry ends the view on its own. ✅
 
 ### Phase 8 — Hardening *(in progress)*
 - **Bundle budget enforced in CI** ✅ — `scripts/check-bundle-size.mjs` gzips the Vite output and fails the build over budget (`npm run build:check`); wired into `.github/workflows/ci.yml` alongside Vitest. Budgets are set at *measured + headroom* to catch creep (a barrel import, a stray dependency), not to relitigate the full-React floor (§5). Current: vendor 91% of budget, app shell 70%, css 65%.
@@ -393,10 +393,11 @@ Each phase ends shippable and testable. No phase depends on a later one.
 - `prefers-reduced-motion` ✅ — already global in `app.css` (honours the OS setting for all animation/transition/scroll). Zoom is never disabled (viewport has no `maximum-scale`), and the semantic colour tokens all clear WCAG AA — the a11y groundwork is in from earlier phases.
 - **Route-level code splitting — evaluated, deliberately NOT done.** §5 lists it as a non-negotiable, but two facts override it here: (a) app code is a tiny fraction of the payload — the runtime (React + Dexie, ~91KB gz) dominates, and splitting the ~15KB of screens saves little; (b) a lazy route chunk is **not** in the service worker's precache, so it would fail to load offline — the exact silent failure the PWA exists to prevent. The budget check now guards the real risk (runtime/vendor creep). Revisit only if a screen grows large enough to matter *and* its chunk is added to the SW precache list.
 
+- **Impersonation one-click "view as tenant" handoff** ✅ — built (see Phase 7 above): session-carried read-only token → SPA boot → read-only app with cache-wipe on exit.
+
 **Still requires a human / device (cannot be automated here):**
 - Lighthouse PWA + a11y run against a served build; contrast audit in real sunlight.
 - Real-device test on a low-end Android; largest Dynamic Type; landscape.
-- Impersonation one-click "view as tenant" handoff into `/app` (Phase 7 follow-up): needs a token-injection path into the SPA boot.
 
 ---
 

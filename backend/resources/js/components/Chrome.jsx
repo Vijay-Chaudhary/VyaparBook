@@ -12,15 +12,18 @@ import { navigate } from '../router';
 const TABS = [
     { route: '/', key: 'home', icon: HomeIcon },
     { route: '/khata', key: 'khata', icon: BookIcon },
-    { route: '/sale', key: 'sales', icon: PlusIcon },
+    // The only write entry in the nav — dropped in a read-only support view.
+    { route: '/sale', key: 'sales', icon: PlusIcon, write: true },
     // Manager-only. Hidden for salesman/accountant, matching StockPolicy and
     // what sync/pull actually sends them — never render a tab that 403s.
     { route: '/stock', key: 'stock', icon: BoxIcon, managerOnly: true },
     { route: '/production', key: 'production', icon: FlaskIcon, managerOnly: true },
 ];
 
-export function BottomNav({ path, canManageStock = false }) {
-    const tabs = TABS.filter((tab) => !tab.managerOnly || canManageStock);
+export function BottomNav({ path, canManageStock = false, readOnly = false }) {
+    const tabs = TABS.filter(
+        (tab) => (!tab.managerOnly || canManageStock) && (!tab.write || !readOnly)
+    );
 
     return (
         <nav
@@ -147,6 +150,38 @@ export function BusinessSwitcher({ current, memberships, onSwitch }) {
                 ))}
             </select>
         </label>
+    );
+}
+
+/**
+ * "You are viewing someone else's tenant" — shown for the whole session when a
+ * platform admin launched a read-only support view from the console (PRD §12).
+ *
+ * Deliberately loud (danger tone, always on top): an operator must never mistake
+ * a tenant's books for their own, and must always have a one-tap way out. Exit
+ * wipes the tenant's local cache off this device before returning to the console.
+ */
+export function ImpersonationBanner({ impersonation, onExit }) {
+    if (!impersonation) return null;
+
+    return (
+        <div
+            role="alert"
+            className="flex flex-wrap items-center gap-x-2 gap-y-1 bg-danger px-4 py-2 text-sm text-white"
+        >
+            <span className="font-semibold">{t('impersonating')}</span>
+            <span className="min-w-0 truncate">
+                {impersonation.tenant_name} · {impersonation.role} · {t('read_only')}
+            </span>
+            <button
+                type="button"
+                onClick={onExit}
+                data-testid="exit-impersonation"
+                className="ml-auto min-h-tap rounded bg-white/20 px-3 font-medium hover:bg-white/30"
+            >
+                {t('exit_support_view')}
+            </button>
+        </div>
     );
 }
 

@@ -62,13 +62,11 @@ return [
     'status_rejected' => 'Rejected',
 
     // Impersonation.
-    'impersonate' => 'Impersonate for support',
-    'impersonate_hint' => 'Mint a short-lived, read-only token to see this tenant exactly as one of its roles does.',
+    'impersonate' => 'View as tenant (support)',
+    'impersonate_hint' => 'Open this tenant\'s app exactly as one of its roles sees it, to reproduce a support issue.',
     'role' => 'Role',
-    'impersonate_action' => 'Mint read-only token',
-    'impersonation_ready' => 'Read-only token for :tenant (:role), valid :minutes minutes',
-    'impersonation_note' => 'This token is read-only and expires on its own. Use it as a bearer token against the API — it can never write.',
-    'copy' => 'Copy token',
+    'impersonate_action' => 'View as tenant',
+    'impersonate_readonly_note' => 'Read-only: the support view can never make changes, and the session expires on its own after 30 minutes.',
 
     // Flash messages.
     'flash_suspended' => 'Tenant suspended.',

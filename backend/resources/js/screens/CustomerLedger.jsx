@@ -7,7 +7,7 @@ import { Screen } from '../components/Chrome';
  * One customer's khata: the running statement plus the two actions that
  * actually get used at the counter.
  */
-export function CustomerLedger({ customer, entries, outstandingPaise }) {
+export function CustomerLedger({ customer, entries, outstandingPaise, readOnly = false }) {
     if (!customer) {
         return (
             <Screen title={t('khata')} onBack={() => navigate('/khata')}>
@@ -47,24 +47,28 @@ export function CustomerLedger({ customer, entries, outstandingPaise }) {
                 )}
             </div>
 
-            <div className="mb-4 flex gap-2">
-                <button
-                    type="button"
-                    className="btn-primary flex-1"
-                    onClick={() => navigate(`/payment/${customer.uuid}`)}
-                    data-testid="record-payment"
-                >
-                    {t('record_payment')}
-                </button>
-                <button
-                    type="button"
-                    className="btn-secondary flex-1"
-                    onClick={() => navigate(`/sale/${customer.uuid}`)}
-                    data-testid="record-sale"
-                >
-                    {t('record_sale')}
-                </button>
-            </div>
+            {/* No write actions in a read-only support view — the operator is
+                here to look, not to touch the shop's books. */}
+            {!readOnly && (
+                <div className="mb-4 flex gap-2">
+                    <button
+                        type="button"
+                        className="btn-primary flex-1"
+                        onClick={() => navigate(`/payment/${customer.uuid}`)}
+                        data-testid="record-payment"
+                    >
+                        {t('record_payment')}
+                    </button>
+                    <button
+                        type="button"
+                        className="btn-secondary flex-1"
+                        onClick={() => navigate(`/sale/${customer.uuid}`)}
+                        data-testid="record-sale"
+                    >
+                        {t('record_sale')}
+                    </button>
+                </div>
+            )}
 
             <h2 className="mb-2 text-sm font-semibold text-ink-muted">{t('ledger')}</h2>
 

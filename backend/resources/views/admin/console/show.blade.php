@@ -10,24 +10,6 @@
 <h1 class="text-2xl font-bold">{{ $business->name }}</h1>
 <p class="mb-4 text-ink-muted">{{ $business->city ?? '—' }}</p>
 
-{{-- Freshly minted impersonation token, flashed from the impersonate action. --}}
-@if ($impersonation)
-    <section class="card mb-4 space-y-2 border-brand" aria-labelledby="imp-heading">
-        <h2 id="imp-heading" class="font-bold">
-            {{ __('admin.impersonation_ready', [
-                'tenant' => $impersonation['tenant_name'],
-                'role' => $impersonation['role'],
-                'minutes' => $impersonation['ttl_minutes'],
-            ]) }}
-        </h2>
-        <p class="text-sm text-ink-muted">{{ __('admin.impersonation_note') }}</p>
-        <textarea readonly rows="3"
-                  class="field-input w-full break-all font-mono text-xs"
-                  data-testid="impersonation-token"
-                  onclick="this.select()">{{ $impersonation['token'] }}</textarea>
-    </section>
-@endif
-
 <div class="grid gap-4 sm:grid-cols-2">
     {{-- Business detail. --}}
     <section class="card space-y-2" aria-labelledby="detail-heading">
@@ -140,6 +122,7 @@
             <button type="submit" class="btn-secondary">{{ __('admin.impersonate_action') }}</button>
         </form>
         <p class="text-xs text-ink-muted">{{ __('admin.impersonate_hint') }}</p>
+        <p class="text-xs text-warning">{{ __('admin.impersonate_readonly_note') }}</p>
     @endif
 </section>
 

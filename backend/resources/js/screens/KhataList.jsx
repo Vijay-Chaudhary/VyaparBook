@@ -11,7 +11,7 @@ import { Screen } from '../components/Chrome';
  * Search filters name, village and phone, since a shop remembers a customer by
  * any of the three.
  */
-export function KhataList({ customers }) {
+export function KhataList({ customers, readOnly = false }) {
     const [query, setQuery] = useState('');
 
     const filtered = useMemo(() => {
@@ -32,9 +32,11 @@ export function KhataList({ customers }) {
         <Screen
             title={t('khata')}
             action={
-                <button type="button" className="btn-primary px-3" onClick={() => navigate('/customer/new')}>
-                    + {t('add_customer')}
-                </button>
+                readOnly ? null : (
+                    <button type="button" className="btn-primary px-3" onClick={() => navigate('/customer/new')}>
+                        + {t('add_customer')}
+                    </button>
+                )
             }
         >
             <div className="card mb-3">
@@ -64,13 +66,15 @@ export function KhataList({ customers }) {
                 <div className="card text-center">
                     <p className="font-medium">{t('no_customers')}</p>
                     <p className="mt-1 text-sm text-ink-muted">{t('no_customers_hint')}</p>
-                    <button
-                        type="button"
-                        className="btn-primary mt-3 w-full"
-                        onClick={() => navigate('/customer/new')}
-                    >
-                        {t('add_customer')}
-                    </button>
+                    {!readOnly && (
+                        <button
+                            type="button"
+                            className="btn-primary mt-3 w-full"
+                            onClick={() => navigate('/customer/new')}
+                        >
+                            {t('add_customer')}
+                        </button>
+                    )}
                 </div>
             ) : (
                 <ul className="space-y-2" data-testid="customer-list">
