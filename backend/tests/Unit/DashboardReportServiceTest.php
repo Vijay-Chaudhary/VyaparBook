@@ -88,3 +88,36 @@ it('totals customer outstanding as Σ of KhataService, and isolates tenants', fu
     expect($summary->customers[0]->name)->toBe('Ramesh');
     expect(collect($summary->customers)->pluck('name'))->not->toContain('Other Shop Customer');
 });
+
+it('sums sales for today and the selected month, and builds a 12-row sales trend', function () {
+    Illuminate\Support\Carbon::setTestNow('2026-07-22');
+
+    $a = Business::factory()->create();
+    $u = User::factory()->create();
+    $c = dashCustomer($a, 'Ramesh');
+
+    dashSale($c, $u, '100.00', '2026-07-22');  // today
+    dashSale($c, $u, '40.00', '2026-07-05');   // this month, not today
+    dashSale($c, $u, '25.00', '2026-05-09');   // May
+    dashSale($c, $u, '9.00', '2025-07-01');    // different year — excluded
+
+    [$salesToday, $salesMonth, $trend] = inTenant($a->id, function () use ($a) {
+        $svc = new DashboardReportService(new App\Services\StockService());
+
+        return [
+            $svc->salesToday($a->id),
+            $svc->salesForMonth($a->id, 2026, 7),
+            $svc->salesTrend($a->id, 2026),
+        ];
+    });
+
+    expect($salesToday)->toBe('100.00');
+    expect($salesMonth)->toBe('140.00');
+
+    expect($trend)->toHaveCount(12);      // list<string>, index 0 = Jan
+    expect($trend[6])->toBe('140.00');    // July
+    expect($trend[4])->toBe('25.00');     // May
+    expect($trend[0])->toBe('0.00');      // January, empty
+
+    Illuminate\Support\Carbon::setTestNow();
+});

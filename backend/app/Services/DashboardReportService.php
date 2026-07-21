@@ -4,8 +4,10 @@
 namespace App\Services;
 
 use App\Models\Customer;
+use App\Models\Sale;
 use App\Reports\CustomerDue;
 use App\Reports\OutstandingSummary;
+use Illuminate\Support\Carbon;
 
 /**
  * Read-only aggregation behind the owner dashboard (Phase 0).
@@ -56,5 +58,44 @@ class DashboardReportService
         );
 
         return new OutstandingSummary($total, $customers);
+    }
+
+    public function salesToday(string $businessId): string
+    {
+        $sum = (string) Sale::query()
+            ->where('business_id', $businessId)
+            ->whereDate('sale_date', Carbon::now()->toDateString())
+            ->selectRaw('coalesce(sum(total), 0)::text as agg')
+            ->value('agg');
+
+        return bcadd($sum, '0', 2);
+    }
+
+    public function salesForMonth(string $businessId, int $year, int $month): string
+    {
+        $sum = (string) Sale::query()
+            ->where('business_id', $businessId)
+            ->whereRaw('extract(year from sale_date) = ?', [$year])
+            ->whereRaw('extract(month from sale_date) = ?', [$month])
+            ->selectRaw('coalesce(sum(total), 0)::text as agg')
+            ->value('agg');
+
+        return bcadd($sum, '0', 2);
+    }
+
+    /** @return list<string> 12 decimal strings, index 0 = January. */
+    public function salesTrend(string $businessId, int $year): array
+    {
+        $byMonth = Sale::query()
+            ->where('business_id', $businessId)
+            ->whereRaw('extract(year from sale_date) = ?', [$year])
+            ->selectRaw('extract(month from sale_date)::int as m, coalesce(sum(total), 0)::text as agg')
+            ->groupBy('m')
+            ->pluck('agg', 'm');
+
+        return array_map(
+            fn (int $m) => bcadd((string) ($byMonth[$m] ?? '0'), '0', 2),
+            range(1, 12),
+        );
     }
 }
