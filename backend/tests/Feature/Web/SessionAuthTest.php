@@ -16,7 +16,7 @@ use PHPOpenSourceSaver\JWTAuth\Facades\JWTAuth;
 it('shows the login page to a guest', function () {
     $this->get('/login')
         ->assertOk()
-        ->assertSee('साइन इन करें'); // Hindi is the default locale (PRD §16)
+        ->assertSee('Sign in'); // English is the default locale
 });
 
 it('signs a user in and starts a session', function () {

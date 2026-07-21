@@ -1,8 +1,8 @@
 {
-    "name": "VyaparBook — खाता व बिक्री",
+    "name": "VyaparBook — Khata & Sales",
     "short_name": "VyaparBook",
-    "description": "दुकान का खाता, बिक्री और स्टॉक — बिना इंटरनेट भी काम करता है।",
-    "lang": "hi",
+    "description": "Your shop's khata, sales and stock — works offline too.",
+    "lang": "en",
     "dir": "ltr",
     "start_url": "/app",
     "scope": "/",

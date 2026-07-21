@@ -310,7 +310,7 @@ Because the runtime is fixed, the savings have to come from everything else. Non
 
 - **Blade pages:** Laravel's native `lang/{hi,en}/*.php` + `__()`. Already built in, zero dependency.
 - **React islands:** a small JSON dictionary per locale + a `t()` helper. A full i18n library is not justified for two languages and a few hundred strings.
-- **Locale resolution:** tenant default (`businesses.default_language`, already in the schema) → per-user override → fallback `hi`. Hindi is the default, not English.
+- **Locale resolution:** tenant default (`businesses.default_language`, already in the schema) → per-user override → fallback `en`. **English is now the default** (`APP_LOCALE=en`); Hindi stays fully translated and selectable, and PRD §16's original Hindi-default is superseded.
 - Dates `dd-MMM-yyyy`; currency via `Intl.NumberFormat('en-IN')`.
 
 Strings live in one place per locale from day one. Retrofitting extraction after the fact is miserable.

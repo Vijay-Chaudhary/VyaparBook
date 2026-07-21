@@ -9,7 +9,7 @@ Tech stack:
   - Blade (session auth) for onboarding, billing, admin console, print views
   - React (JWT via a session-protected token exchange) for the offline-capable screens under `/app/*`
   - Offline-first PWA: Dexie (IndexedDB) + service worker — PRD §9 is a hard requirement, not a nice-to-have
-  - i18n: Laravel `__()` for Blade, JSON dictionaries for React, Hindi default (PRD §16's `next-intl` is superseded)
+  - i18n: Laravel `__()` for Blade, JSON dictionaries for React, **English default** with Hindi fully available and selectable (PRD §16's Hindi-default and `next-intl` are both superseded)
 - No Docker — native local services (Postgres, PgBouncer, Redis installed directly; app run via `php artisan serve` in dev)
 
 Note: the `backend/` directory holds the entire application, frontend included. The name is historical.

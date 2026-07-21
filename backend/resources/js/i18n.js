@@ -2,8 +2,9 @@
  * Strings for the React layer (docs/frontend-plan.md §6).
  *
  * A plain dictionary, not an i18n library: two languages and a few hundred
- * strings do not justify the bytes. Hindi is the default (PRD §16), so `hi` is
- * the complete set and `en` is the fallback for anyone who switches.
+ * strings do not justify the bytes. English is the default; `en` is the complete
+ * set and the fallback, while `hi` is kept fully translated for anyone who
+ * switches (the product still serves Hindi-speaking shopkeepers first-hand).
  *
  * Every string lives here from the start — retrofitting extraction later is
  * miserable, and half-translated screens are worse than untranslated ones.
@@ -229,15 +230,15 @@ const strings = {
     },
 };
 
-let locale = 'hi';
+let locale = 'en';
 
 export function setLocale(next) {
     if (strings[next]) locale = next;
 }
 
-/** Translate. Falls back to Hindi, then to the key itself. */
+/** Translate. Falls back to English (the default), then to the key itself. */
 export function t(key) {
-    return strings[locale]?.[key] ?? strings.hi[key] ?? key;
+    return strings[locale]?.[key] ?? strings.en[key] ?? key;
 }
 
 /** dd-MMM-yyyy, per PRD §16. */
