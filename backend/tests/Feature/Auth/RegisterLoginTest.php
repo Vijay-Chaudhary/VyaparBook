@@ -6,6 +6,7 @@ it('registers a new user and issues a token', function () {
         'name' => 'Vijay Kumar',
         'email' => 'vijay@example.com',
         'password' => 'password123',
+        'consent' => true,
     ])->assertCreated()->assertJsonStructure(['token']);
 });
 
@@ -14,6 +15,7 @@ it('rejects login with the wrong password', function () {
         'name' => 'Vijay Kumar',
         'email' => 'vijay2@example.com',
         'password' => 'password123',
+        'consent' => true,
     ]);
 
     $this->postJson('/api/v1/auth/login', [
@@ -47,10 +49,12 @@ it('logs in with the correct password', function () {
         'name' => 'Vijay Kumar',
         'email' => 'vijay3@example.com',
         'password' => 'password123',
+        'consent' => true,
     ]);
 
     $this->postJson('/api/v1/auth/login', [
         'email' => 'vijay3@example.com',
         'password' => 'password123',
+        'consent' => true,
     ])->assertOk()->assertJsonStructure(['token']);
 });

@@ -7,6 +7,7 @@ use App\Models\Invite;
 use App\Models\Membership;
 use App\Models\User;
 use App\Policies\InvitePolicy;
+use App\Services\PlanGuard;
 use App\Services\TokenService;
 use App\Support\TenantContext;
 use Carbon\Carbon;
@@ -27,6 +28,13 @@ class InviteController extends Controller
         $data = $request->validate([
             'role' => ['nullable', 'in:owner,admin,salesman,accountant'],
         ]);
+
+        // Enforce the user-seat cap as a soft-block: inviting another user when the
+        // plan's seats are already filled returns a 402 upgrade prompt.
+        $guard = app(PlanGuard::class);
+        if ($guard->isOverLimit($guard->resolve(), 'users')) {
+            return $guard->overLimitResponse('users');
+        }
 
         // business_id comes from the resolved tenant, never the {id} path segment —
         // the path is not trusted, so a mismatched id cannot invite into another business.

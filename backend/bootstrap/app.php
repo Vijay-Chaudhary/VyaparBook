@@ -15,7 +15,21 @@ return Application::configure(basePath: dirname(__DIR__))
         $middleware->alias([
             'tenant.context' => \App\Http\Middleware\SetTenantContext::class,
             'require.tenant' => \App\Http\Middleware\RequireTenant::class,
+            'plan.gate' => \App\Http\Middleware\EnforceActivePlan::class,
+            'require.platform_admin' => \App\Http\Middleware\RequirePlatformAdmin::class,
+            'platform_admin.web' => \App\Http\Middleware\EnsurePlatformAdmin::class,
         ]);
+
+        // Laravel's priority list sorts ThrottleRequests ahead of unlisted
+        // custom middleware, so without this the per-tenant limiter would run
+        // BEFORE the tenant is resolved and silently key on the user instead —
+        // giving a shop's six staff six separate budgets and defeating the
+        // noisy-neighbour containment entirely. It fails invisibly (limits still
+        // "work", just on the wrong bucket), so it is pinned here.
+        $middleware->prependToPriorityList(
+            before: \Illuminate\Routing\Middleware\ThrottleRequests::class,
+            prepend: \App\Http\Middleware\SetTenantContext::class,
+        );
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

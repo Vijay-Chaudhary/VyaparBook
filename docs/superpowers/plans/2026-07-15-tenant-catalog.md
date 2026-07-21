@@ -14,6 +14,42 @@
 
 ---
 
+## Progress (updated 2026-07-17)
+
+**✅ 18 of 18 tasks complete — slice done.** The full catalog slice — models, RLS, CRUD, aggregate read, templates and seeding — is built, committed, documented, and green against a live Postgres, with DB-level RLS proof and cross-tenant leak coverage in place. Full suite: **102 passed (200 assertions)** on 2026-07-17, matching the plan's predicted count exactly.
+
+| # | Task | Status | Commit |
+|---|------|--------|--------|
+| 1 | Container defaults for `tenant.*` bindings | ✅ Done | `7ce70de` |
+| 2 | `TenantAwareJob` binds the app-level tenant | ✅ Done | `2bf6b5d` |
+| 3 | `HasVersion` trait | ✅ Done | `4c88963` |
+| 4 | Product model, migration, factory | ✅ Done | `9f1382f` |
+| 5 | PackSize model, migration, factory | ✅ Done | `184783d` |
+| 6 | ProductPack model, migration, factory | ✅ Done | `7974b0b` |
+| 7 | `CatalogService::suggestedCostPrice` | ✅ Done | `00c0cfb` |
+| 8 | `CatalogPolicy` | ✅ Done | `7475002` |
+| 9 | Product CRUD + archive/restore | ✅ Done | `7f434fe` |
+| 10 | RBAC coverage for catalog writes | ✅ Done | `cbf5dc9` |
+| 11 | PackSize CRUD + archive/restore | ✅ Done | `73057cc` |
+| 12 | ProductPack CRUD + archive/restore | ✅ Done | `2079db2` |
+| 13 | `GET /catalog` aggregate read | ✅ Done | `7d1520c` |
+| 14 | Catalog templates + `CatalogTemplateService` | ✅ Done | `dc1b0aa` |
+| 15 | `POST /catalog/seed` endpoint | ✅ Done | `2f4aabf` |
+| 16 | DB-level RLS proof (`CatalogRlsTest`) | ✅ Done | `083b403` |
+| 17 | Catalog cases in the cross-tenant leak suite | ✅ Done | `5028a08` |
+| 18 | Full suite, docs, plan close-out | ✅ Done | `ef7b461` |
+
+**Verified:** full suite — 102 passed (200 assertions) on 2026-07-17.
+
+### Known Gaps
+
+Nothing was deferred from the task list — all 18 tasks shipped as specified. Two pre-existing constraints carry forward unchanged (both already recorded in the tenancy plan's close-out and `backend/README.md`):
+
+- **PgBouncer is not configured**, so the suite runs against Postgres directly. Every RLS / `SET LOCAL` guarantee these tasks prove is validated against Postgres semantics, not against transaction pooling in situ. Unchanged by this slice; a green suite here is not evidence that pooling is safe.
+- **Placeholder template data.** The namkeen/sweets/spices templates ship plausible-but-invented products, sizes, and prices — the real tenant lists are data we do not have. Swapping in real data is a file edit under `database/catalog_templates/`, no code change.
+
+---
+
 ## Two pre-existing gaps this slice must close first
 
 Tasks 1 and 2 are not catalog features. They fix container/queue behaviour that has never fired because **no model used `BelongsToTenant` until now**. Both were verified against the running app, not assumed:
@@ -87,7 +123,7 @@ backend/
 - Modify: `backend/app/Providers/AppServiceProvider.php`
 - Test: `backend/tests/Unit/TenantContainerDefaultsTest.php`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 ```php
 <?php
@@ -100,12 +136,12 @@ it('resolves the tenant bindings to null outside a request', function () {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd backend && php artisan test --filter=TenantContainerDefaultsTest`
 Expected: FAIL — `BindingResolutionException: Target class [tenant.id] does not exist.`
 
-- [ ] **Step 3: Bind null defaults in AppServiceProvider**
+- [x] **Step 3: Bind null defaults in AppServiceProvider**
 
 Replace the body of `register()` in `backend/app/Providers/AppServiceProvider.php`:
 
@@ -129,17 +165,17 @@ Replace the body of `register()` in `backend/app/Providers/AppServiceProvider.ph
     }
 ```
 
-- [ ] **Step 4: Run the test**
+- [x] **Step 4: Run the test**
 
 Run: `cd backend && php artisan test --filter=TenantContainerDefaultsTest`
 Expected: PASS (1 passed)
 
-- [ ] **Step 5: Run the whole suite to prove nothing regressed**
+- [x] **Step 5: Run the whole suite to prove nothing regressed**
 
 Run: `cd backend && php artisan test`
 Expected: PASS (40 passed) — `SetTenantContext` and `BelongsToTenantTraitTest` both override these bindings, so the defaults must not change existing behaviour.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/Providers/AppServiceProvider.php backend/tests/Unit/TenantContainerDefaultsTest.php
@@ -154,7 +190,7 @@ git commit -m "fix: bind null defaults for tenant.* container keys"
 - Modify: `backend/app/Traits/TenantAwareJob.php`
 - Test: `backend/tests/Unit/TenantAwareJobTest.php`
 
-- [ ] **Step 1: Add a failing test case**
+- [x] **Step 1: Add a failing test case**
 
 Append to `backend/tests/Unit/TenantAwareJobTest.php`, and add the highlighted line to the existing `FixtureTenantJob` so it observes the container too:
 
@@ -179,12 +215,12 @@ it('binds the app-level tenant so BelongsToTenant models are scoped inside a job
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd backend && php artisan test --filter=TenantAwareJobTest`
 Expected: FAIL — the new case gets `null` (Task 1's default), not the tenant id. The pre-existing GUC test still passes.
 
-- [ ] **Step 3: Bind the tenant in the trait**
+- [x] **Step 3: Bind the tenant in the trait**
 
 Replace `handle()` in `backend/app/Traits/TenantAwareJob.php`:
 
@@ -207,12 +243,12 @@ Replace `handle()` in `backend/app/Traits/TenantAwareJob.php`:
     }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `cd backend && php artisan test --filter=TenantAwareJobTest`
 Expected: PASS (2 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/Traits/TenantAwareJob.php backend/tests/Unit/TenantAwareJobTest.php
@@ -229,7 +265,7 @@ git commit -m "fix: bind app-level tenant in TenantAwareJob, not just the GUC"
 
 `version` exists for PRD §9's future delta sync. It is added now because backfilling it onto a table that already holds live tenant data is a migration plus a data fix; adding it now is one column and this trait.
 
-- [ ] **Step 1: Write the trait**
+- [x] **Step 1: Write the trait**
 
 ```php
 <?php
@@ -255,7 +291,7 @@ trait HasVersion
 }
 ```
 
-- [ ] **Step 2: Write a failing test against a fixture table**
+- [x] **Step 2: Write a failing test against a fixture table**
 
 ```php
 <?php
@@ -313,12 +349,12 @@ it('does not bump the version on a read', function () {
 });
 ```
 
-- [ ] **Step 3: Run the tests**
+- [x] **Step 3: Run the tests**
 
 Run: `cd backend && php artisan test --filter=HasVersionTraitTest`
 Expected: PASS (3 passed)
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/app/Traits/HasVersion.php backend/tests/Unit/HasVersionTraitTest.php
@@ -335,7 +371,7 @@ git commit -m "feat: add HasVersion trait for sync-ready row versioning"
 - Create: `backend/database/factories/ProductFactory.php`
 - Test: `backend/tests/Unit/ProductModelTest.php`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```php
 <?php
@@ -389,7 +425,7 @@ This is the flat policy the tenancy spec reserved for every domain table — no 
 
 New tables need no explicit `GRANT`: migration `2026_07_05_000001_create_app_role` ran `ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE ON TABLES TO vyaparbook_app`, which covers tables created later by the same privileged role.
 
-- [ ] **Step 2: Write the model**
+- [x] **Step 2: Write the model**
 
 ```php
 <?php
@@ -426,7 +462,7 @@ class Product extends Model
 }
 ```
 
-- [ ] **Step 3: Write the factory**
+- [x] **Step 3: Write the factory**
 
 ```php
 <?php
@@ -456,7 +492,7 @@ class ProductFactory extends Factory
 }
 ```
 
-- [ ] **Step 4: Write a failing test**
+- [x] **Step 4: Write a failing test**
 
 ```php
 <?php
@@ -495,7 +531,7 @@ it('casts money to a 2-decimal string, not a float', function () {
 
 `Product::on('pgsql_migrate')` runs as the superuser `postgres`, which bypasses RLS entirely (superusers ignore even `FORCE ROW LEVEL SECURITY`) — the same mechanism `MembershipRlsTest` relies on for setup.
 
-- [ ] **Step 5: Run the migration and tests**
+- [x] **Step 5: Run the migration and tests**
 
 ```bash
 cd backend
@@ -504,7 +540,7 @@ php artisan test --filter=ProductModelTest
 ```
 Expected: PASS (2 passed)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/database/migrations backend/app/Models/Product.php backend/database/factories/ProductFactory.php backend/tests/Unit/ProductModelTest.php
@@ -521,7 +557,7 @@ git commit -m "feat: add Product model with RLS isolation policy"
 - Create: `backend/database/factories/PackSizeFactory.php`
 - Test: `backend/tests/Unit/PackSizeModelTest.php`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```php
 <?php
@@ -569,7 +605,7 @@ return new class extends Migration
 
 `weight_kg` carries 3 decimals so 100g is exactly `0.100`. `label` is free display text; `weight_kg` is the canonical unit that does all arithmetic (spec §2).
 
-- [ ] **Step 2: Write the model**
+- [x] **Step 2: Write the model**
 
 ```php
 <?php
@@ -604,7 +640,7 @@ class PackSize extends Model
 }
 ```
 
-- [ ] **Step 3: Write the factory**
+- [x] **Step 3: Write the factory**
 
 ```php
 <?php
@@ -639,7 +675,7 @@ class PackSizeFactory extends Factory
 }
 ```
 
-- [ ] **Step 4: Write a failing test**
+- [x] **Step 4: Write a failing test**
 
 ```php
 <?php
@@ -703,7 +739,7 @@ it('allows the same label in a different business', function () {
 });
 ```
 
-- [ ] **Step 5: Run the migration and tests**
+- [x] **Step 5: Run the migration and tests**
 
 ```bash
 cd backend
@@ -712,7 +748,7 @@ php artisan test --filter=PackSizeModelTest
 ```
 Expected: PASS (4 passed)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/database/migrations backend/app/Models/PackSize.php backend/database/factories/PackSizeFactory.php backend/tests/Unit/PackSizeModelTest.php
@@ -729,7 +765,7 @@ git commit -m "feat: add PackSize model with RLS isolation policy"
 - Create: `backend/database/factories/ProductPackFactory.php`
 - Test: `backend/tests/Unit/ProductPackModelTest.php`
 
-- [ ] **Step 1: Write the migration**
+- [x] **Step 1: Write the migration**
 
 ```php
 <?php
@@ -778,7 +814,7 @@ return new class extends Migration
 
 The `cascadeOnDelete` on `product_id`/`pack_size_id` never fires in normal operation — products and packs are archived, never deleted (spec §2). It exists for the one case that does delete rows: dropping a `Business` cascades to everything it owns.
 
-- [ ] **Step 2: Write the model**
+- [x] **Step 2: Write the model**
 
 ```php
 <?php
@@ -821,7 +857,7 @@ class ProductPack extends Model
 }
 ```
 
-- [ ] **Step 3: Write the factory**
+- [x] **Step 3: Write the factory**
 
 ```php
 <?php
@@ -854,7 +890,7 @@ class ProductPackFactory extends Factory
 
 Callers must pass `business_id`, `product_id` and `pack_size_id` explicitly when they need them to agree — the defaults above build three *unrelated* businesses. Tests that care always pass all three.
 
-- [ ] **Step 4: Write a failing test**
+- [x] **Step 4: Write a failing test**
 
 ```php
 <?php
@@ -912,7 +948,7 @@ it('rejects the same product/pack pairing twice', function () {
 });
 ```
 
-- [ ] **Step 5: Run the migration and tests**
+- [x] **Step 5: Run the migration and tests**
 
 ```bash
 cd backend
@@ -921,7 +957,7 @@ php artisan test --filter=ProductPackModelTest
 ```
 Expected: PASS (2 passed)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/database/migrations backend/app/Models/ProductPack.php backend/database/factories/ProductPackFactory.php backend/tests/Unit/ProductPackModelTest.php
@@ -938,7 +974,7 @@ git commit -m "feat: add ProductPack model with RLS isolation policy"
 
 One rule, one home: "suggest `base_cost_per_kg × weight_kg`" is needed both when a template omits a cost (Task 14) and when someone POSTs a product-pack without one (Task 12). It lives here so the two cannot drift.
 
-- [ ] **Step 1: Write a failing test**
+- [x] **Step 1: Write a failing test**
 
 ```php
 <?php
@@ -1004,12 +1040,12 @@ it('returns null when the product has no base cost', function () {
 });
 ```
 
-- [ ] **Step 2: Run it to verify it fails**
+- [x] **Step 2: Run it to verify it fails**
 
 Run: `cd backend && php artisan test --filter=CatalogServiceTest`
 Expected: FAIL — `Class "App\Services\CatalogService" not found`
 
-- [ ] **Step 3: Write the service**
+- [x] **Step 3: Write the service**
 
 ```php
 <?php
@@ -1044,12 +1080,12 @@ class CatalogService
 }
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `cd backend && php artisan test --filter=CatalogServiceTest`
 Expected: PASS (4 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/Services/CatalogService.php backend/tests/Unit/CatalogServiceTest.php
@@ -1064,7 +1100,7 @@ git commit -m "feat: add CatalogService::suggestedCostPrice with exact decimal m
 - Create: `backend/app/Policies/CatalogPolicy.php`
 - Test: covered by Task 10's RBAC test (this task ships the class the controllers call)
 
-- [ ] **Step 1: Write the policy**
+- [x] **Step 1: Write the policy**
 
 Mirrors `InvitePolicy` exactly — same shape, same container-read of the verified role.
 
@@ -1090,7 +1126,7 @@ class CatalogPolicy
 }
 ```
 
-- [ ] **Step 2: Commit**
+- [x] **Step 2: Commit**
 
 ```bash
 git add backend/app/Policies/CatalogPolicy.php
@@ -1106,7 +1142,7 @@ git commit -m "feat: add CatalogPolicy gating catalog writes to owner/admin"
 - Modify: `backend/routes/api.php`
 - Test: `backend/tests/Feature/Catalog/CatalogCrudTest.php`
 
-- [ ] **Step 1: Write the controller**
+- [x] **Step 1: Write the controller**
 
 ```php
 <?php
@@ -1203,7 +1239,7 @@ class ProductController extends Controller
 }
 ```
 
-- [ ] **Step 2: Add the routes**
+- [x] **Step 2: Add the routes**
 
 In `backend/routes/api.php`, inside the existing `Route::middleware(['require.tenant'])->group(...)` block (alongside the invite route):
 
@@ -1214,7 +1250,7 @@ In `backend/routes/api.php`, inside the existing `Route::middleware(['require.te
             Route::post('products/{id}/restore', [\App\Http\Controllers\Api\V1\ProductController::class, 'restore']);
 ```
 
-- [ ] **Step 3: Write a failing feature test**
+- [x] **Step 3: Write a failing feature test**
 
 ```php
 <?php
@@ -1294,12 +1330,12 @@ it('returns 404 for a product in another business', function () {
 });
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `cd backend && php artisan test --filter=CatalogCrudTest`
 Expected: PASS (4 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/Http/Controllers/Api/V1/ProductController.php backend/routes/api.php backend/tests/Feature/Catalog/CatalogCrudTest.php
@@ -1313,7 +1349,7 @@ git commit -m "feat: add product CRUD endpoints with archive semantics"
 **Files:**
 - Test: `backend/tests/Feature/Catalog/CatalogRbacTest.php`
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 ```php
 <?php
@@ -1369,12 +1405,12 @@ it('blocks an accountant from creating a product', function () {
 });
 ```
 
-- [ ] **Step 2: Run the tests**
+- [x] **Step 2: Run the tests**
 
 Run: `cd backend && php artisan test --filter=CatalogRbacTest`
 Expected: PASS (4 passed)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/tests/Feature/Catalog/CatalogRbacTest.php
@@ -1390,7 +1426,7 @@ git commit -m "test: cover catalog write RBAC across all four roles"
 - Modify: `backend/routes/api.php`
 - Test: `backend/tests/Feature/Catalog/PackSizeCrudTest.php`
 
-- [ ] **Step 1: Write the controller**
+- [x] **Step 1: Write the controller**
 
 ```php
 <?php
@@ -1490,7 +1526,7 @@ class PackSizeController extends Controller
 }
 ```
 
-- [ ] **Step 2: Add the routes**
+- [x] **Step 2: Add the routes**
 
 Inside the same `require.tenant` group in `backend/routes/api.php`:
 
@@ -1501,7 +1537,7 @@ Inside the same `require.tenant` group in `backend/routes/api.php`:
             Route::post('pack-sizes/{id}/restore', [\App\Http\Controllers\Api\V1\PackSizeController::class, 'restore']);
 ```
 
-- [ ] **Step 3: Write a failing feature test**
+- [x] **Step 3: Write a failing feature test**
 
 ```php
 <?php
@@ -1572,12 +1608,12 @@ it('rejects a zero or negative weight', function () {
 
 The third test is the one that matters most — it proves the unscoped `Rule::unique` is genuinely tenant-scoped by RLS rather than accidentally global.
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `cd backend && php artisan test --filter=PackSizeCrudTest`
 Expected: PASS (4 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/Http/Controllers/Api/V1/PackSizeController.php backend/routes/api.php backend/tests/Feature/Catalog/PackSizeCrudTest.php
@@ -1593,7 +1629,7 @@ git commit -m "feat: add pack size CRUD endpoints"
 - Modify: `backend/routes/api.php`
 - Test: `backend/tests/Feature/Catalog/ProductPackCrudTest.php`
 
-- [ ] **Step 1: Write the controller**
+- [x] **Step 1: Write the controller**
 
 ```php
 <?php
@@ -1700,7 +1736,7 @@ class ProductPackController extends Controller
 }
 ```
 
-- [ ] **Step 2: Add the routes**
+- [x] **Step 2: Add the routes**
 
 Inside the same `require.tenant` group in `backend/routes/api.php`:
 
@@ -1711,7 +1747,7 @@ Inside the same `require.tenant` group in `backend/routes/api.php`:
             Route::post('product-packs/{id}/restore', [\App\Http\Controllers\Api\V1\ProductPackController::class, 'restore']);
 ```
 
-- [ ] **Step 3: Write a failing feature test**
+- [x] **Step 3: Write a failing feature test**
 
 ```php
 <?php
@@ -1796,12 +1832,12 @@ it('refuses to pair a product with another business pack size', function () {
 });
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `cd backend && php artisan test --filter=ProductPackCrudTest`
 Expected: PASS (3 passed)
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add backend/app/Http/Controllers/Api/V1/ProductPackController.php backend/routes/api.php backend/tests/Feature/Catalog/ProductPackCrudTest.php
@@ -1822,7 +1858,7 @@ git commit -m "feat: add product pack CRUD with suggested cost price"
 
 **Effective archiving (spec §2):** a `ProductPack` is hidden when it, its `Product`, **or** its `PackSize` is archived — evaluated at read time. Archiving a product never writes `archived_at` onto its packs. Cascading the write would destroy information and make restore ambiguous: after un-archiving Sev, a pack archived individually beforehand must stay archived, and only read-time evaluation preserves that.
 
-- [ ] **Step 1: Write the controller**
+- [x] **Step 1: Write the controller**
 
 ```php
 <?php
@@ -1908,7 +1944,7 @@ class CatalogController extends Controller
 }
 ```
 
-- [ ] **Step 2: Add the route**
+- [x] **Step 2: Add the route**
 
 Inside the same `require.tenant` group in `backend/routes/api.php`:
 
@@ -1916,7 +1952,7 @@ Inside the same `require.tenant` group in `backend/routes/api.php`:
             Route::get('catalog', [\App\Http\Controllers\Api\V1\CatalogController::class, 'index']);
 ```
 
-- [ ] **Step 3: Write a failing read test**
+- [x] **Step 3: Write a failing read test**
 
 ```php
 <?php
@@ -2009,7 +2045,7 @@ it('never returns another business catalog', function () {
 });
 ```
 
-- [ ] **Step 4: Write a failing archive test**
+- [x] **Step 4: Write a failing archive test**
 
 ```php
 <?php
@@ -2186,7 +2222,7 @@ it('hides a pack whose pack size is archived', function () {
 });
 ```
 
-- [ ] **Step 5: Run the tests**
+- [x] **Step 5: Run the tests**
 
 ```bash
 cd backend
@@ -2195,7 +2231,7 @@ php artisan test --filter=CatalogArchiveTest
 ```
 Expected: PASS (4 passed, then 7 passed)
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/Http/Controllers/Api/V1/CatalogController.php backend/routes/api.php backend/tests/Feature/Catalog/CatalogReadTest.php backend/tests/Feature/Catalog/CatalogArchiveTest.php
@@ -2215,7 +2251,7 @@ git commit -m "feat: add GET /catalog aggregate read with read-time archiving"
 
 Templates are code: versioned in git, reviewed in PRs, and a new Phase 3 vertical is a new file with no migration. Rows land in the tenant's own tables, so "every tenant edits freely" (PRD §6) needs no extra machinery.
 
-- [ ] **Step 1: Write the namkeen template**
+- [x] **Step 1: Write the namkeen template**
 
 Tenant #1 (Shree Raj Shyama Ji) is the Namkeen template — Senvda/Sev/Mix.
 
@@ -2268,7 +2304,7 @@ return [
 ];
 ```
 
-- [ ] **Step 2: Write the sweets template**
+- [x] **Step 2: Write the sweets template**
 
 ```php
 <?php
@@ -2304,7 +2340,7 @@ return [
 ];
 ```
 
-- [ ] **Step 3: Write the spices template**
+- [x] **Step 3: Write the spices template**
 
 ```php
 <?php
@@ -2340,7 +2376,7 @@ return [
 ];
 ```
 
-- [ ] **Step 4: Write the service**
+- [x] **Step 4: Write the service**
 
 ```php
 <?php
@@ -2429,7 +2465,7 @@ class CatalogTemplateService
 }
 ```
 
-- [ ] **Step 5: Write a failing test**
+- [x] **Step 5: Write a failing test**
 
 ```php
 <?php
@@ -2508,12 +2544,12 @@ it('rejects an unknown template', function () {
 });
 ```
 
-- [ ] **Step 6: Run the tests**
+- [x] **Step 6: Run the tests**
 
 Run: `cd backend && php artisan test --filter=CatalogTemplateServiceTest`
 Expected: PASS (5 passed)
 
-- [ ] **Step 7: Commit**
+- [x] **Step 7: Commit**
 
 ```bash
 git add backend/database/catalog_templates backend/app/Services/CatalogTemplateService.php backend/tests/Unit/CatalogTemplateServiceTest.php
@@ -2529,7 +2565,7 @@ git commit -m "feat: add catalog templates for namkeen, sweets and spices"
 - Modify: `backend/routes/api.php`
 - Test: `backend/tests/Feature/Catalog/CatalogTemplateTest.php`
 
-- [ ] **Step 1: Add the seed method to CatalogController**
+- [x] **Step 1: Add the seed method to CatalogController**
 
 Add these imports to `backend/app/Http/Controllers/Api/V1/CatalogController.php`:
 
@@ -2573,7 +2609,7 @@ Add the constructor and method to the class:
     }
 ```
 
-- [ ] **Step 2: Add the route**
+- [x] **Step 2: Add the route**
 
 Inside the same `require.tenant` group in `backend/routes/api.php`:
 
@@ -2581,7 +2617,7 @@ Inside the same `require.tenant` group in `backend/routes/api.php`:
             Route::post('catalog/seed', [\App\Http\Controllers\Api\V1\CatalogController::class, 'seed']);
 ```
 
-- [ ] **Step 3: Write a failing feature test**
+- [x] **Step 3: Write a failing feature test**
 
 ```php
 <?php
@@ -2690,12 +2726,12 @@ it('seeds only the caller business, never a neighbour', function () {
 });
 ```
 
-- [ ] **Step 4: Run the tests**
+- [x] **Step 4: Run the tests**
 
 Run: `cd backend && php artisan test --filter=CatalogTemplateTest`
 Expected: PASS (7 passed)
 
-- [ ] **Step 5: Verify the whole onboarding flow end to end**
+- [x] **Step 5: Verify the whole onboarding flow end to end**
 
 This is the PRD §5 path a real owner walks. Run it against the dev server to confirm the token from `POST /businesses` can seed immediately with no extra switch.
 
@@ -2725,7 +2761,7 @@ kill $SERVER_PID
 ```
 Expected: the seed call returns `{"message":"Catalog seeded."}` and the catalog call returns 3 products with nested packs. If `POST /businesses` needed a separate switch first, this is where that shows up.
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add backend/app/Http/Controllers/Api/V1/CatalogController.php backend/routes/api.php backend/tests/Feature/Catalog/CatalogTemplateTest.php
@@ -2741,7 +2777,7 @@ git commit -m "feat: add POST /catalog/seed with one-time onboarding guard"
 
 Mirrors `MembershipRlsTest`: proves the policies themselves, with the app layer removed. Uses the query builder rather than Eloquent deliberately — `BelongsToTenant`'s global scope would otherwise mask whether RLS is doing anything, which is the whole point of this file.
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 ```php
 <?php
@@ -2829,12 +2865,12 @@ it('shows a business its own products', function () {
 });
 ```
 
-- [ ] **Step 2: Run the tests**
+- [x] **Step 2: Run the tests**
 
 Run: `cd backend && php artisan test --filter=CatalogRlsTest`
 Expected: PASS (4 passed)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/tests/Feature/Tenancy/CatalogRlsTest.php
@@ -2850,7 +2886,7 @@ git commit -m "test: prove catalog RLS policies with the app layer bypassed"
 
 These go in the **existing** suite rather than a new file: it is the single place isolation is proven, and splitting it makes it easy to believe coverage exists where it does not.
 
-- [ ] **Step 1: Append the catalog cases**
+- [x] **Step 1: Append the catalog cases**
 
 Add these imports at the top of `backend/tests/Feature/Tenancy/CrossTenantLeakTest.php` if not already present:
 
@@ -2928,12 +2964,12 @@ it('rejects business As owner archiving business Bs product', function () {
 });
 ```
 
-- [ ] **Step 2: Run the suite**
+- [x] **Step 2: Run the suite**
 
 Run: `cd backend && php artisan test --filter=CrossTenantLeakTest`
 Expected: PASS (8 passed — 5 pre-existing + 3 new)
 
-- [ ] **Step 3: Commit**
+- [x] **Step 3: Commit**
 
 ```bash
 git add backend/tests/Feature/Tenancy/CrossTenantLeakTest.php
@@ -2948,12 +2984,12 @@ git commit -m "test: extend cross-tenant leak suite with catalog cases"
 - Modify: `backend/README.md`
 - Modify: `docs/superpowers/plans/2026-07-15-tenant-catalog.md`
 
-- [ ] **Step 1: Run the entire suite**
+- [x] **Step 1: Run the entire suite**
 
 Run: `cd backend && php artisan test`
 Expected: PASS. Baseline before this slice was 40 passed; every task above adds tests and none should have been removed. If anything fails, fix it before continuing — do not mark this task complete with a red suite.
 
-- [ ] **Step 2: Document the catalog API in the README**
+- [x] **Step 2: Document the catalog API in the README**
 
 Append to `backend/README.md`:
 
@@ -2988,11 +3024,11 @@ when it, its product, or its pack size is archived, but archiving a product does
 not write `archived_at` onto its packs. This keeps restore lossless.
 ```
 
-- [ ] **Step 3: Mark the plan complete**
+- [x] **Step 3: Mark the plan complete**
 
 Tick every checkbox in this plan file and add a "Known Gaps" section recording anything deferred during execution (matching the tenancy plan's close-out convention). If nothing was deferred, say so explicitly rather than omitting the section.
 
-- [ ] **Step 4: Commit**
+- [x] **Step 4: Commit**
 
 ```bash
 git add backend/README.md docs/superpowers/plans/2026-07-15-tenant-catalog.md

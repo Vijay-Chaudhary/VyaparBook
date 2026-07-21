@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
 use App\Models\User;
+use App\Services\ConsentService;
 use App\Services\TokenService;
 use App\Support\TenantContext;
 use Illuminate\Http\Request;
@@ -11,7 +12,10 @@ use Illuminate\Support\Facades\Hash;
 
 class AuthController extends Controller
 {
-    public function __construct(private readonly TokenService $tokenService) {}
+    public function __construct(
+        private readonly TokenService $tokenService,
+        private readonly ConsentService $consents,
+    ) {}
 
     public function register(Request $request)
     {
@@ -19,6 +23,10 @@ class AuthController extends Controller
             'name' => ['required', 'string', 'max:120'],
             'email' => ['required', 'email', 'unique:users,email'],
             'password' => ['required', 'string', 'min:8'],
+            // DPDP consent (PRD §13): 'accepted' means the caller sent a literal
+            // true — a missing or false field fails. Consent must be a clear
+            // affirmative action, so it cannot be defaulted on the server.
+            'consent' => ['required', 'accepted'],
         ]);
 
         $user = User::create([
@@ -27,7 +35,12 @@ class AuthController extends Controller
             'password' => Hash::make($data['password']),
         ]);
 
-        return response()->json(['token' => $this->tokenService->issue($user)], 201);
+        $this->consents->grant($user, $request);
+
+        return response()->json([
+            'token' => $this->tokenService->issue($user),
+            'policy_version' => $this->consents->currentPolicyVersion(),
+        ], 201);
     }
 
     public function login(Request $request)
