@@ -9,7 +9,7 @@ import { Screen } from '../components/Chrome';
  * Deliberately thin: the shopkeeper opens the app to record something or to
  * check who owes, not to read a dashboard.
  */
-export function Home({ userName, customers, entriesToday }) {
+export function Home({ userName, customers, entriesToday, isOwner = false, tenantId = null }) {
     const totalDue = customers.reduce((sum, c) => sum + Math.max(0, c.outstandingPaise), 0);
 
     const salesTodayPaise = entriesToday
@@ -61,6 +61,23 @@ export function Home({ userName, customers, entriesToday }) {
                     {t('add_customer')}
                 </button>
             </div>
+
+            {/*
+              * Billing lives in the Blade half (online-only), so this is a real
+              * link out of the SPA, not a navigate(). Only the owner may manage
+              * billing (PRD §7), and the server refuses anyone else — so no one
+              * else is shown the door. The current business is passed through so
+              * a multi-shop owner lands on the shop they are looking at.
+              */}
+            {isOwner && (
+                <a
+                    href={tenantId ? `/billing?business=${tenantId}` : '/billing'}
+                    className="btn-secondary mt-2 w-full"
+                    data-testid="billing-link"
+                >
+                    {t('plan_billing')}
+                </a>
+            )}
 
             <p className="mt-4 text-center text-xs text-ink-muted tabular">{today()}</p>
         </Screen>

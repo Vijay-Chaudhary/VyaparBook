@@ -110,6 +110,8 @@ const strings = {
         choose_business: 'दुकान चुनें',
         switch_business: 'दुकान बदलें',
         sync_before_switch: 'दुकान बदलने से पहले सिंक करें — कुछ प्रविष्टियाँ बाकी हैं।',
+
+        plan_billing: 'प्लान और बिलिंग',
     },
 
     en: {
@@ -212,6 +214,8 @@ const strings = {
         choose_business: 'Choose a shop',
         switch_business: 'Switch shop',
         sync_before_switch: 'Sync before switching shop — some entries are still queued.',
+
+        plan_billing: 'Plan & billing',
     },
 };
 

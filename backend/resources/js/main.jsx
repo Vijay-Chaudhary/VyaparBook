@@ -434,7 +434,7 @@ function App({ userName, locale }) {
 
             case 'production':
             case 'new-batch':
-                if (!canManageStock) return <Home userName={userName} customers={customers} entriesToday={entriesToday} />;
+                if (!canManageStock) return <Home userName={userName} customers={customers} entriesToday={entriesToday} isOwner={role === 'owner'} tenantId={tenantId} />;
 
                 if (route.name === 'new-batch') {
                     // Products come from the catalog cache; materials from stock.
@@ -449,7 +449,7 @@ function App({ userName, locale }) {
                 // Defence in depth: the tab is already hidden for non-managers,
                 // but a salesman deep-linking to /stock must also be refused —
                 // and they hold no stock rows anyway.
-                if (!canManageStock) return <Home userName={userName} customers={customers} entriesToday={entriesToday} />;
+                if (!canManageStock) return <Home userName={userName} customers={customers} entriesToday={entriesToday} isOwner={role === 'owner'} tenantId={tenantId} />;
 
                 if (route.name === 'material') {
                     return (
@@ -469,7 +469,7 @@ function App({ userName, locale }) {
                 return <StockList materials={materials} online={online} />;
 
             default:
-                return <Home userName={userName} customers={customers} entriesToday={entriesToday} />;
+                return <Home userName={userName} customers={customers} entriesToday={entriesToday} isOwner={role === 'owner'} tenantId={tenantId} />;
         }
     };
 

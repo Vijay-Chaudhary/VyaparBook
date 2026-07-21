@@ -1,6 +1,7 @@
 <?php
 
 use App\Http\Controllers\Web\ApiTokenController;
+use App\Http\Controllers\Web\BillingController;
 use App\Http\Controllers\Web\LoginController;
 use App\Http\Controllers\Web\OnboardingController;
 use App\Http\Controllers\Web\RegisterController;
@@ -48,6 +49,15 @@ Route::middleware('auth')->group(function () {
 
 Route::middleware('auth')->group(function () {
     Route::post('logout', [LoginController::class, 'destroy'])->name('logout');
+
+    /*
+     | Billing & plan (docs/frontend-plan.md §7 Phase 6) — Blade, online-only.
+     | Owner-only, enforced in the controller by resolving the caller's OWNED
+     | business (never a request-supplied one). Deliberately not behind the plan
+     | gate: an owner in dunning must reach this page to record a payment.
+     */
+    Route::get('billing', [BillingController::class, 'show'])->name('billing');
+    Route::post('billing/payment', [BillingController::class, 'storePayment'])->name('billing.payment');
 
     // Session -> JWT exchange for the React layer. Throttled because it mints
     // credentials: a valid session should not make it freely spammable.

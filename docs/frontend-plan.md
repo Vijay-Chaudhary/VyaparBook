@@ -374,9 +374,11 @@ Each phase ends shippable and testable. No phase depends on a later one.
 > on-hand work offline; writes go straight to the REST API and report the
 > server's verdict (402 → upgrade prompt, offline → try-again).
 
-### Phase 6 — Billing & Plan *(Blade, online-only)*
-- Plan display, record payment, dunning banner
-- Read-only (402) state must **soft-prompt, never block data entry** (PRD §15)
+### Phase 6 — Billing & Plan *(Blade, online-only)* ✅ *done*
+- Plan display, live usage vs limits, record payment (pending → platform verifies), payment history ✅
+- Dunning banner: the `/billing` page shows the read_only/past_due/trial state, and is the way **out** of dunning — owner-only, and deliberately outside the plan gate so a suspended owner can still pay. ✅
+- Reached from the React app via an **owner-only** "Plan & billing" link on Home (a real link out of the SPA, carrying `?business=` so a multi-shop owner lands on the shop they're viewing). ✅
+- Read-only (402) **soft-prompts, never blocks data entry** — inherent to the offline-first design: khata writes always land in the local outbox; a read_only tenant's `sync/push` returns 402 and the entry stays queued, never lost (PRD §15). Owner-only gating mirrors the JWT `BillingController` (resolves the caller's *owned* business, never a request-supplied one). ✅
 
 ### Phase 7 — Platform console *(Blade, online-only)*
 - Tenant directory, drill-down, verify/reject payment, suspend/reactivate, impersonate
