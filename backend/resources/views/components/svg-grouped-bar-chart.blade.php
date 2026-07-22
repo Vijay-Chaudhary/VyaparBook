@@ -15,7 +15,8 @@
 @endphp
 <figure class="chart">
     <figcaption class="chart-title">{{ $title }}</figcaption>
-    <svg viewBox="0 0 300 132" role="img" aria-label="{{ $title }}" class="w-full">
+    {{-- top inset (-6) gives the max y-axis label room so it doesn't clip. --}}
+    <svg viewBox="0 -6 300 138" role="img" aria-label="{{ $title }}" class="w-full">
         {{-- y-axis gridlines + labels --}}
         @foreach ($tickData as $t)
             <line x1="{{ $plotLeft }}" y1="{{ $t['yPct'] }}" x2="{{ $plotRight }}" y2="{{ $t['yPct'] }}"
