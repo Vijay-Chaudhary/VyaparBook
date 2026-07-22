@@ -43,8 +43,17 @@ class DashboardReportService
         $salesTrend = $this->salesTrend($businessId, $period->year);
         $prodTrend = $this->productionTrend($businessId, $period->year);
         $grossTrend = $this->grossProfitTrend($businessId, $period->year);
+        $expensesTrend = $this->expensesTrend($businessId, $period->year);
+
         $trend = array_map(
-            fn (int $m) => new TrendRow($m, $salesTrend[$m - 1], $prodTrend[$m - 1], $grossTrend[$m - 1]),
+            fn (int $m) => new TrendRow(
+                $m,
+                $salesTrend[$m - 1],
+                $prodTrend[$m - 1],
+                $grossTrend[$m - 1],
+                $expensesTrend[$m - 1],
+                bcsub($grossTrend[$m - 1], $expensesTrend[$m - 1], 2), // net profit (may be negative)
+            ),
             range(1, 12),
         );
 
@@ -56,11 +65,25 @@ class DashboardReportService
         $highestProfit = collect($performance)
             ->sortByDesc(fn (ProductPerf $p) => (float) $p->estProfitRupees)->first();
 
+        // Selected-month P&L figures. Gross and expenses come from the trends we
+        // already fetched (index month-1); net = gross − expenses.
+        $salesMonth = $this->salesForMonth($businessId, $period->year, $period->month);
+        $grossMonth = $grossTrend[$period->month - 1];
+        $expensesMonth = $expensesTrend[$period->month - 1];
+        $netProfitMonth = bcsub($grossMonth, $expensesMonth, 2);
+
+        $netMargin = bccomp($salesMonth, '0.00', 2) === 0
+            ? '0.0'
+            : bcadd(bcmul(bcdiv($netProfitMonth, $salesMonth, 4), '100', 2), '0', 1);
+
         return new DashboardReport(
             period: $period,
             salesTodayRupees: $this->salesToday($businessId),
-            salesMonthRupees: $this->salesForMonth($businessId, $period->year, $period->month),
-            estGrossProfitMonthRupees: $grossTrend[$period->month - 1],
+            salesMonthRupees: $salesMonth,
+            estGrossProfitMonthRupees: $grossMonth,
+            expensesMonthRupees: $expensesMonth,
+            netProfitMonthRupees: $netProfitMonth,
+            netProfitMarginPercent: $netMargin,
             outstanding: $this->customerOutstanding($businessId),
             productionMonthKg: $this->productionForMonth($businessId, $period->year, $period->month),
             lowStock: $lowStock,
@@ -68,6 +91,7 @@ class DashboardReportService
             productPerformance: $performance,
             highestSellingName: $highestSelling?->name,
             highestProfitName: $highestProfit?->name,
+            expenseBreakdown: $this->expensesByCategory($businessId, $period->year, $period->month),
             trend: $trend,
         );
     }

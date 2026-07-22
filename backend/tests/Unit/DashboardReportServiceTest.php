@@ -256,6 +256,9 @@ it('assembles a full report, with highest-selling/profit and an empty-shop case'
     expect($report->highestSellingName)->toBeNull();
     expect($report->trend)->toHaveCount(12);
     expect($report->estGrossProfitMonthRupees)->toBe('0.00');
+    expect($report->expensesMonthRupees)->toBe('0.00');
+    expect($report->netProfitMonthRupees)->toBe('0.00');
+    expect($report->netProfitMarginPercent)->toBe('0.0');
 
     Illuminate\Support\Carbon::setTestNow();
 });
@@ -329,4 +332,66 @@ it('totals expenses for a month, breaks them down by category, and builds a 12-r
     expect($trend[6])->toBe('8200.00');  // July
     expect($trend[4])->toBe('800.00');   // May
     expect($trend[0])->toBe('0.00');     // January
+});
+
+it('assembles net profit for a profitable month, a loss month, and guards zero-sales margin', function () {
+    Illuminate\Support\Carbon::setTestNow('2026-07-22');
+
+    $a = Business::factory()->create();
+    $u = User::factory()->create();
+
+    // One product pack: sell 100, cost 93 → gross profit 7 per unit.
+    $product = App\Models\Product::on('pgsql_migrate')->create([
+        'business_id' => $a->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
+    ]);
+    $ps = App\Models\PackSize::on('pgsql_migrate')->create([
+        'business_id' => $a->id, 'label' => '1kg', 'weight_kg' => '1.000',
+    ]);
+    $pack = App\Models\ProductPack::on('pgsql_migrate')->create([
+        'business_id' => $a->id, 'product_id' => $product->id, 'pack_size_id' => $ps->id,
+        'default_sell_price' => '100.00', 'default_cost_price' => '93.00',
+    ]);
+    $c = dashCustomer($a, 'Ramesh');
+
+    // July: sell 100 units → sales 10000, cost 9300, gross 700. Expenses 500 → net 200. margin 2.0%.
+    $jul = dashSale($c, $u, '10000.00', '2026-07-10');
+    saleLine($jul, $pack, 100, '100.00');
+    dashExpense($a, $u, 'rent', '500.00', '2026-07-01');
+
+    // June: sell 10 → sales 1000, cost 930, gross 70. Expenses 250 → net -180 (a loss).
+    $jun = dashSale($c, $u, '1000.00', '2026-06-10');
+    saleLine($jun, $pack, 10, '100.00');
+    dashExpense($a, $u, 'salaries', '250.00', '2026-06-15');
+
+    $report = inTenant($a->id, fn () => (new DashboardReportService(new App\Services\StockService()))
+        ->forMonth($a->id, App\Reports\ReportPeriod::fromInput(2026, 7)));
+
+    // Selected month = July.
+    expect($report->expensesMonthRupees)->toBe('500.00');
+    expect($report->netProfitMonthRupees)->toBe('200.00');       // 700 − 500
+    expect($report->netProfitMarginPercent)->toBe('2.0');        // 200 / 10000 * 100
+
+    // Trend carries per-month expenses + net profit, incl. the June loss.
+    expect($report->trend[6]->netProfitRupees)->toBe('200.00');  // July
+    expect($report->trend[5]->netProfitRupees)->toBe('-180.00'); // June: 70 − 250
+    expect($report->trend[5]->expensesRupees)->toBe('250.00');
+    expect($report->trend[0]->netProfitRupees)->toBe('0.00');    // January
+
+    // Breakdown for July.
+    expect(collect($report->expenseBreakdown)->pluck('category')->all())->toBe(['rent']);
+
+    Illuminate\Support\Carbon::setTestNow();
+});
+
+it('reports a zero net margin when there are no sales (no divide-by-zero)', function () {
+    $a = Business::factory()->create();
+    $u = User::factory()->create();
+    dashExpense($a, $u, 'rent', '500.00', '2026-07-01');   // expense but no sales
+
+    $report = inTenant($a->id, fn () => (new DashboardReportService(new App\Services\StockService()))
+        ->forMonth($a->id, App\Reports\ReportPeriod::fromInput(2026, 7)));
+
+    expect($report->salesMonthRupees)->toBe('0.00');
+    expect($report->netProfitMonthRupees)->toBe('-500.00');  // 0 gross − 500 expenses
+    expect($report->netProfitMarginPercent)->toBe('0.0');    // guarded
 });
