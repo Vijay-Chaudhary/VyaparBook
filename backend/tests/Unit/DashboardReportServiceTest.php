@@ -122,6 +122,29 @@ it('sums sales for today and the selected month, and builds a 12-row sales trend
     Illuminate\Support\Carbon::setTestNow();
 });
 
+function stockIn(App\Models\RawMaterial $m, User $u, string $qty): void
+{
+    $mv = new App\Models\StockMovement([
+        'business_id' => $m->business_id, 'uuid' => (string) Str::uuid(),
+        'raw_material_id' => $m->id, 'movement_date' => '2026-07-01',
+        'kind' => 'in', 'qty' => $qty,
+    ]);
+    $mv->setConnection('pgsql_migrate');
+    $mv->created_by = $u->id;
+    $mv->save();
+}
+
+function saleLine(App\Models\Sale $s, App\Models\ProductPack $pack, int $qty, string $rate): void
+{
+    $line = new App\Models\SaleLine([
+        'business_id' => $s->business_id, 'sale_id' => $s->id,
+        'product_pack_id' => $pack->id, 'qty' => $qty, 'rate' => $rate,
+    ]);
+    $line->setConnection('pgsql_migrate');
+    $line->line_total = bcmul($rate, (string) $qty, 2);
+    $line->save();
+}
+
 function dashBatch(Business $b, User $u, string $kg, string $date): void
 {
     $batch = new App\Models\ProductionBatch([
@@ -159,4 +182,51 @@ it('sums production for the month and builds a 12-row kg trend', function () {
     expect($trend[6])->toBe('80.000');  // July
     expect($trend[4])->toBe('10.000');  // May
     expect($trend[0])->toBe('0.000');   // January
+});
+
+it('flags materials below reorder and ranks product performance', function () {
+    $a = Business::factory()->create();
+    $u = User::factory()->create();
+
+    // Low stock: Besan on-hand 150 (reorder 100 → OK), Salt on-hand 4 (reorder 20 → LOW).
+    $besan = App\Models\RawMaterial::on('pgsql_migrate')->create([
+        'business_id' => $a->id, 'uuid' => (string) Str::uuid(),
+        'name' => 'Besan', 'unit' => 'kg', 'reorder_level' => '100.000',
+    ]);
+    $salt = App\Models\RawMaterial::on('pgsql_migrate')->create([
+        'business_id' => $a->id, 'uuid' => (string) Str::uuid(),
+        'name' => 'Salt', 'unit' => 'kg', 'reorder_level' => '20.000',
+    ]);
+    stockIn($besan, $u, '150.000');
+    stockIn($salt, $u, '4.000');
+
+    // Product performance: two packs of one product sold this year.
+    $product = App\Models\Product::on('pgsql_migrate')->create([
+        'business_id' => $a->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
+    ]);
+    $ps = App\Models\PackSize::on('pgsql_migrate')->create([
+        'business_id' => $a->id, 'label' => '1kg', 'weight_kg' => '1.000',
+    ]);
+    $pack = App\Models\ProductPack::on('pgsql_migrate')->create([
+        'business_id' => $a->id, 'product_id' => $product->id, 'pack_size_id' => $ps->id,
+        'default_sell_price' => '100.00', 'default_cost_price' => '93.00',
+    ]);
+    $c = dashCustomer($a, 'Ramesh');
+    $sale = dashSale($c, $u, '1000.00', '2026-07-10');
+    saleLine($sale, $pack, 10, '100.00');   // qty 10, sales 1000, cost 930, profit 70, margin 7.0%
+
+    [$low, $perf] = inTenant($a->id, function () use ($a) {
+        $svc = new DashboardReportService(new App\Services\StockService());
+
+        return [$svc->lowStock($a->id), $svc->productPerformance($a->id, 2026)];
+    });
+
+    expect(collect($low)->pluck('name'))->toContain('Salt')->not->toContain('Besan');
+
+    expect($perf[0]->name)->toBe('Sev 1kg');
+    expect($perf[0]->qtySold)->toBe(10);
+    expect($perf[0]->salesRupees)->toBe('1000.00');
+    expect($perf[0]->estCostRupees)->toBe('930.00');
+    expect($perf[0]->estProfitRupees)->toBe('70.00');
+    expect($perf[0]->marginPercent)->toBe('7.0');
 });

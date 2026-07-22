@@ -5,10 +5,14 @@ namespace App\Services;
 
 use App\Models\Customer;
 use App\Models\ProductionBatch;
+use App\Models\RawMaterial;
 use App\Models\Sale;
 use App\Reports\CustomerDue;
+use App\Reports\LowStockRow;
 use App\Reports\OutstandingSummary;
+use App\Reports\ProductPerf;
 use Illuminate\Support\Carbon;
+use Illuminate\Support\Facades\DB;
 
 /**
  * Read-only aggregation behind the owner dashboard (Phase 0).
@@ -126,5 +130,69 @@ class DashboardReportService
             fn (int $m) => bcadd((string) ($byMonth[$m] ?? '0'), '0', 3),
             range(1, 12),
         );
+    }
+
+    /**
+     * Materials below their reorder level. Reuses StockService so the on-hand
+     * and threshold logic stays in one place. Raw materials per tenant are few,
+     * so a per-material check is fine (no N+1 concern at this cardinality).
+     *
+     * @return list<LowStockRow>
+     */
+    public function lowStock(string $businessId): array
+    {
+        return RawMaterial::query()
+            ->where('business_id', $businessId)
+            ->whereNull('archived_at')
+            ->get()
+            ->filter(fn (RawMaterial $m) => $this->stock->belowReorder($m))
+            ->map(fn (RawMaterial $m) => new LowStockRow(
+                $m->name,
+                $this->stock->onHandFor($m),
+                bcadd((string) $m->reorder_level, '0', 3),
+            ))
+            ->values()
+            ->all();
+    }
+
+    /**
+     * Per product-pack sales for the year: qty, revenue, estimated cost
+     * (qty × default_cost_price, treated as 0 when unpriced) and margin.
+     * Ordered by revenue, highest first.
+     *
+     * @return list<ProductPerf>
+     */
+    public function productPerformance(string $businessId, int $year): array
+    {
+        $rows = DB::table('sale_lines as sl')
+            ->join('sales as s', 's.id', '=', 'sl.sale_id')
+            ->join('product_packs as pp', 'pp.id', '=', 'sl.product_pack_id')
+            ->join('products as prod', 'prod.id', '=', 'pp.product_id')
+            ->join('pack_sizes as ps', 'ps.id', '=', 'pp.pack_size_id')
+            ->where('sl.business_id', $businessId)
+            ->whereRaw('extract(year from s.sale_date) = ?', [$year])
+            ->groupBy('pp.id', 'prod.name_en', 'prod.name_hi', 'ps.label', 'pp.default_cost_price')
+            ->selectRaw("
+                coalesce(prod.name_en, prod.name_hi) || ' ' || ps.label as name,
+                sum(sl.qty)::int as qty,
+                sum(sl.line_total)::text as sales,
+                sum(sl.qty * coalesce(pp.default_cost_price, 0))::text as est_cost
+            ")
+            ->get();
+
+        return $rows
+            ->map(function ($r) {
+                $sales = bcadd($r->sales, '0', 2);
+                $cost = bcadd($r->est_cost, '0', 2);
+                $profit = bcsub($sales, $cost, 2);
+                $margin = bccomp($sales, '0.00', 2) === 0
+                    ? '0.0'
+                    : bcadd(bcmul(bcdiv($profit, $sales, 4), '100', 2), '0', 1);
+
+                return new ProductPerf($r->name, (int) $r->qty, $sales, $cost, $profit, $margin);
+            })
+            ->sortByDesc(fn (ProductPerf $p) => (float) $p->salesRupees)
+            ->values()
+            ->all();
     }
 }
