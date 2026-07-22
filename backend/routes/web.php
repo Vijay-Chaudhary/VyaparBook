@@ -6,6 +6,7 @@ use App\Http\Controllers\Web\ApiTokenController;
 use App\Http\Controllers\Web\BillingController;
 use App\Http\Controllers\Web\LoginController;
 use App\Http\Controllers\Web\OnboardingController;
+use App\Http\Controllers\Web\ExpenseController;
 use App\Http\Controllers\Web\RegisterController;
 use App\Http\Controllers\Web\ReportController;
 use Illuminate\Support\Facades\Route;
@@ -68,6 +69,17 @@ Route::middleware('auth')->group(function () {
      | still read their reports, like the billing page stays reachable.
      */
     Route::get('reports/dashboard', [ReportController::class, 'show'])->name('reports.dashboard');
+
+    /*
+     | Operating expenses (Phase 1) — Blade, online-only, owner-only. Same
+     | owner-tool pattern as billing/reports; not behind the plan gate.
+     | {expense} is resolved owner-scoped inside the controller, never via
+     | implicit binding (no tenant is pinned during route resolution).
+     */
+    Route::get('expenses', [ExpenseController::class, 'index'])->name('expenses');
+    Route::post('expenses', [ExpenseController::class, 'store'])->name('expenses.store');
+    Route::put('expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
+    Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
 
     // Session -> JWT exchange for the React layer. Throttled because it mints
     // credentials: a valid session should not make it freely spammable.
