@@ -13,6 +13,61 @@
     $barW = ($slot * 0.7) / $seriesCount;
     $groupW = $barW * $seriesCount;
 @endphp
+
+{{-- Custom hover tooltip: shipped once with the component, regardless of how
+     many charts are on the page. No CSP in this app; a scoped inline script is
+     fine and keeps the chart itself dependency-free. Colour-coded to the bar. --}}
+@once
+@push('head')
+<style>
+    .chart-bar { transition: opacity .1s; }
+    .chart-bar:hover { opacity: .8; cursor: default; }
+    .chart-tooltip {
+        position: fixed; z-index: 60; display: none; pointer-events: none;
+        background: #111827; color: #fff; font-size: 12px; line-height: 1.3;
+        padding: 6px 9px; border-radius: 6px; box-shadow: 0 2px 10px rgba(0,0,0,.28);
+        white-space: nowrap; transform: translate(-50%, -128%);
+    }
+    .chart-tooltip .sw { display:inline-block; width:9px; height:9px; border-radius:2px; margin-right:7px; vertical-align:middle; }
+    .chart-tooltip .val { font-weight:600; }
+    @media (prefers-color-scheme: dark) { .chart-tooltip { background:#e5e7eb; color:#111827; } }
+</style>
+@endpush
+@push('scripts')
+<script>
+(function () {
+    var tip = document.createElement('div');
+    tip.className = 'chart-tooltip';
+    document.body.appendChild(tip);
+
+    function place(e) { tip.style.left = e.clientX + 'px'; tip.style.top = e.clientY + 'px'; }
+
+    document.addEventListener('mouseover', function (e) {
+        var bar = e.target.closest && e.target.closest('.chart-bar');
+        if (!bar) return;
+        var text = bar.getAttribute('data-tip') || '';
+        var color = bar.getAttribute('data-color') || '#4472C4';
+        var sep = text.indexOf(': ');
+        var head = sep === -1 ? text : text.slice(0, sep + 2);
+        var val = sep === -1 ? '' : text.slice(sep + 2);
+        tip.textContent = '';
+        var sw = document.createElement('span'); sw.className = 'sw'; sw.style.background = color;
+        tip.appendChild(sw);
+        tip.appendChild(document.createTextNode(head));
+        var v = document.createElement('span'); v.className = 'val'; v.textContent = val;
+        tip.appendChild(v);
+        tip.style.display = 'block';
+        place(e);
+    });
+    document.addEventListener('mousemove', function (e) { if (tip.style.display === 'block') place(e); });
+    document.addEventListener('mouseout', function (e) {
+        if (e.target.closest && e.target.closest('.chart-bar')) tip.style.display = 'none';
+    });
+})();
+</script>
+@endpush
+@endonce
+
 <figure class="chart">
     <figcaption class="chart-title">{{ $title }}</figcaption>
     {{-- top inset (-6) gives the max y-axis label room so it doesn't clip. --}}
@@ -32,12 +87,12 @@
         @foreach ($groupData as $gi => $group)
             @php $slotX = $plotLeft + $gi * $slot + ($slot - $groupW) / 2; @endphp
             @foreach ($group['bars'] as $bi => $bar)
-                <rect x="{{ $slotX + $bi * $barW }}" y="{{ $bar['yPct'] }}"
+                <rect class="chart-bar" x="{{ $slotX + $bi * $barW }}" y="{{ $bar['yPct'] }}"
                       width="{{ $barW * 0.9 }}" height="{{ $bar['heightPct'] }}"
-                      fill="{{ $bar['color'] }}">
-                    {{-- Native SVG tooltip: browsers show this on hover, no JS. --}}
-                    <title>{{ $group['label'] }} · {{ $bar['label'] }}: {{ $bar['value'] }}</title>
-                </rect>
+                      fill="{{ $bar['color'] }}"
+                      data-tip="{{ $group['label'] }} · {{ $bar['label'] }}: {{ $bar['value'] }}"
+                      data-color="{{ $bar['color'] }}"
+                      aria-label="{{ $group['label'] }} {{ $bar['label'] }} {{ $bar['value'] }}"></rect>
             @endforeach
             <text x="{{ $plotLeft + $gi * $slot + $slot / 2 }}" y="108" font-size="5"
                   text-anchor="middle" fill="#555">{{ $group['label'] }}</text>
