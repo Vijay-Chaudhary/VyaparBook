@@ -34,7 +34,10 @@
             @foreach ($group['bars'] as $bi => $bar)
                 <rect x="{{ $slotX + $bi * $barW }}" y="{{ $bar['yPct'] }}"
                       width="{{ $barW * 0.9 }}" height="{{ $bar['heightPct'] }}"
-                      fill="{{ $bar['color'] }}"></rect>
+                      fill="{{ $bar['color'] }}">
+                    {{-- Native SVG tooltip: browsers show this on hover, no JS. --}}
+                    <title>{{ $group['label'] }} · {{ $bar['label'] }}: {{ $bar['value'] }}</title>
+                </rect>
             @endforeach
             <text x="{{ $plotLeft + $gi * $slot + $slot / 2 }}" y="108" font-size="5"
                   text-anchor="middle" fill="#555">{{ $group['label'] }}</text>

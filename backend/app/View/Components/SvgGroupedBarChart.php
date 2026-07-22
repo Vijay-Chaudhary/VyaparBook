@@ -36,7 +36,7 @@ class SvgGroupedBarChart extends Component
         public string $unit = 'inr',
     ) {}
 
-    /** @return list<array{label: string, bars: list<array{color: string, yPct: float, heightPct: float, negative: bool}>}> */
+    /** @return list<array{label: string, bars: list<array{label: string, value: string, color: string, yPct: float, heightPct: float, negative: bool}>}> */
     public function groups(): array
     {
         [$max, , $range] = $this->bounds();
@@ -44,10 +44,13 @@ class SvgGroupedBarChart extends Component
 
         return array_map(function (int $i) use ($max, $range, $y0) {
             $bars = array_map(function (array $s) use ($i, $max, $range, $y0) {
-                $v = (float) ($s['values'][$i] ?? 0);
+                $raw = (string) ($s['values'][$i] ?? '0');
+                $v = (float) $raw;
                 $yv = $this->yOf($v, $max, $range);
 
                 return [
+                    'label' => $s['label'],                  // series name, for the hover tooltip
+                    'value' => $this->formatValue($raw),     // full (un-abbreviated) value
                     'color' => $v < 0 ? self::LOSS_COLOR : $s['color'],
                     'yPct' => min($y0, $yv),
                     'heightPct' => round(abs($yv - $y0), 1),
@@ -119,6 +122,18 @@ class SvgGroupedBarChart extends Component
         }
 
         return Inr::abbreviate(number_format($v, 2, '.', ''));
+    }
+
+    /** Full (un-abbreviated) value for a hover tooltip: ₹8,272.00 or "80 kg". */
+    private function formatValue(string $amount): string
+    {
+        if ($this->unit === 'kg') {
+            $s = rtrim(rtrim(bcadd($amount === '' ? '0' : $amount, '0', 3), '0'), '.');
+
+            return (($s === '' || $s === '-0') ? '0' : $s) . ' kg';
+        }
+
+        return Inr::format($amount === '' ? '0' : $amount);
     }
 
     public function render(): View
