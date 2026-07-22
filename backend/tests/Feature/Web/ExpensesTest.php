@@ -115,6 +115,17 @@ describe('crud', function () {
         expect(Expense::on('pgsql_migrate')->withoutGlobalScopes()->find($foreign->id)->archived_at)->toBeNull();
     });
 
+    it('rejects a malformed client-supplied uuid cleanly (not a 500)', function () {
+        [$owner, $business] = expensesOwner();
+
+        $this->actingAs($owner)->post('/expenses', [
+            'business' => $business->id, 'uuid' => 'not-a-uuid',
+            'category' => 'rent', 'amount' => '5000', 'spent_on' => '2026-07-01',
+        ])->assertSessionHasErrors('uuid');
+
+        expect(Expense::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(0);
+    });
+
     it('is idempotent on a replayed uuid', function () {
         [$owner, $business] = expensesOwner();
         $uuid = (string) Str::uuid();

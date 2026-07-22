@@ -136,6 +136,9 @@ class ExpenseController extends Controller
     private function validated(Request $request): array
     {
         return $request->validate([
+            // uuid is client-supplied (idempotency key); validate it so a malformed
+            // value is a clean error, not a raw QueryException from the uuid column.
+            'uuid' => ['nullable', 'uuid'],
             'category' => ['required', Rule::in(ExpenseCategory::keys())],
             'amount' => ['required', 'numeric', 'gt:0'],
             'spent_on' => ['required', 'date'],
