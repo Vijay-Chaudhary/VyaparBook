@@ -6,7 +6,10 @@
 <div class="mx-auto max-w-5xl p-4">
     <header class="mb-4 flex items-center justify-between">
         <h1 class="text-xl font-bold">{{ __('reports.heading') }}</h1>
-        <a href="{{ route('app') }}" class="text-sm text-brand">{{ __('reports.back_to_app') }}</a>
+        <nav class="flex gap-3 text-sm">
+            <a href="{{ route('expenses', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_expenses') }}</a>
+            <a href="{{ route('app') }}" class="text-brand">{{ __('reports.back_to_app') }}</a>
+        </nav>
     </header>
 
     {{-- Period picker: GET form, so a bookmark/reload keeps the chosen month. --}}
