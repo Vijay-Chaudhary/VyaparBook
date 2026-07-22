@@ -88,6 +88,43 @@ function seedFullTenant(): array
         'updated_at' => now(),
     ]);
 
+    $supplierId = (string) Str::uuid();
+    DB::connection('pgsql_migrate')->table('suppliers')->insert([
+        'id' => $supplierId,
+        'business_id' => $business->id,
+        'uuid' => (string) Str::uuid(),
+        'name' => 'Besan Traders',
+        'opening_balance' => '0.00',
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    DB::connection('pgsql_migrate')->table('purchases')->insert([
+        'id' => (string) Str::uuid(),
+        'business_id' => $business->id,
+        'uuid' => (string) Str::uuid(),
+        'supplier_id' => $supplierId,
+        'raw_material_id' => $material->id,
+        'purchase_date' => now()->toDateString(),
+        'qty' => '10.000',
+        'unit_cost' => '40.00',
+        'total' => '400.00',
+        'created_by' => $user->id,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+    DB::connection('pgsql_migrate')->table('supplier_payments')->insert([
+        'id' => (string) Str::uuid(),
+        'business_id' => $business->id,
+        'uuid' => (string) Str::uuid(),
+        'supplier_id' => $supplierId,
+        'payment_date' => now()->toDateString(),
+        'amount' => '200.00',
+        'mode' => 'cash',
+        'created_by' => $user->id,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
     return [$business, $user];
 }
 

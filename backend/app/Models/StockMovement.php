@@ -17,9 +17,9 @@ class StockMovement extends Model
 
     // created_by is absent from $fillable: it is stamped from app('tenant.user_id'),
     // never taken from request input. version and sync_seq are trait-managed.
-    // production_batch_id is fillable so ProductionWriter can set it; it stays null
-    // for movements recorded by hand.
-    protected $fillable = ['business_id', 'uuid', 'raw_material_id', 'movement_date', 'kind', 'qty', 'note', 'production_batch_id'];
+    // production_batch_id / purchase_id are fillable so the Production and Purchase
+    // writers can set them; both stay null for movements recorded by hand.
+    protected $fillable = ['business_id', 'uuid', 'raw_material_id', 'movement_date', 'kind', 'qty', 'note', 'production_batch_id', 'purchase_id'];
 
     protected $casts = [
         'movement_date' => 'date',
@@ -37,5 +37,11 @@ class StockMovement extends Model
     public function productionBatch(): BelongsTo
     {
         return $this->belongsTo(ProductionBatch::class);
+    }
+
+    /** The purchase whose recording wrote this costed `in` movement, when it has one. */
+    public function purchase(): BelongsTo
+    {
+        return $this->belongsTo(Purchase::class);
     }
 }

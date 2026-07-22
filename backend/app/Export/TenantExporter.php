@@ -32,6 +32,9 @@ class TenantExporter
     private const TABLES = [
         'customers',
         'expenses',
+        'suppliers',
+        'purchases',
+        'supplier_payments',
         'products',
         'pack_sizes',
         'product_packs',

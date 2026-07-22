@@ -35,6 +35,7 @@ class TenantEraser
     private const DELETE_ORDER = [
         'material_consumptions',
         'stock_movements',
+        'purchases',
         'sale_lines',
         'payments',
         'sales',
@@ -43,6 +44,8 @@ class TenantEraser
         'products',
         'pack_sizes',
         'raw_materials',
+        'supplier_payments',
+        'suppliers',
         'customers',
         'expenses',
         'subscription_payments',
