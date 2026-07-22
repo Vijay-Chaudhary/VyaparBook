@@ -234,11 +234,19 @@ Run: `php artisan migrate --database=pgsql_migrate 2>/dev/null; php artisan migr
 Run: `php -r "require 'vendor/autoload.php'; echo class_exists('App\Models\Expense') ? 'ok' : 'missing';"`
 Expected: prints `ok`.
 
+- [ ] **Step 7b: Register the new table in the DPDP registries (REQUIRED)**
+
+Any table with a `business_id` must be listed in two hardcoded registries, or you break tenant export and silently orphan rows on tenant erasure (DPDP, PRD §13):
+- Add `'expenses'` to `app/Export/TenantExporter.php`'s `TABLES` const — a guard test (`tests/Feature/Export/TenantExportTest.php`) introspects `information_schema` and **fails** until every `business_id` table is listed.
+- Add `'expenses'` to `app/Export/TenantEraser.php`'s `DELETE_ORDER` const, positioned like other leaf tenant tables (nothing FKs to `expenses`; it cascades on `business_id`).
+- If `TenantEraseTest` seeds a row per tenant table and asserts erasure completeness, add an `expenses` row so this stays covered.
+
 - [ ] **Step 8: Commit**
 
 ```bash
 git add app/Expenses/ExpenseCategory.php tests/Unit/ExpenseCategoryTest.php \
-        database/migrations/2026_07_22_000001_create_expenses_table.php app/Models/Expense.php
+        database/migrations/2026_07_22_000001_create_expenses_table.php app/Models/Expense.php \
+        app/Export/TenantExporter.php app/Export/TenantEraser.php
 git commit -m "feat: add expenses table, Expense model and ExpenseCategory"
 ```
 
