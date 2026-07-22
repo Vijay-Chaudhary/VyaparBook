@@ -35,6 +35,7 @@ Label: `feature`
 
 | ID | Status | Area | Summary | Issue |
 |----|--------|------|---------|-------|
+| F-02 | done | reports/expenses | Operating expenses & Net Profit (Phase 1). New owner-only Blade `/expenses` CRUD (record/edit/archive expenses by category — rent, salaries, electricity, transport, maintenance, other; operating-expenses only), and the dashboard P&L it unlocks: Sales → Est. product cost → Est. Gross Profit → Operating Expenses → **Net Profit** + net margin %, a by-category breakdown, a monthly net-profit chart, and Expenses/Net-profit trend columns (loss-aware, danger colour). New `expenses` table (RLS + app scope, soft-delete, registered in DPDP export/erase); net profit computed in `DashboardReportService`, all bcmath. See spec `docs/superpowers/specs/2026-07-22-owner-expenses-net-profit-phase-1-design.md` and plan `docs/superpowers/plans/2026-07-22-owner-expenses-net-profit-phase-1.md`. | — |
 | F-01 | done | reports | Owner management dashboard (Phase 0) at `GET /reports/dashboard` — Blade, online-only, owner-only. Sales (today/month), customer outstanding (khata parity), production, low-stock, product-wise performance, and 12-month sales/production trends with server-rendered inline-SVG charts. All figures computed from existing data (no new tables), bcmath decimal strings throughout, tenant-pinned (RLS + app scope). Owner link added to `Home.jsx`. See spec `docs/superpowers/specs/2026-07-22-owner-reporting-dashboard-phase-0-design.md` and plan `docs/superpowers/plans/2026-07-22-owner-reporting-dashboard-phase-0.md`. | — |
 
 ---
