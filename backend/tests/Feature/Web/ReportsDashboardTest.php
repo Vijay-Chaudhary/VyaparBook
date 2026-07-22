@@ -44,7 +44,7 @@ describe('render', function () {
         [$owner, $business] = reportsOwner();
         Customer::on('pgsql_migrate')->create([
             'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
-            'name' => 'Ramesh', 'opening_balance' => '1500.00',
+            'name' => 'Ramesh', 'village' => 'Rampur', 'opening_balance' => '1500.00',
         ]);
 
         $this->actingAs($owner)
@@ -52,7 +52,9 @@ describe('render', function () {
             ->assertOk()
             ->assertSee(__('reports.heading'))
             ->assertSee(__('reports.customer_outstanding'))
-            ->assertSee('₹1,500.00');   // Inr-formatted outstanding
+            ->assertSee('₹1,500.00')    // Inr-formatted total outstanding
+            ->assertSee('Ramesh')       // per-customer summary list renders the name
+            ->assertSee('Rampur');      // ...and the village
     });
 
     it('clamps an out-of-range month without erroring', function () {

@@ -16,6 +16,12 @@ return [
     'production_month' => 'Production (this month)',
     'stock_low_alerts' => 'Low stock alerts (items)',
 
+    // Customer outstanding list
+    'customer_outstanding_list' => 'Customer outstanding (highest first)',
+    'customer' => 'Customer',
+    'village' => 'Village',
+    'amount_due' => 'Amount due',
+
     // Key insights
     'key_insights' => 'Key insights',
     'highest_selling_product' => 'Highest selling product',

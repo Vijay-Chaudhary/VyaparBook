@@ -15,6 +15,11 @@ return [
     'production_month' => 'उत्पादन (इस महीने)',
     'stock_low_alerts' => 'कम स्टॉक चेतावनी (वस्तुएँ)',
 
+    'customer_outstanding_list' => 'ग्राहक बकाया (सबसे ज़्यादा पहले)',
+    'customer' => 'ग्राहक',
+    'village' => 'गाँव',
+    'amount_due' => 'बकाया राशि',
+
     'key_insights' => 'मुख्य जानकारी',
     'highest_selling_product' => 'सबसे ज़्यादा बिकने वाला उत्पाद',
     'highest_profit_product' => 'सबसे ज़्यादा मुनाफ़े वाला उत्पाद',

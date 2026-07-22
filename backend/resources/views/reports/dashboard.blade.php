@@ -35,6 +35,7 @@
 
     @include('reports.partials.tiles')
     @include('reports.partials.insights')
+    @include('reports.partials.customers')
 
     <div class="mt-4 grid gap-4 md:grid-cols-2">
         @include('reports.partials.charts')
