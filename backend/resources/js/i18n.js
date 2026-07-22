@@ -114,6 +114,7 @@ const strings = {
         sync_before_switch: 'दुकान बदलने से पहले सिंक करें — कुछ प्रविष्टियाँ बाकी हैं।',
 
         plan_billing: 'प्लान और बिलिंग',
+        reports_dashboard: 'डैशबोर्ड',
 
         impersonating: 'सहायता दृश्य',
         read_only: 'केवल-पढ़ें',
@@ -224,6 +225,7 @@ const strings = {
         sync_before_switch: 'Sync before switching shop — some entries are still queued.',
 
         plan_billing: 'Plan & billing',
+        reports_dashboard: 'Dashboard',
 
         impersonating: 'Support view',
         read_only: 'read-only',

@@ -35,7 +35,7 @@ Label: `feature`
 
 | ID | Status | Area | Summary | Issue |
 |----|--------|------|---------|-------|
-| _none yet_ | | | | |
+| F-01 | done | reports | Owner management dashboard (Phase 0) at `GET /reports/dashboard` — Blade, online-only, owner-only. Sales (today/month), customer outstanding (khata parity), production, low-stock, product-wise performance, and 12-month sales/production trends with server-rendered inline-SVG charts. All figures computed from existing data (no new tables), bcmath decimal strings throughout, tenant-pinned (RLS + app scope). Owner link added to `Home.jsx`. See spec `docs/superpowers/specs/2026-07-22-owner-reporting-dashboard-phase-0-design.md` and plan `docs/superpowers/plans/2026-07-22-owner-reporting-dashboard-phase-0.md`. | — |
 
 ---
 
