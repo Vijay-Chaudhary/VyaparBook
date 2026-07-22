@@ -81,6 +81,19 @@ export function Home({ userName, customers, entriesToday, isOwner = false, tenan
                 </a>
             )}
 
+            {/* Management dashboard is Blade (online-only), so a real link out
+              * of the SPA, mirroring the billing link. Owner-only; the current
+              * business is passed through for a multi-shop owner. */}
+            {isOwner && !readOnly && (
+                <a
+                    href={tenantId ? `/reports/dashboard?business=${tenantId}` : '/reports/dashboard'}
+                    className="btn-secondary mt-2 w-full"
+                    data-testid="dashboard-link"
+                >
+                    {t('reports_dashboard')}
+                </a>
+            )}
+
             <p className="mt-4 text-center text-xs text-ink-muted tabular">{today()}</p>
         </Screen>
     );
