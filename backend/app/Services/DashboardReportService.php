@@ -8,9 +8,12 @@ use App\Models\ProductionBatch;
 use App\Models\RawMaterial;
 use App\Models\Sale;
 use App\Reports\CustomerDue;
+use App\Reports\DashboardReport;
 use App\Reports\LowStockRow;
 use App\Reports\OutstandingSummary;
 use App\Reports\ProductPerf;
+use App\Reports\ReportPeriod;
+use App\Reports\TrendRow;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -31,6 +34,38 @@ class DashboardReportService
     public function __construct(
         private readonly StockService $stock,
     ) {}
+
+    public function forMonth(string $businessId, ReportPeriod $period): DashboardReport
+    {
+        $salesTrend = $this->salesTrend($businessId, $period->year);
+        $prodTrend = $this->productionTrend($businessId, $period->year);
+        $trend = array_map(
+            fn (int $m) => new TrendRow($m, $salesTrend[$m - 1], $prodTrend[$m - 1]),
+            range(1, 12),
+        );
+
+        $performance = $this->productPerformance($businessId, $period->year);
+        $lowStock = $this->lowStock($businessId);
+
+        $highestSelling = collect($performance)
+            ->sortByDesc(fn (ProductPerf $p) => $p->qtySold)->first();
+        $highestProfit = collect($performance)
+            ->sortByDesc(fn (ProductPerf $p) => (float) $p->estProfitRupees)->first();
+
+        return new DashboardReport(
+            period: $period,
+            salesTodayRupees: $this->salesToday($businessId),
+            salesMonthRupees: $this->salesForMonth($businessId, $period->year, $period->month),
+            outstanding: $this->customerOutstanding($businessId),
+            productionMonthKg: $this->productionForMonth($businessId, $period->year, $period->month),
+            lowStock: $lowStock,
+            lowStockCount: count($lowStock),
+            productPerformance: $performance,
+            highestSellingName: $highestSelling?->name,
+            highestProfitName: $highestProfit?->name,
+            trend: $trend,
+        );
+    }
 
     /**
      * Total and per-customer outstanding, reproducing KhataService's identity

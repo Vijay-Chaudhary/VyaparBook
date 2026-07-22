@@ -230,3 +230,20 @@ it('flags materials below reorder and ranks product performance', function () {
     expect($perf[0]->estProfitRupees)->toBe('70.00');
     expect($perf[0]->marginPercent)->toBe('7.0');
 });
+
+it('assembles a full report, with highest-selling/profit and an empty-shop case', function () {
+    Illuminate\Support\Carbon::setTestNow('2026-07-22');
+
+    // Empty shop first: everything zero, nothing crashes.
+    $empty = Business::factory()->create();
+    $report = inTenant($empty->id, fn () => (new DashboardReportService(new App\Services\StockService()))
+        ->forMonth($empty->id, App\Reports\ReportPeriod::fromInput(2026, 7)));
+
+    expect($report->salesMonthRupees)->toBe('0.00');
+    expect($report->outstanding->totalRupees)->toBe('0.00');
+    expect($report->lowStockCount)->toBe(0);
+    expect($report->highestSellingName)->toBeNull();
+    expect($report->trend)->toHaveCount(12);
+
+    Illuminate\Support\Carbon::setTestNow();
+});
