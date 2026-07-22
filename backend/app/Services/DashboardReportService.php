@@ -4,6 +4,7 @@
 namespace App\Services;
 
 use App\Models\Customer;
+use App\Models\ProductionBatch;
 use App\Models\Sale;
 use App\Reports\CustomerDue;
 use App\Reports\OutstandingSummary;
@@ -95,6 +96,34 @@ class DashboardReportService
 
         return array_map(
             fn (int $m) => bcadd((string) ($byMonth[$m] ?? '0'), '0', 2),
+            range(1, 12),
+        );
+    }
+
+    public function productionForMonth(string $businessId, int $year, int $month): string
+    {
+        $sum = (string) ProductionBatch::query()
+            ->where('business_id', $businessId)
+            ->whereRaw('extract(year from batch_date) = ?', [$year])
+            ->whereRaw('extract(month from batch_date) = ?', [$month])
+            ->selectRaw('coalesce(sum(output_kg), 0)::text as agg')
+            ->value('agg');
+
+        return bcadd($sum, '0', 3);
+    }
+
+    /** @return list<string> 12 scale-3 kg strings, index 0 = January. */
+    public function productionTrend(string $businessId, int $year): array
+    {
+        $byMonth = ProductionBatch::query()
+            ->where('business_id', $businessId)
+            ->whereRaw('extract(year from batch_date) = ?', [$year])
+            ->selectRaw('extract(month from batch_date)::int as m, coalesce(sum(output_kg), 0)::text as agg')
+            ->groupBy('m')
+            ->pluck('agg', 'm');
+
+        return array_map(
+            fn (int $m) => bcadd((string) ($byMonth[$m] ?? '0'), '0', 3),
             range(1, 12),
         );
     }

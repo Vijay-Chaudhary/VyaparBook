@@ -121,3 +121,42 @@ it('sums sales for today and the selected month, and builds a 12-row sales trend
 
     Illuminate\Support\Carbon::setTestNow();
 });
+
+function dashBatch(Business $b, User $u, string $kg, string $date): void
+{
+    $batch = new App\Models\ProductionBatch([
+        'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
+        'product_id' => App\Models\Product::on('pgsql_migrate')->create([
+            'business_id' => $b->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
+        ])->id,
+        'batch_date' => $date, 'output_kg' => $kg,
+    ]);
+    $batch->setConnection('pgsql_migrate');
+    $batch->created_by = $u->id;
+    $batch->save();
+}
+
+it('sums production for the month and builds a 12-row kg trend', function () {
+    $a = Business::factory()->create();
+    $u = User::factory()->create();
+
+    dashBatch($a, $u, '50.000', '2026-07-04');
+    dashBatch($a, $u, '30.000', '2026-07-20');
+    dashBatch($a, $u, '10.000', '2026-05-02');
+
+    [$prodMonth, $trend] = inTenant($a->id, function () use ($a) {
+        $svc = new DashboardReportService(new App\Services\StockService());
+
+        return [
+            $svc->productionForMonth($a->id, 2026, 7),
+            $svc->productionTrend($a->id, 2026),
+        ];
+    });
+
+    expect($prodMonth)->toBe('80.000');
+
+    expect($trend)->toHaveCount(12);
+    expect($trend[6])->toBe('80.000');  // July
+    expect($trend[4])->toBe('10.000');  // May
+    expect($trend[0])->toBe('0.000');   // January
+});
