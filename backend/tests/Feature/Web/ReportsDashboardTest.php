@@ -46,6 +46,14 @@ describe('render', function () {
             'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
             'name' => 'Ramesh', 'village' => 'Rampur', 'opening_balance' => '1500.00',
         ]);
+        // An expense for the current month so the P&L Net Profit line renders.
+        $e = new App\Models\Expense([
+            'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
+            'category' => 'rent', 'amount' => '1200.00', 'spent_on' => now()->format('Y-m-d'),
+        ]);
+        $e->setConnection('pgsql_migrate');
+        $e->created_by = $owner->id;
+        $e->save();
 
         $this->actingAs($owner)
             ->get('/reports/dashboard')
@@ -55,8 +63,10 @@ describe('render', function () {
             ->assertSee('₹1,500.00')    // Inr-formatted total outstanding
             ->assertSee('Ramesh')       // per-customer summary list renders the name
             ->assertSee('Rampur')       // ...and the village
-            ->assertSee(__('reports.est_gross_profit_month'))
-            ->assertSee(__('reports.gross_profit_caveat')); // shown, before-expenses caveat
+            ->assertSee(__('reports.est_gross_profit'))  // gross-profit row in the P&L block
+            ->assertSee(__('reports.gross_profit_caveat'))
+            ->assertSee(__('reports.net_profit'))        // P&L block renders
+            ->assertSee(__('reports.expenses'));         // expenses line in P&L
     });
 
     it('clamps an out-of-range month without erroring', function () {

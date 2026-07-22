@@ -34,7 +34,7 @@
     </form>
 
     @include('reports.partials.tiles')
-    @include('reports.partials.gross-profit')
+    @include('reports.partials.pnl')
     @include('reports.partials.insights')
     @include('reports.partials.customers')
 

@@ -42,6 +42,15 @@ return [
     'gross_profit_caveat' => '= बिक्री − अनुमानित उत्पाद लागत; परिचालन खर्च से पहले',
     'monthly_gross_profit_chart' => 'मासिक अनुमानित सकल मुनाफ़ा',
 
+    // P&L (Phase 1)
+    'pnl' => 'लाभ और हानि (इस महीने)',
+    'expenses' => 'परिचालन खर्च',
+    'net_profit' => 'शुद्ध लाभ',
+    'net_margin' => 'शुद्ध मार्जिन',
+    'expenses_by_category' => 'श्रेणी अनुसार खर्च',
+    'manage_expenses' => 'खर्च प्रबंधित करें',
+    'monthly_net_profit_chart' => 'मासिक शुद्ध लाभ',
+
     'monthly_trend' => 'मासिक रुझान (इस वर्ष)',
     'month' => 'महीना',
     'production' => 'उत्पादन (कि.ग्रा.)',

@@ -48,6 +48,15 @@ return [
     'gross_profit_caveat' => '= Sales − estimated product cost; before operating expenses',
     'monthly_gross_profit_chart' => 'Monthly est. gross profit',
 
+    // P&L (Phase 1)
+    'pnl' => 'Profit & loss (this month)',
+    'expenses' => 'Operating expenses',
+    'net_profit' => 'Net profit',
+    'net_margin' => 'Net margin',
+    'expenses_by_category' => 'Expenses by category',
+    'manage_expenses' => 'Manage expenses',
+    'monthly_net_profit_chart' => 'Monthly net profit',
+
     // Trend
     'monthly_trend' => 'Monthly trend (this year)',
     'month' => 'Month',
