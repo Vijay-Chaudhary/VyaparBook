@@ -54,7 +54,9 @@ describe('render', function () {
             ->assertSee(__('reports.customer_outstanding'))
             ->assertSee('₹1,500.00')    // Inr-formatted total outstanding
             ->assertSee('Ramesh')       // per-customer summary list renders the name
-            ->assertSee('Rampur');      // ...and the village
+            ->assertSee('Rampur')       // ...and the village
+            ->assertSee(__('reports.est_gross_profit_month'))
+            ->assertSee(__('reports.gross_profit_caveat')); // shown, before-expenses caveat
     });
 
     it('clamps an out-of-range month without erroring', function () {

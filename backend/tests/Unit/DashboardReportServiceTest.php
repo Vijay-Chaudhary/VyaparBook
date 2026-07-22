@@ -244,6 +244,44 @@ it('assembles a full report, with highest-selling/profit and an empty-shop case'
     expect($report->lowStockCount)->toBe(0);
     expect($report->highestSellingName)->toBeNull();
     expect($report->trend)->toHaveCount(12);
+    expect($report->estGrossProfitMonthRupees)->toBe('0.00');
 
     Illuminate\Support\Carbon::setTestNow();
+});
+
+it('computes an estimated monthly gross profit: sales minus product cost, before expenses', function () {
+    $a = Business::factory()->create();
+    $u = User::factory()->create();
+
+    $product = App\Models\Product::on('pgsql_migrate')->create([
+        'business_id' => $a->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
+    ]);
+    $ps = App\Models\PackSize::on('pgsql_migrate')->create([
+        'business_id' => $a->id, 'label' => '1kg', 'weight_kg' => '1.000',
+    ]);
+    $pack = App\Models\ProductPack::on('pgsql_migrate')->create([
+        'business_id' => $a->id, 'product_id' => $product->id, 'pack_size_id' => $ps->id,
+        'default_sell_price' => '100.00', 'default_cost_price' => '93.00',
+    ]);
+    $c = dashCustomer($a, 'Ramesh');
+
+    $jul = dashSale($c, $u, '1000.00', '2026-07-10');
+    saleLine($jul, $pack, 10, '100.00');   // sales 1000, cost 930 → gross profit 70.00
+    $may = dashSale($c, $u, '300.00', '2026-05-04');
+    saleLine($may, $pack, 3, '100.00');    // sales 300, cost 279 → gross profit 21.00
+
+    [$trend, $monthFigure] = inTenant($a->id, function () use ($a) {
+        $svc = new DashboardReportService(new App\Services\StockService());
+
+        return [
+            $svc->grossProfitTrend($a->id, 2026),
+            $svc->forMonth($a->id, App\Reports\ReportPeriod::fromInput(2026, 7))->estGrossProfitMonthRupees,
+        ];
+    });
+
+    expect($trend)->toHaveCount(12);
+    expect($trend[6])->toBe('70.00');   // July
+    expect($trend[4])->toBe('21.00');   // May
+    expect($trend[0])->toBe('0.00');    // January
+    expect($monthFigure)->toBe('70.00'); // selected month = July
 });

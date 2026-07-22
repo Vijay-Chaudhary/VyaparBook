@@ -42,6 +42,12 @@ return [
     'est_profit' => 'Est. profit',
     'margin' => 'Margin %',
 
+    // Estimated gross profit (before operating expenses)
+    'est_gross_profit_month' => 'Est. gross profit (this month)',
+    'est_gross_profit' => 'Est. gross profit',
+    'gross_profit_caveat' => '= Sales − estimated product cost; before operating expenses',
+    'monthly_gross_profit_chart' => 'Monthly est. gross profit',
+
     // Trend
     'monthly_trend' => 'Monthly trend (this year)',
     'month' => 'Month',

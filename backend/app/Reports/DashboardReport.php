@@ -13,6 +13,7 @@ final readonly class DashboardReport
         public ReportPeriod $period,
         public string $salesTodayRupees,
         public string $salesMonthRupees,
+        public string $estGrossProfitMonthRupees, // sales − est. product cost, before expenses
         public OutstandingSummary $outstanding,
         public string $productionMonthKg,
         public array $lowStock,

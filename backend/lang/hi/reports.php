@@ -37,6 +37,11 @@ return [
     'est_profit' => 'अनुमानित मुनाफ़ा',
     'margin' => 'मार्जिन %',
 
+    'est_gross_profit_month' => 'अनुमानित सकल मुनाफ़ा (इस महीने)',
+    'est_gross_profit' => 'अनुमानित सकल मुनाफ़ा',
+    'gross_profit_caveat' => '= बिक्री − अनुमानित उत्पाद लागत; परिचालन खर्च से पहले',
+    'monthly_gross_profit_chart' => 'मासिक अनुमानित सकल मुनाफ़ा',
+
     'monthly_trend' => 'मासिक रुझान (इस वर्ष)',
     'month' => 'महीना',
     'production' => 'उत्पादन (कि.ग्रा.)',

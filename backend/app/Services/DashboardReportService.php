@@ -39,8 +39,9 @@ class DashboardReportService
     {
         $salesTrend = $this->salesTrend($businessId, $period->year);
         $prodTrend = $this->productionTrend($businessId, $period->year);
+        $grossTrend = $this->grossProfitTrend($businessId, $period->year);
         $trend = array_map(
-            fn (int $m) => new TrendRow($m, $salesTrend[$m - 1], $prodTrend[$m - 1]),
+            fn (int $m) => new TrendRow($m, $salesTrend[$m - 1], $prodTrend[$m - 1], $grossTrend[$m - 1]),
             range(1, 12),
         );
 
@@ -56,6 +57,7 @@ class DashboardReportService
             period: $period,
             salesTodayRupees: $this->salesToday($businessId),
             salesMonthRupees: $this->salesForMonth($businessId, $period->year, $period->month),
+            estGrossProfitMonthRupees: $grossTrend[$period->month - 1],
             outstanding: $this->customerOutstanding($businessId),
             productionMonthKg: $this->productionForMonth($businessId, $period->year, $period->month),
             lowStock: $lowStock,
@@ -163,6 +165,33 @@ class DashboardReportService
 
         return array_map(
             fn (int $m) => bcadd((string) ($byMonth[$m] ?? '0'), '0', 3),
+            range(1, 12),
+        );
+    }
+
+    /**
+     * Estimated monthly GROSS profit for the year: Σ sale-line revenue minus
+     * Σ (qty × pack cost). This is NOT net profit — operating expenses have no
+     * source in the schema yet (deferred), so callers must label it "estimated,
+     * before operating expenses". Unpriced packs count as zero cost.
+     *
+     * @return list<string> 12 scale-2 decimal strings, index 0 = January.
+     */
+    public function grossProfitTrend(string $businessId, int $year): array
+    {
+        $byMonth = DB::table('sale_lines as sl')
+            ->join('sales as s', 's.id', '=', 'sl.sale_id')
+            ->join('product_packs as pp', 'pp.id', '=', 'sl.product_pack_id')
+            ->where('sl.business_id', $businessId)
+            ->whereRaw('extract(year from s.sale_date) = ?', [$year])
+            ->groupByRaw('extract(month from s.sale_date)')
+            ->selectRaw('extract(month from s.sale_date)::int as m,
+                (coalesce(sum(sl.line_total), 0)
+                 - coalesce(sum(sl.qty * coalesce(pp.default_cost_price, 0)), 0))::text as agg')
+            ->pluck('agg', 'm');
+
+        return array_map(
+            fn (int $m) => bcadd((string) ($byMonth[$m] ?? '0'), '0', 2),
             range(1, 12),
         );
     }

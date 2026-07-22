@@ -7,6 +7,7 @@
             <tr class="text-left text-ink-muted">
                 <th>{{ __('reports.month') }}</th>
                 <th class="text-right">{{ __('reports.sales') }}</th>
+                <th class="text-right">{{ __('reports.est_gross_profit') }}</th>
                 <th class="text-right">{{ __('reports.production') }}</th>
             </tr>
         </thead>
@@ -15,6 +16,7 @@
                 <tr>
                     <td>{{ \Illuminate\Support\Carbon::create()->month($row->month)->translatedFormat('M') }}</td>
                     <td class="tabular text-right">{{ Inr::format($row->salesRupees) }}</td>
+                    <td class="tabular text-right text-success">{{ Inr::format($row->grossProfitRupees) }}</td>
                     <td class="tabular text-right">{{ rtrim(rtrim($row->productionKg, '0'), '.') ?: '0' }}</td>
                 </tr>
             @endforeach
