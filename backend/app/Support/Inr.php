@@ -36,6 +36,34 @@ class Inr
         return "{$sign}{$symbol}{$grouped}.{$frac}";
     }
 
+    /**
+     * Compact rupee label for chart axes: ₹8.3K, ₹2.6L, ₹1.5Cr. Display-only
+     * (float division is fine here — this never touches a stored figure). Uses
+     * Indian scale words (K = thousand, L = lakh, Cr = crore) and the same U+2212
+     * minus and ₹ as format().
+     */
+    public static function abbreviate(string $amount, bool $withSymbol = true): string
+    {
+        $negative = str_starts_with($amount, '-');
+        $n = (float) ltrim($amount, '-');
+        $symbol = $withSymbol ? '₹' : '';
+        $sign = $negative ? '−' : '';
+
+        $trim = fn (string $s) => rtrim(rtrim($s, '0'), '.');
+
+        if ($n >= 10000000) {
+            $body = $trim(number_format($n / 10000000, 1, '.', '')) . 'Cr';
+        } elseif ($n >= 100000) {
+            $body = $trim(number_format($n / 100000, 1, '.', '')) . 'L';
+        } elseif ($n >= 1000) {
+            $body = $trim(number_format($n / 1000, 1, '.', '')) . 'K';
+        } else {
+            $body = $trim(number_format($n, 2, '.', '')) ?: '0';
+        }
+
+        return "{$sign}{$symbol}{$body}";
+    }
+
     private static function groupIndian(string $whole): string
     {
         if (strlen($whole) <= 3) {
