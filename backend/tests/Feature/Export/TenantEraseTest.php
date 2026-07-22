@@ -76,6 +76,18 @@ function seedFullTenant(): array
         'updated_at' => now(),
     ]);
 
+    DB::connection('pgsql_migrate')->table('expenses')->insert([
+        'id' => (string) Str::uuid(),
+        'business_id' => $business->id,
+        'uuid' => (string) Str::uuid(),
+        'category' => 'rent',
+        'amount' => '1000.00',
+        'spent_on' => now()->toDateString(),
+        'created_by' => $user->id,
+        'created_at' => now(),
+        'updated_at' => now(),
+    ]);
+
     return [$business, $user];
 }
 

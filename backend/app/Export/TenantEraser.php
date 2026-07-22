@@ -44,6 +44,7 @@ class TenantEraser
         'pack_sizes',
         'raw_materials',
         'customers',
+        'expenses',
         'subscription_payments',
         'subscriptions',
         'invites',
