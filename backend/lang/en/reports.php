@@ -47,6 +47,7 @@ return [
     'est_gross_profit' => 'Est. gross profit',
     'gross_profit_caveat' => '= Sales − estimated product cost; before operating expenses',
     'monthly_gross_profit_chart' => 'Monthly est. gross profit',
+    'monthly_money_chart' => 'Monthly performance (₹)',
 
     // P&L (Phase 1)
     'pnl' => 'Profit & loss (this month)',

@@ -66,7 +66,9 @@ describe('render', function () {
             ->assertSee(__('reports.est_gross_profit'))  // gross-profit row in the P&L block
             ->assertSee(__('reports.gross_profit_caveat'))
             ->assertSee(__('reports.net_profit'))        // P&L block renders
-            ->assertSee(__('reports.expenses'));         // expenses line in P&L
+            ->assertSee(__('reports.expenses'))          // expenses line in P&L
+            ->assertSee(__('reports.monthly_money_chart')) // grouped ₹ chart title
+            ->assertSee('₹0');                            // a y-axis tick label renders
     });
 
     it('clamps an out-of-range month without erroring', function () {

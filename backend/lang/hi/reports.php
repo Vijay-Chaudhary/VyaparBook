@@ -41,6 +41,7 @@ return [
     'est_gross_profit' => 'अनुमानित सकल मुनाफ़ा',
     'gross_profit_caveat' => '= बिक्री − अनुमानित उत्पाद लागत; परिचालन खर्च से पहले',
     'monthly_gross_profit_chart' => 'मासिक अनुमानित सकल मुनाफ़ा',
+    'monthly_money_chart' => 'मासिक प्रदर्शन (₹)',
 
     // P&L (Phase 1)
     'pnl' => 'लाभ और हानि (इस महीने)',
