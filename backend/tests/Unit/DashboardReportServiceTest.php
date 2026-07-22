@@ -159,6 +159,17 @@ function dashBatch(Business $b, User $u, string $kg, string $date): void
     $batch->save();
 }
 
+function dashExpense(App\Models\Business $b, App\Models\User $u, string $category, string $amount, string $date, ?string $note = null): void
+{
+    $e = new App\Models\Expense([
+        'business_id' => $b->id, 'uuid' => (string) Illuminate\Support\Str::uuid(),
+        'category' => $category, 'amount' => $amount, 'spent_on' => $date, 'note' => $note,
+    ]);
+    $e->setConnection('pgsql_migrate');
+    $e->created_by = $u->id;
+    $e->save();
+}
+
 it('sums production for the month and builds a 12-row kg trend', function () {
     $a = Business::factory()->create();
     $u = User::factory()->create();
@@ -284,4 +295,38 @@ it('computes an estimated monthly gross profit: sales minus product cost, before
     expect($trend[4])->toBe('21.00');   // May
     expect($trend[0])->toBe('0.00');    // January
     expect($monthFigure)->toBe('70.00'); // selected month = July
+});
+
+it('totals expenses for a month, breaks them down by category, and builds a 12-row trend', function () {
+    $a = Business::factory()->create();
+    $b = Business::factory()->create();   // second tenant — must NOT leak in
+    $u = User::factory()->create();
+
+    dashExpense($a, $u, 'rent', '5000.00', '2026-07-01');
+    dashExpense($a, $u, 'salaries', '3000.00', '2026-07-05');
+    dashExpense($a, $u, 'rent', '200.00', '2026-07-20');     // second rent in July
+    dashExpense($a, $u, 'electricity', '800.00', '2026-05-04'); // May, different month
+    dashExpense($b, $u, 'rent', '99999.00', '2026-07-02');    // other tenant
+
+    [$month, $breakdown, $trend] = inTenant($a->id, function () use ($a) {
+        $svc = new DashboardReportService(new App\Services\StockService());
+
+        return [
+            $svc->expensesForMonth($a->id, 2026, 7),
+            $svc->expensesByCategory($a->id, 2026, 7),
+            $svc->expensesTrend($a->id, 2026),
+        ];
+    });
+
+    expect($month)->toBe('8200.00');                 // 5000 + 3000 + 200
+
+    // Breakdown ordered by canonical category order, zero categories omitted.
+    expect(collect($breakdown)->pluck('category')->all())->toBe(['rent', 'salaries']);
+    expect($breakdown[0]->amountRupees)->toBe('5200.00'); // rent 5000 + 200
+    expect($breakdown[1]->amountRupees)->toBe('3000.00');
+
+    expect($trend)->toHaveCount(12);
+    expect($trend[6])->toBe('8200.00');  // July
+    expect($trend[4])->toBe('800.00');   // May
+    expect($trend[0])->toBe('0.00');     // January
 });

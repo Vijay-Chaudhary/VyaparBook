@@ -3,12 +3,15 @@
 
 namespace App\Services;
 
+use App\Expenses\ExpenseCategory;
 use App\Models\Customer;
+use App\Models\Expense;
 use App\Models\ProductionBatch;
 use App\Models\RawMaterial;
 use App\Models\Sale;
 use App\Reports\CustomerDue;
 use App\Reports\DashboardReport;
+use App\Reports\ExpenseCategoryTotal;
 use App\Reports\LowStockRow;
 use App\Reports\OutstandingSummary;
 use App\Reports\ProductPerf;
@@ -188,6 +191,63 @@ class DashboardReportService
             ->selectRaw('extract(month from s.sale_date)::int as m,
                 (coalesce(sum(sl.line_total), 0)
                  - coalesce(sum(sl.qty * coalesce(pp.default_cost_price, 0)), 0))::text as agg')
+            ->pluck('agg', 'm');
+
+        return array_map(
+            fn (int $m) => bcadd((string) ($byMonth[$m] ?? '0'), '0', 2),
+            range(1, 12),
+        );
+    }
+
+    public function expensesForMonth(string $businessId, int $year, int $month): string
+    {
+        $sum = (string) Expense::query()
+            ->where('business_id', $businessId)
+            ->whereNull('archived_at')
+            ->whereRaw('extract(year from spent_on) = ?', [$year])
+            ->whereRaw('extract(month from spent_on) = ?', [$month])
+            ->selectRaw('coalesce(sum(amount), 0)::text as agg')
+            ->value('agg');
+
+        return bcadd($sum, '0', 2);
+    }
+
+    /**
+     * Operating expenses grouped by category for the month, ordered by the
+     * canonical ExpenseCategory order, with zero categories omitted.
+     *
+     * @return list<ExpenseCategoryTotal>
+     */
+    public function expensesByCategory(string $businessId, int $year, int $month): array
+    {
+        $byCategory = Expense::query()
+            ->where('business_id', $businessId)
+            ->whereNull('archived_at')
+            ->whereRaw('extract(year from spent_on) = ?', [$year])
+            ->whereRaw('extract(month from spent_on) = ?', [$month])
+            ->groupBy('category')
+            ->selectRaw('category, sum(amount)::text as agg')
+            ->pluck('agg', 'category');
+
+        $out = [];
+        foreach (ExpenseCategory::keys() as $key) {
+            if ($byCategory->has($key)) {
+                $out[] = new ExpenseCategoryTotal($key, bcadd((string) $byCategory[$key], '0', 2));
+            }
+        }
+
+        return $out;
+    }
+
+    /** @return list<string> 12 scale-2 decimal strings, index 0 = January. */
+    public function expensesTrend(string $businessId, int $year): array
+    {
+        $byMonth = Expense::query()
+            ->where('business_id', $businessId)
+            ->whereNull('archived_at')
+            ->whereRaw('extract(year from spent_on) = ?', [$year])
+            ->selectRaw('extract(month from spent_on)::int as m, coalesce(sum(amount), 0)::text as agg')
+            ->groupBy('m')
             ->pluck('agg', 'm');
 
         return array_map(
