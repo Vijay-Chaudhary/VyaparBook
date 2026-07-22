@@ -7,6 +7,7 @@ use App\Http\Controllers\Web\BillingController;
 use App\Http\Controllers\Web\LoginController;
 use App\Http\Controllers\Web\OnboardingController;
 use App\Http\Controllers\Web\RegisterController;
+use App\Http\Controllers\Web\ReportController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -60,6 +61,13 @@ Route::middleware('auth')->group(function () {
      */
     Route::get('billing', [BillingController::class, 'show'])->name('billing');
     Route::post('billing/payment', [BillingController::class, 'storePayment'])->name('billing.payment');
+
+    /*
+     | Owner management dashboard (Phase 0) — Blade, online-only, owner-only.
+     | Read-only, so intentionally NOT behind the plan gate: a lapsed owner may
+     | still read their reports, like the billing page stays reachable.
+     */
+    Route::get('reports/dashboard', [ReportController::class, 'show'])->name('reports.dashboard');
 
     // Session -> JWT exchange for the React layer. Throttled because it mints
     // credentials: a valid session should not make it freely spammable.
