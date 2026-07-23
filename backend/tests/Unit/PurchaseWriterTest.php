@@ -1,46 +1,17 @@
 <?php
 // tests/Unit/PurchaseWriterTest.php
 //
-// Uses the global inTenant() helper defined in DashboardReportServiceTest.php
-// (Pest loads every Unit test file into one scope).
+// pwInTenant/pwSupplier/pwMaterial come from tests/Pest.php, so this file and
+// PurchaseAggregationTest.php can each be run on their own.
 
 use App\Models\Business;
 use App\Models\Purchase;
 use App\Models\RawMaterial;
 use App\Models\StockMovement;
-use App\Models\Supplier;
 use App\Models\User;
 use App\Services\PurchaseWriter;
 use App\Services\StockService;
-use App\Support\TenantContext;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
-
-/** Local tenant-pin helper (uniquely named so single-file runs don't need the dashboard test's inTenant). */
-function pwInTenant(string $businessId, callable $fn): mixed
-{
-    return DB::transaction(function () use ($businessId, $fn) {
-        TenantContext::switchTo($businessId);
-        app()->bind('tenant.id', fn () => $businessId);
-
-        return $fn();
-    });
-}
-
-function pwSupplier(Business $b, string $name = 'Besan Traders', string $opening = '0.00'): Supplier
-{
-    return Supplier::on('pgsql_migrate')->create([
-        'business_id' => $b->id, 'uuid' => (string) Str::uuid(), 'name' => $name, 'opening_balance' => $opening,
-    ]);
-}
-
-function pwMaterial(Business $b, string $name = 'Besan'): RawMaterial
-{
-    return RawMaterial::on('pgsql_migrate')->create([
-        'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
-        'name' => $name, 'unit' => 'kg', 'reorder_level' => '0.000',
-    ]);
-}
 
 it('records a purchase with a linked costed stock-in, and is idempotent', function () {
     $a = Business::factory()->create();

@@ -97,6 +97,50 @@ function platformAdmin(): array
     return [$admin, (new \App\Services\TokenService())->issue($admin)];
 }
 
+/*
+|--------------------------------------------------------------------------
+| Suppliers & purchases test helpers (Phase 2a)
+|--------------------------------------------------------------------------
+|
+| Shared across tests/Unit/Purchase*Test.php. Defined here rather than in one
+| of those files so a single-file run (`pest tests/Unit/PurchaseAggregationTest
+| .php`) still has them — a test file that isn't selected is never loaded.
+*/
+
+/** Run $fn inside a tenant-pinned transaction (RLS session var + app-level scope). */
+function pwInTenant(string $businessId, callable $fn): mixed
+{
+    return \Illuminate\Support\Facades\DB::transaction(function () use ($businessId, $fn) {
+        \App\Support\TenantContext::switchTo($businessId);
+        app()->bind('tenant.id', fn () => $businessId);
+
+        return $fn();
+    });
+}
+
+/** A supplier seeded on the migration connection (bypasses RLS, like the other seed helpers). */
+function pwSupplier(\App\Models\Business $b, string $name = 'Besan Traders', string $opening = '0.00'): \App\Models\Supplier
+{
+    return \App\Models\Supplier::on('pgsql_migrate')->create([
+        'business_id' => $b->id,
+        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'name' => $name,
+        'opening_balance' => $opening,
+    ]);
+}
+
+/** A kg-denominated raw material seeded on the migration connection. */
+function pwMaterial(\App\Models\Business $b, string $name = 'Besan'): \App\Models\RawMaterial
+{
+    return \App\Models\RawMaterial::on('pgsql_migrate')->create([
+        'business_id' => $b->id,
+        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'name' => $name,
+        'unit' => 'kg',
+        'reorder_level' => '0.000',
+    ]);
+}
+
 /** A pending manual/UPI payment lodged (out-of-band) for a business. */
 function pendingPayment(string $businessId, string $plan = 'pro'): \App\Models\SubscriptionPayment
 {
