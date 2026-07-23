@@ -7,8 +7,10 @@ use App\Http\Controllers\Web\BillingController;
 use App\Http\Controllers\Web\LoginController;
 use App\Http\Controllers\Web\OnboardingController;
 use App\Http\Controllers\Web\ExpenseController;
+use App\Http\Controllers\Web\PurchaseController;
 use App\Http\Controllers\Web\RegisterController;
 use App\Http\Controllers\Web\ReportController;
+use App\Http\Controllers\Web\SupplierController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -80,6 +82,24 @@ Route::middleware('auth')->group(function () {
     Route::post('expenses', [ExpenseController::class, 'store'])->name('expenses.store');
     Route::put('expenses/{expense}', [ExpenseController::class, 'update'])->name('expenses.update');
     Route::delete('expenses/{expense}', [ExpenseController::class, 'destroy'])->name('expenses.destroy');
+
+    /*
+     | Suppliers & costed raw-material purchases (Phase 2a) — Blade, online-only,
+     | owner-only, same owner-tool pattern as expenses and not plan-gated.
+     | {purchase}/{supplier} are resolved owner-scoped inside the controllers,
+     | never via implicit binding (no tenant is pinned during route resolution).
+     |
+     | Deleting a purchase also reverses the stock-in it created, so on-hand
+     | never overcounts — hence DELETE, routed through PurchaseWriter.
+     */
+    Route::get('purchases', [PurchaseController::class, 'index'])->name('purchases');
+    Route::post('purchases', [PurchaseController::class, 'store'])->name('purchases.store');
+    Route::delete('purchases/{purchase}', [PurchaseController::class, 'destroy'])->name('purchases.destroy');
+
+    Route::get('suppliers', [SupplierController::class, 'index'])->name('suppliers');
+    Route::post('suppliers', [SupplierController::class, 'store'])->name('suppliers.store');
+    Route::get('suppliers/{supplier}', [SupplierController::class, 'show'])->name('suppliers.show');
+    Route::post('suppliers/{supplier}/payments', [SupplierController::class, 'storePayment'])->name('suppliers.payments.store');
 
     // Session -> JWT exchange for the React layer. Throttled because it mints
     // credentials: a valid session should not make it freely spammable.

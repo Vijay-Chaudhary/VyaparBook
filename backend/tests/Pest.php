@@ -118,6 +118,24 @@ function pwInTenant(string $businessId, callable $fn): mixed
     });
 }
 
+/**
+ * An owner plus the business they own, ready for actingAs().
+ *
+ * @return array{0: \App\Models\User, 1: \App\Models\Business}
+ */
+function pwOwner(): array
+{
+    $business = \App\Models\Business::factory()->create();
+    $user = \App\Models\User::factory()->create();
+    \App\Models\Membership::on('pgsql_migrate')->create([
+        'user_id' => $user->id,
+        'business_id' => $business->id,
+        'role' => 'owner',
+    ]);
+
+    return [$user, $business];
+}
+
 /** A supplier seeded on the migration connection (bypasses RLS, like the other seed helpers). */
 function pwSupplier(\App\Models\Business $b, string $name = 'Besan Traders', string $opening = '0.00'): \App\Models\Supplier
 {

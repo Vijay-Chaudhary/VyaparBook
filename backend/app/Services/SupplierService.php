@@ -6,6 +6,7 @@ namespace App\Services;
 use App\Models\Supplier;
 use App\Reports\SupplierDue;
 use App\Reports\SupplierOutstandingSummary;
+use Illuminate\Support\Collection;
 
 /**
  * Supplier payables — the mirror of the customer khata, on the buy side.
@@ -31,11 +32,11 @@ class SupplierService
         $rows = Supplier::query()
             ->where('business_id', $businessId)
             ->whereNull('archived_at')
-            ->selectRaw('name, village, (' . $this->outstandingExpr() . ')::text as outstanding')
+            ->selectRaw('id, name, village, (' . $this->outstandingExpr() . ')::text as outstanding')
             ->get();
 
         $suppliers = $rows
-            ->map(fn ($r) => new SupplierDue($r->name, $r->village, bcadd($r->outstanding, '0', 2)))
+            ->map(fn ($r) => new SupplierDue($r->id, $r->name, $r->village, bcadd($r->outstanding, '0', 2)))
             ->sortByDesc(fn (SupplierDue $s) => (float) $s->outstandingRupees)
             ->values()
             ->all();
@@ -47,6 +48,45 @@ class SupplierService
         );
 
         return new SupplierOutstandingSummary($total, $suppliers);
+    }
+
+    /**
+     * A time-ordered payables statement: every purchase and payment for the
+     * supplier as one stream with a running balance. Purchases raise what we owe
+     * (credit: +), payments lower it (debit: −); the last running value equals
+     * outstandingFor(). Mirrors KhataService::ledgerFor on the buy side.
+     *
+     * @return Collection<int, array{kind: string, ref: \Illuminate\Database\Eloquent\Model, date: \Illuminate\Support\Carbon, delta: string, running_balance: string}>
+     */
+    public function ledgerFor(Supplier $supplier): Collection
+    {
+        $entries = $supplier->purchases()->whereNull('archived_at')->get()
+            ->map(fn ($p) => [
+                'kind' => 'purchase',
+                'ref' => $p,
+                'date' => $p->purchase_date,
+                'delta' => (string) $p->total,                  // we owe more: +
+            ])
+            ->concat($supplier->supplierPayments()->whereNull('archived_at')->get()->map(fn ($sp) => [
+                'kind' => 'payment',
+                'ref' => $sp,
+                'date' => $sp->payment_date,
+                'delta' => bcmul((string) $sp->amount, '-1', 2), // we owe less: −
+            ]))
+            ->sortBy([
+                ['date', 'asc'],
+                fn ($a, $b) => $a['ref']->created_at <=> $b['ref']->created_at,
+            ])
+            ->values();
+
+        $running = bcadd((string) $supplier->opening_balance, '0', 2);
+
+        return $entries->map(function ($e) use (&$running) {
+            $running = bcadd($running, $e['delta'], 2);
+            $e['running_balance'] = $running;
+
+            return $e;
+        });
     }
 
     /** opening + Σ non-archived purchases − Σ non-archived payments. */

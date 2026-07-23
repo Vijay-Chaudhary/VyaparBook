@@ -56,6 +56,8 @@ return [
     'net_margin' => 'Net margin',
     'expenses_by_category' => 'Expenses by category',
     'manage_expenses' => 'Manage expenses',
+    'manage_purchases' => 'Purchases',
+    'manage_suppliers' => 'Suppliers',
     'monthly_net_profit_chart' => 'Monthly net profit',
 
     // Trend

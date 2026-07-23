@@ -50,6 +50,8 @@ return [
     'net_margin' => 'शुद्ध मार्जिन',
     'expenses_by_category' => 'श्रेणी अनुसार खर्च',
     'manage_expenses' => 'खर्च प्रबंधित करें',
+    'manage_purchases' => 'खरीद',
+    'manage_suppliers' => 'आपूर्तिकर्ता',
     'monthly_net_profit_chart' => 'मासिक शुद्ध लाभ',
 
     'monthly_trend' => 'मासिक रुझान (इस वर्ष)',
