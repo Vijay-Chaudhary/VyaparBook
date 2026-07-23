@@ -11,7 +11,6 @@ use App\Models\SupplierPayment;
 use App\Models\User;
 use App\Services\PurchaseService;
 use App\Services\PurchaseWriter;
-use App\Services\StockService;
 use App\Services\SupplierService;
 use Illuminate\Support\Str;
 
@@ -52,7 +51,7 @@ it('computes supplier outstanding, weighted-avg cost/kg and stock value, isolati
         $sp->save();
 
         $supplierService = new SupplierService();
-        $purchaseService = new PurchaseService(new StockService());
+        $purchaseService = new PurchaseService();
         $summary = $supplierService->outstandingSummary($besan->business_id);
 
         return [
@@ -79,7 +78,7 @@ it('reports zero cost/kg and value for a material never purchased', function () 
     $salt = pwMaterial($a, 'Salt');
 
     $res = pwInTenant($a->id, function () use ($salt, $a) {
-        $svc = new PurchaseService(new StockService());
+        $svc = new PurchaseService();
 
         return [
             'cost' => $svc->costPerKgFor(RawMaterial::find($salt->id)),
@@ -89,4 +88,52 @@ it('reports zero cost/kg and value for a material never purchased', function () 
 
     expect($res['cost'])->toBe('0.00');
     expect($res['value'])->toBe('0.00');
+});
+
+it('agrees with the per-material cost when valuing the whole catalogue', function () {
+    // The dashboard uses the set-based stockValuationRows; a supplier ledger or
+    // a single material uses costPerKgFor. They divide the same way, so a
+    // material can never be worth one thing on the tile and another on its row.
+    $a = Business::factory()->create();
+    $u = User::factory()->create();
+
+    $sup = pwSupplier($a);
+    $besan = pwMaterial($a, 'Besan');
+    $salt = pwMaterial($a, 'Salt');          // never purchased
+    // 3 kg @ ₹10 = ₹30, then 0.001 kg @ ₹1 — a division that does not come out
+    // even, so a scale mismatch between the two paths would show up here.
+    $atta = pwMaterial($a, 'Atta');
+
+    $rows = pwInTenant($a->id, function () use ($a, $sup, $besan, $atta, $u) {
+        app()->bind('tenant.user_id', fn () => $u->id);
+        $writer = new PurchaseWriter();
+
+        $writer->record(['uuid' => (string) Str::uuid(), 'supplier_id' => $sup->id, 'raw_material_id' => $besan->id,
+            'purchase_date' => '2026-07-01', 'qty' => '100', 'unit_cost' => '40', 'note' => null]);
+        $writer->record(['uuid' => (string) Str::uuid(), 'supplier_id' => $sup->id, 'raw_material_id' => $atta->id,
+            'purchase_date' => '2026-07-01', 'qty' => '3', 'unit_cost' => '10', 'note' => null]);
+        $writer->record(['uuid' => (string) Str::uuid(), 'supplier_id' => $sup->id, 'raw_material_id' => $atta->id,
+            'purchase_date' => '2026-07-02', 'qty' => '0.001', 'unit_cost' => '1', 'note' => null]);
+
+        $svc = new PurchaseService();
+
+        return collect($svc->stockValuationRows($a->id))
+            ->mapWithKeys(fn ($r) => [$r->name => [
+                'row' => $r->costPerKgRupees,
+                'single' => $svc->costPerKgFor(RawMaterial::where('name', $r->name)->firstOrFail()),
+                'value' => $r->valueRupees,
+            ]])
+            ->all();
+    });
+
+    expect(array_keys($rows))->toBe(['Atta', 'Besan', 'Salt']);   // ordered by name
+
+    foreach ($rows as $name => $r) {
+        expect($r['row'])->toBe($r['single'], "cost/kg disagrees for {$name}");
+    }
+
+    expect($rows['Besan']['row'])->toBe('40.00');
+    expect($rows['Besan']['value'])->toBe('4000.00');   // 100 kg on hand × 40
+    expect($rows['Salt']['row'])->toBe('0.00');         // never purchased
+    expect($rows['Salt']['value'])->toBe('0.00');
 });

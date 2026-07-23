@@ -16,6 +16,13 @@ return [
     'stock_low_alerts' => 'कम स्टॉक चेतावनी (वस्तुएँ)',
 
     'customer_outstanding_list' => 'ग्राहक बकाया (सबसे ज़्यादा पहले)',
+    'supplier_outstanding_list' => 'आपूर्तिकर्ता देय (सबसे ज़्यादा पहले)',
+    'supplier' => 'आपूर्तिकर्ता',
+    'amount_payable' => 'देय राशि',
+    'stock_value' => 'स्टॉक मूल्य',
+    'stock_value_hint' => 'अभी मौजूद',
+    'stock_valuation' => 'स्टॉक मूल्यांकन',
+    'cost_per_kg' => 'लागत प्रति किलो',
     'customer' => 'ग्राहक',
     'village' => 'गाँव',
     'amount_due' => 'बकाया राशि',
@@ -61,6 +68,8 @@ return [
     'monthly_production_chart' => 'मासिक उत्पादन',
 
     'no_customers' => 'अभी कोई ग्राहक नहीं।',
+    'no_suppliers' => 'अभी कोई आपूर्तिकर्ता नहीं।',
+    'no_materials' => 'अभी कोई कच्चा माल नहीं।',
     'no_products' => 'इस वर्ष अभी तक कोई बिक्री दर्ज नहीं हुई।',
     'no_low_stock' => 'सभी सामग्री पुनःऑर्डर स्तर से ऊपर हैं।',
 ];

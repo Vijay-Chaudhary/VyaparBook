@@ -77,7 +77,7 @@ it('totals customer outstanding as Σ of KhataService, and isolates tenants', fu
     $khata = new KhataService();
     $expectedTotal = bcadd($khata->outstandingFor($c1), $khata->outstandingFor($c2), 2);
 
-    $summary = inTenant($a->id, fn () => (new DashboardReportService(new App\Services\StockService()))
+    $summary = inTenant($a->id, fn () => app(DashboardReportService::class)
         ->customerOutstanding($a->id));
 
     expect($summary->totalRupees)->toBe($expectedTotal)   // '1628.50'
@@ -102,7 +102,7 @@ it('sums sales for today and the selected month, and builds a 12-row sales trend
     dashSale($c, $u, '9.00', '2025-07-01');    // different year — excluded
 
     [$salesToday, $salesMonth, $trend] = inTenant($a->id, function () use ($a) {
-        $svc = new DashboardReportService(new App\Services\StockService());
+        $svc = app(DashboardReportService::class);
 
         return [
             $svc->salesToday($a->id),
@@ -179,7 +179,7 @@ it('sums production for the month and builds a 12-row kg trend', function () {
     dashBatch($a, $u, '10.000', '2026-05-02');
 
     [$prodMonth, $trend] = inTenant($a->id, function () use ($a) {
-        $svc = new DashboardReportService(new App\Services\StockService());
+        $svc = app(DashboardReportService::class);
 
         return [
             $svc->productionForMonth($a->id, 2026, 7),
@@ -227,7 +227,7 @@ it('flags materials below reorder and ranks product performance', function () {
     saleLine($sale, $pack, 10, '100.00');   // qty 10, sales 1000, cost 930, profit 70, margin 7.0%
 
     [$low, $perf] = inTenant($a->id, function () use ($a) {
-        $svc = new DashboardReportService(new App\Services\StockService());
+        $svc = app(DashboardReportService::class);
 
         return [$svc->lowStock($a->id), $svc->productPerformance($a->id, 2026)];
     });
@@ -247,7 +247,7 @@ it('assembles a full report, with highest-selling/profit and an empty-shop case'
 
     // Empty shop first: everything zero, nothing crashes.
     $empty = Business::factory()->create();
-    $report = inTenant($empty->id, fn () => (new DashboardReportService(new App\Services\StockService()))
+    $report = inTenant($empty->id, fn () => app(DashboardReportService::class)
         ->forMonth($empty->id, App\Reports\ReportPeriod::fromInput(2026, 7)));
 
     expect($report->salesMonthRupees)->toBe('0.00');
@@ -285,7 +285,7 @@ it('computes an estimated monthly gross profit: sales minus product cost, before
     saleLine($may, $pack, 3, '100.00');    // sales 300, cost 279 → gross profit 21.00
 
     [$trend, $monthFigure] = inTenant($a->id, function () use ($a) {
-        $svc = new DashboardReportService(new App\Services\StockService());
+        $svc = app(DashboardReportService::class);
 
         return [
             $svc->grossProfitTrend($a->id, 2026),
@@ -312,7 +312,7 @@ it('totals expenses for a month, breaks them down by category, and builds a 12-r
     dashExpense($b, $u, 'rent', '99999.00', '2026-07-02');    // other tenant
 
     [$month, $breakdown, $trend] = inTenant($a->id, function () use ($a) {
-        $svc = new DashboardReportService(new App\Services\StockService());
+        $svc = app(DashboardReportService::class);
 
         return [
             $svc->expensesForMonth($a->id, 2026, 7),
@@ -363,7 +363,7 @@ it('assembles net profit for a profitable month, a loss month, and guards zero-s
     saleLine($jun, $pack, 10, '100.00');
     dashExpense($a, $u, 'salaries', '250.00', '2026-06-15');
 
-    $report = inTenant($a->id, fn () => (new DashboardReportService(new App\Services\StockService()))
+    $report = inTenant($a->id, fn () => app(DashboardReportService::class)
         ->forMonth($a->id, App\Reports\ReportPeriod::fromInput(2026, 7)));
 
     // Selected month = July.
@@ -388,7 +388,7 @@ it('reports a zero net margin when there are no sales (no divide-by-zero)', func
     $u = User::factory()->create();
     dashExpense($a, $u, 'rent', '500.00', '2026-07-01');   // expense but no sales
 
-    $report = inTenant($a->id, fn () => (new DashboardReportService(new App\Services\StockService()))
+    $report = inTenant($a->id, fn () => app(DashboardReportService::class)
         ->forMonth($a->id, App\Reports\ReportPeriod::fromInput(2026, 7)));
 
     expect($report->salesMonthRupees)->toBe('0.00');

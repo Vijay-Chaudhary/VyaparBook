@@ -80,3 +80,49 @@ describe('render', function () {
             ->assertOk();
     });
 });
+
+describe('phase 2a', function () {
+    it('shows stock value, the valuation table and supplier payables', function () {
+        [$owner, $business] = pwOwner();
+        $sup = pwSupplier($business, 'Besan Traders', '500.00');
+        pwMaterial($business, 'Besan');
+        pwMaterial($business, 'Salt');           // never purchased → shown as —
+
+        // 100kg @ ₹42 = ₹4,200 stock value; supplier payable 500 + 4,200 = 4,700.
+        $this->actingAs($owner)->post('/purchases', [
+            'business' => $business->id, 'supplier_id' => $sup->id,
+            'raw_material_id' => \App\Models\RawMaterial::on('pgsql_migrate')
+                ->where('business_id', $business->id)->where('name', 'Besan')->value('id'),
+            'purchase_date' => '2026-07-04', 'qty' => '100', 'unit_cost' => '42',
+        ])->assertRedirect();
+
+        $this->actingAs($owner)->get('/reports/dashboard?business=' . $business->id)
+            ->assertOk()
+            ->assertSee('Stock value')
+            ->assertSee('₹4,200.00')      // tile + valuation total + Besan's row
+            ->assertSee('₹42.00')         // weighted-average cost per kg
+            ->assertSee('Besan Traders')  // supplier payables section
+            ->assertSee('₹4,700.00')      // opening 500 + the purchase
+            ->assertSee('Salt');          // unpriced material still listed
+    });
+
+    it('does not leak another tenant\'s stock or payables into the dashboard', function () {
+        [$owner, $business] = pwOwner();
+        [$otherOwner, $other] = pwOwner();
+
+        $foreignSup = pwSupplier($other, 'Other Shop Supplier', '9999.00');
+        pwMaterial($other, 'Foreign Material');
+        $this->actingAs($otherOwner)->post('/purchases', [
+            'business' => $other->id, 'supplier_id' => $foreignSup->id,
+            'raw_material_id' => \App\Models\RawMaterial::on('pgsql_migrate')
+                ->where('business_id', $other->id)->value('id'),
+            'purchase_date' => '2026-07-04', 'qty' => '10', 'unit_cost' => '900',
+        ]);
+
+        $this->actingAs($owner)->get('/reports/dashboard?business=' . $business->id)
+            ->assertOk()
+            ->assertDontSee('Other Shop Supplier')
+            ->assertDontSee('Foreign Material')
+            ->assertDontSee('₹9,000.00');   // the other tenant's stock value
+    });
+});

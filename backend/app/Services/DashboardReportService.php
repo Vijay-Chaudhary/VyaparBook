@@ -16,6 +16,7 @@ use App\Reports\LowStockRow;
 use App\Reports\OutstandingSummary;
 use App\Reports\ProductPerf;
 use App\Reports\ReportPeriod;
+use App\Reports\StockValuationRow;
 use App\Reports\TrendRow;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
@@ -36,6 +37,8 @@ class DashboardReportService
 {
     public function __construct(
         private readonly StockService $stock,
+        private readonly PurchaseService $purchases,
+        private readonly SupplierService $suppliers,
     ) {}
 
     public function forMonth(string $businessId, ReportPeriod $period): DashboardReport
@@ -59,6 +62,15 @@ class DashboardReportService
 
         $performance = $this->productPerformance($businessId, $period->year);
         $lowStock = $this->lowStock($businessId);
+
+        // Valuation is a point-in-time figure, not a monthly one: it values the
+        // stock on hand right now, so it does not move with the period picker.
+        $stockValuation = $this->purchases->stockValuationRows($businessId);
+        $stockValue = array_reduce(
+            $stockValuation,
+            fn (string $carry, StockValuationRow $r) => bcadd($carry, $r->valueRupees, 2),
+            '0.00',
+        );
 
         $highestSelling = collect($performance)
             ->sortByDesc(fn (ProductPerf $p) => $p->qtySold)->first();
@@ -93,6 +105,9 @@ class DashboardReportService
             highestProfitName: $highestProfit?->name,
             expenseBreakdown: $this->expensesByCategory($businessId, $period->year, $period->month),
             trend: $trend,
+            stockValueRupees: $stockValue,
+            stockValuation: $stockValuation,
+            supplierOutstanding: $this->suppliers->outstandingSummary($businessId),
         );
     }
 

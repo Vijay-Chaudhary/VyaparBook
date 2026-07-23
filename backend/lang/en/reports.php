@@ -18,6 +18,13 @@ return [
 
     // Customer outstanding list
     'customer_outstanding_list' => 'Customer outstanding (highest first)',
+    'supplier_outstanding_list' => 'Supplier payable (highest first)',
+    'supplier' => 'Supplier',
+    'amount_payable' => 'Amount payable',
+    'stock_value' => 'Stock value',
+    'stock_value_hint' => 'On hand now',
+    'stock_valuation' => 'Stock valuation',
+    'cost_per_kg' => 'Cost per kg',
     'customer' => 'Customer',
     'village' => 'Village',
     'amount_due' => 'Amount due',
@@ -69,6 +76,8 @@ return [
 
     // Empty states
     'no_customers' => 'No customers yet.',
+    'no_suppliers' => 'No suppliers yet.',
+    'no_materials' => 'No raw materials yet.',
     'no_products' => 'No sales recorded this year yet.',
     'no_low_stock' => 'All materials are above their reorder level.',
 ];

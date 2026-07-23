@@ -9,6 +9,7 @@ final readonly class DashboardReport
      * @param list<ProductPerf>            $productPerformance
      * @param list<ExpenseCategoryTotal>   $expenseBreakdown
      * @param list<TrendRow>               $trend  exactly 12 rows, Jan..Dec
+     * @param list<StockValuationRow>      $stockValuation
      */
     public function __construct(
         public ReportPeriod $period,
@@ -27,5 +28,10 @@ final readonly class DashboardReport
         public ?string $highestProfitName,
         public array $expenseBreakdown,
         public array $trend,
+        // Phase 2a: raw-material stock valued at weighted-average purchase cost,
+        // and what is owed to suppliers (the buy-side mirror of $outstanding).
+        public string $stockValueRupees,
+        public array $stockValuation,
+        public SupplierOutstandingSummary $supplierOutstanding,
     ) {}
 }

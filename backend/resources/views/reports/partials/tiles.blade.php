@@ -1,6 +1,6 @@
 {{-- resources/views/reports/partials/tiles.blade.php --}}
 @php use App\Support\Inr; @endphp
-<div class="grid grid-cols-2 gap-3 md:grid-cols-4">
+<div class="grid grid-cols-2 gap-3 md:grid-cols-5">
     <div class="card">
         <p class="text-sm text-ink-muted">{{ __('reports.sales_today') }}</p>
         <p class="tabular text-lg font-bold">{{ Inr::format($report->salesTodayRupees) }}</p>
@@ -16,5 +16,12 @@
     <div class="card">
         <p class="text-sm text-ink-muted">{{ __('reports.production_month') }}</p>
         <p class="tabular text-lg font-bold">{{ rtrim(rtrim($report->productionMonthKg, '0'), '.') ?: '0' }} Kg</p>
+    </div>
+    {{-- Stock value is point-in-time (what is on hand right now), unlike the
+         month figures beside it — reports.stock_value_hint says so. --}}
+    <div class="card">
+        <p class="text-sm text-ink-muted">{{ __('reports.stock_value') }}</p>
+        <p class="tabular text-lg font-bold">{{ Inr::format($report->stockValueRupees) }}</p>
+        <p class="text-xs text-ink-muted">{{ __('reports.stock_value_hint') }}</p>
     </div>
 </div>
