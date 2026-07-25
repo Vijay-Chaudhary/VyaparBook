@@ -7,6 +7,7 @@ use App\Http\Controllers\Concerns\ResolvesOwnedTenant;
 use App\Http\Controllers\Controller;
 use App\Models\Business;
 use App\Models\Customer;
+use App\Models\ReminderBatch;
 use App\Models\ReminderLog;
 use App\Jobs\SendReminderJob;
 use App\Reminders\ReminderMessage;
@@ -49,15 +50,24 @@ class ReminderController extends Controller
             return redirect()->route('app');
         }
 
-        [$business, $rows] = $this->runInTenant($businessId, fn () => [
+        [$business, $rows, $planned] = $this->runInTenant($businessId, fn () => [
             Business::findOrFail($businessId),
             $reminders->overdue($businessId),
+            // Phase 4c: what the scheduler intends to send, so the owner can
+            // stop it before it goes rather than read about it afterwards.
+            ReminderLog::query()
+                ->where('business_id', $businessId)
+                ->whereNotNull('batch_id')
+                ->where('status', 'planned')
+                ->with('customer')
+                ->get(),
         ]);
 
         return view('reminders.index', [
             'businessId' => $businessId,
             'business' => $business,
             'rows' => $rows,
+            'planned' => $planned,
             'minOutstanding' => (string) $business->reminder_min_outstanding,
             'minDays' => (int) $business->reminder_min_days,
         ]);
@@ -140,6 +150,68 @@ class ReminderController extends Controller
             // Phase 4a: hand off to the owner's own WhatsApp.
             default => redirect()->away($result['url']),
         };
+    }
+
+    /**
+     * Save the automation settings (Phase 4c).
+     *
+     * send_at is validated against the global quiet-hours window: a tenant may
+     * choose WHEN inside it, never that their customers be messaged at 3am.
+     */
+    public function settings(Request $request): RedirectResponse
+    {
+        $businessId = $this->ownedBusinessId($request->input('business'));
+        if ($businessId === null) {
+            return redirect()->route('app');
+        }
+
+        $data = $request->validate([
+            'reminder_auto_enabled' => ['nullable', 'boolean'],
+            'reminder_send_at' => ['required', 'date_format:H:i', 'after_or_equal:09:00', 'before_or_equal:19:59'],
+            'reminder_cooldown_days' => ['required', 'integer', 'min:0', 'max:90'],
+            'reminder_daily_cap' => ['required', 'integer', 'min:1', 'max:200'],
+        ]);
+
+        $this->runInTenant($businessId, function () use ($businessId, $data, $request) {
+            $business = Business::findOrFail($businessId);
+            $business->reminder_auto_enabled = $request->boolean('reminder_auto_enabled');
+            $business->reminder_send_at = $data['reminder_send_at'];
+            $business->reminder_cooldown_days = (int) $data['reminder_cooldown_days'];
+            $business->reminder_daily_cap = (int) $data['reminder_daily_cap'];
+            $business->save();
+        });
+
+        return redirect()->route('reminders', ['business' => $businessId])
+            ->with('status', __('reminders.settings_saved'));
+    }
+
+    /** Cancel one planned reminder before the scheduler releases it. */
+    public function cancelPlanned(Request $request, string $reminder): RedirectResponse
+    {
+        $businessId = $this->ownedBusinessId($request->input('business'));
+        if ($businessId === null) {
+            return redirect()->route('app');
+        }
+
+        $this->runInTenant($businessId, function () use ($businessId, $reminder) {
+            $log = ReminderLog::query()
+                ->where('business_id', $businessId)
+                ->where('status', 'planned')
+                ->find($reminder);
+
+            if ($log === null) {
+                throw new NotFoundHttpException;
+            }
+
+            // Cancelled, not deleted: the owner's decision not to chase someone
+            // is history worth keeping.
+            $log->status = 'cancelled';
+            $log->status_at = Carbon::now();
+            $log->save();
+        });
+
+        return redirect()->route('reminders', ['business' => $businessId])
+            ->with('status', __('reminders.cancelled'));
     }
 
     /** Customer asked not to be reminded (DPDP — see the migration's note). */

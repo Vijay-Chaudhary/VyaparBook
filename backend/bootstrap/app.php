@@ -3,6 +3,7 @@
 use Illuminate\Foundation\Application;
 use Illuminate\Foundation\Configuration\Exceptions;
 use Illuminate\Foundation\Configuration\Middleware;
+use Illuminate\Console\Scheduling\Schedule;
 
 return Application::configure(basePath: dirname(__DIR__))
     ->withRouting(
@@ -36,6 +37,24 @@ return Application::configure(basePath: dirname(__DIR__))
             before: \Illuminate\Routing\Middleware\ThrottleRequests::class,
             prepend: \App\Http\Middleware\SetTenantContext::class,
         );
+    })
+    /*
+     | The app's FIRST scheduler (Phase 4c — automated payment reminders).
+     |
+     | OPERATIONAL PREREQUISITE: this does nothing unless the box runs
+     |   * `php artisan schedule:run` every minute from cron, and
+     |   * a queue worker (`php artisan queue:work`), since sending is queued.
+     | Without both, reminders are planned and never sent — safe, but silent.
+     |
+     | Planning runs early so an owner has the working day to cancel anything
+     | before dispatch releases it. Dispatch runs often because a batch held by
+     | quiet hours or a not-yet-reached send time just waits for the next tick;
+     | the dispatcher re-checks every safety condition, so extra passes are
+     | cheap. withoutOverlapping so a slow run cannot double-send.
+     */
+    ->withSchedule(function (Schedule $schedule) {
+        $schedule->command('reminders:plan')->dailyAt('06:00')->withoutOverlapping();
+        $schedule->command('reminders:dispatch')->everyFifteenMinutes()->withoutOverlapping();
     })
     ->withExceptions(function (Exceptions $exceptions) {
         //

@@ -127,6 +127,14 @@ Route::middleware('auth')->group(function () {
      | implicit binding (no tenant is pinned during route resolution).
      */
     Route::get('reminders', [ReminderController::class, 'index'])->name('reminders');
+
+    // Phase 4c: automation settings and cancelling a scheduled reminder before
+    // it goes out. Declared BEFORE reminders/{customer} — a literal segment
+    // must win over the wildcard, or /reminders/settings resolves as a
+    // customer id of "settings".
+    Route::post('reminders/settings', [ReminderController::class, 'settings'])->name('reminders.settings');
+    Route::post('reminders/planned/{reminder}/cancel', [ReminderController::class, 'cancelPlanned'])->name('reminders.cancel');
+
     Route::post('reminders/{customer}', [ReminderController::class, 'send'])->name('reminders.send');
     Route::post('reminders/{customer}/opt-out', [ReminderController::class, 'optOut'])->name('reminders.opt_out');
     Route::post('reminders/{customer}/opt-in', [ReminderController::class, 'optIn'])->name('reminders.opt_in');

@@ -233,3 +233,131 @@ it('shows the outcome of the last reminder on the row', function () {
         ->assertOk()
         ->assertSee(__('reminders.status.failed'));
 });
+
+describe('scheduled reminders (Phase 4c)', function () {
+    it('saves the automation settings and states what enabling means', function () {
+        [$owner, $business] = pwOwner();
+
+        $this->actingAs($owner)->post('/reminders/settings', [
+            'business' => $business->id,
+            'reminder_auto_enabled' => '1',
+            'reminder_send_at' => '11:30',
+            'reminder_cooldown_days' => '10',
+            'reminder_daily_cap' => '40',
+        ])->assertRedirect(route('reminders', ['business' => $business->id]));
+
+        $fresh = App\Models\Business::on('pgsql_migrate')->find($business->id);
+        expect($fresh->reminder_auto_enabled)->toBeTrue();
+        expect($fresh->reminder_cooldown_days)->toBe(10);
+        expect($fresh->reminder_daily_cap)->toBe(40);
+
+        $this->actingAs($owner)->get('/reminders?business=' . $business->id)
+            ->assertOk()
+            ->assertSee(__('reminders.auto_warning'));
+    });
+
+    it('refuses a send time outside quiet hours', function () {
+        [$owner, $business] = pwOwner();
+
+        $this->actingAs($owner)->post('/reminders/settings', [
+            'business' => $business->id,
+            'reminder_send_at' => '03:00',
+            'reminder_cooldown_days' => '7',
+            'reminder_daily_cap' => '25',
+        ])->assertSessionHasErrors('reminder_send_at');
+    });
+
+    it('rejects an absurd daily cap', function () {
+        [$owner, $business] = pwOwner();
+
+        $this->actingAs($owner)->post('/reminders/settings', [
+            'business' => $business->id,
+            'reminder_send_at' => '10:00',
+            'reminder_cooldown_days' => '7',
+            'reminder_daily_cap' => '5000',
+        ])->assertSessionHasErrors('reminder_daily_cap');
+    });
+
+    it('shows tomorrow\'s planned reminders so the owner can cancel them', function () {
+        [$owner, $business] = pwOwner();
+        $customer = remOverdueCustomer($business, $owner, 'Ramesh Kumar', '2500.00');
+
+        $batch = App\Models\ReminderBatch::on('pgsql_migrate')->create([
+            'business_id' => $business->id, 'scheduled_for' => now()->toDateString(),
+            'status' => 'planned', 'planned_count' => 1,
+        ]);
+        $log = new ReminderLog([
+            'business_id' => $business->id, 'customer_id' => $customer->id,
+            'channel' => 'cloud_api', 'amount_at_send' => '2500.00',
+            'locale' => 'en', 'phone_e164' => '919876543210', 'batch_id' => $batch->id,
+        ]);
+        $log->setConnection('pgsql_migrate');
+        $log->status = 'planned';
+        $log->save();
+
+        $this->actingAs($owner)->get('/reminders?business=' . $business->id)
+            ->assertOk()
+            ->assertSee(__('reminders.scheduled_heading'))
+            ->assertSee('Ramesh Kumar');
+
+        $this->actingAs($owner)->post('/reminders/planned/' . $log->id . '/cancel', [
+            'business' => $business->id,
+        ])->assertRedirect(route('reminders', ['business' => $business->id]));
+
+        expect(ReminderLog::on('pgsql_migrate')->find($log->id)->status)->toBe('cancelled');
+    });
+
+    it('does not let one tenant cancel another tenant\'s planned reminder', function () {
+        [$owner, $business] = pwOwner();
+        [$otherOwner, $otherBusiness] = pwOwner();
+        $customer = remOverdueCustomer($otherBusiness, $otherOwner, 'Not Yours');
+
+        $batch = App\Models\ReminderBatch::on('pgsql_migrate')->create([
+            'business_id' => $otherBusiness->id, 'scheduled_for' => now()->toDateString(),
+            'status' => 'planned', 'planned_count' => 1,
+        ]);
+        $log = new ReminderLog([
+            'business_id' => $otherBusiness->id, 'customer_id' => $customer->id,
+            'channel' => 'cloud_api', 'amount_at_send' => '2500.00',
+            'locale' => 'en', 'phone_e164' => '919876543210', 'batch_id' => $batch->id,
+        ]);
+        $log->setConnection('pgsql_migrate');
+        $log->status = 'planned';
+        $log->save();
+
+        $this->actingAs($owner)->post('/reminders/planned/' . $log->id . '/cancel', [
+            'business' => $business->id,
+        ])->assertNotFound();
+
+        // Read past the tenant scope: the row belongs to the OTHER tenant, which
+        // is precisely why the request 404'd.
+        $row = Illuminate\Support\Facades\DB::connection('pgsql_migrate')
+            ->table('reminder_logs')->where('id', $log->id)->first();
+        expect($row->status)->toBe('planned');
+    });
+
+    it('lets a manual tap chase someone the cooldown would have skipped', function () {
+        // The cooldown restrains the machine, not the owner: a human deciding to
+        // chase again is a different act.
+        [$owner, $business] = pwOwner();
+        $customer = remOverdueCustomer($business, $owner, 'Recently Auto-Reminded');
+
+        $batch = App\Models\ReminderBatch::on('pgsql_migrate')->create([
+            'business_id' => $business->id, 'scheduled_for' => now()->subDay()->toDateString(),
+            'status' => 'sent', 'planned_count' => 1, 'sent_count' => 1,
+        ]);
+        $log = new ReminderLog([
+            'business_id' => $business->id, 'customer_id' => $customer->id,
+            'channel' => 'cloud_api', 'amount_at_send' => '2500.00',
+            'locale' => 'en', 'phone_e164' => '919876543210', 'batch_id' => $batch->id,
+        ]);
+        $log->setConnection('pgsql_migrate');
+        $log->status = 'sent';
+        $log->save();
+
+        $response = $this->actingAs($owner)
+            ->post('/reminders/' . $customer->id, ['business' => $business->id]);
+
+        expect($response->headers->get('Location'))->toStartWith('https://wa.me/');
+    });
+});

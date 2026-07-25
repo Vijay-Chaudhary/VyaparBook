@@ -36,7 +36,7 @@ class CatalogController extends Controller
                         ->whereHas('packSize', fn ($p) => $p->whereNull('pack_sizes.archived_at'));
                 });
             }])
-            ->orderBy('name_hi')
+            ->orderBy('name_en')
             ->get();
 
         $packSizes = PackSize::query()

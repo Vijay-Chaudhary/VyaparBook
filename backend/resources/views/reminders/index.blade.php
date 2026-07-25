@@ -23,6 +23,67 @@
         <p class="card mb-3 text-sm text-danger">{{ session('error') }}</p>
     @endif
 
+    {{-- Phase 4c: what the scheduler intends to send, while it can still be
+         stopped. Shown above the overdue list because it is time-sensitive. --}}
+    <div class="card mt-4">
+        <h2 class="mb-2 font-semibold">{{ __('reminders.scheduled_heading') }}</h2>
+        @if ($planned->isEmpty())
+            <p class="text-sm text-ink-muted">{{ __('reminders.scheduled_none') }}</p>
+        @else
+            <table class="w-full text-sm">
+                <tbody>
+                    @foreach ($planned as $item)
+                        <tr>
+                            <td>{{ $item->customer?->name ?? '—' }}</td>
+                            <td class="tabular text-right">{{ Inr::format($item->amount_at_send) }}</td>
+                            <td class="text-right">
+                                <form method="POST" action="{{ route('reminders.cancel', ['reminder' => $item->id]) }}">
+                                    @csrf
+                                    <input type="hidden" name="business" value="{{ $businessId }}">
+                                    <button type="submit" class="text-xs text-danger">{{ __('reminders.cancel') }}</button>
+                                </form>
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        @endif
+    </div>
+
+    {{-- Automation settings. The warning is deliberately not fine print: the
+         owner is agreeing that messages go out without asking them again. --}}
+    <div class="card mt-4">
+        <h2 class="mb-2 font-semibold">{{ __('reminders.automation') }}</h2>
+        <form method="POST" action="{{ route('reminders.settings') }}" class="flex flex-wrap items-end gap-3">
+            @csrf
+            <input type="hidden" name="business" value="{{ $businessId }}">
+            <label class="flex items-center gap-2 text-sm">
+                <input type="checkbox" name="reminder_auto_enabled" value="1" @checked($business->reminder_auto_enabled)>
+                {{ __('reminders.auto_enabled') }}
+            </label>
+            <label class="text-sm">
+                <span class="block text-ink-muted">{{ __('reminders.send_at') }}</span>
+                <input type="time" name="reminder_send_at" class="field-input"
+                       value="{{ \Illuminate\Support\Str::substr((string) $business->reminder_send_at, 0, 5) }}">
+            </label>
+            <label class="text-sm">
+                <span class="block text-ink-muted">{{ __('reminders.cooldown_days') }}</span>
+                <input type="number" name="reminder_cooldown_days" min="0" max="90" class="field-input"
+                       value="{{ $business->reminder_cooldown_days }}">
+            </label>
+            <label class="text-sm">
+                <span class="block text-ink-muted">{{ __('reminders.daily_cap') }}</span>
+                <input type="number" name="reminder_daily_cap" min="1" max="200" class="field-input"
+                       value="{{ $business->reminder_daily_cap }}">
+            </label>
+            <button type="submit" class="btn-primary">{{ __('reminders.save') }}</button>
+        </form>
+        <p class="mt-2 text-xs text-ink-muted">{{ __('reminders.auto_warning') }}</p>
+        <p class="text-xs text-ink-muted">{{ __('reminders.send_at_hint') }} {{ __('reminders.cooldown_hint') }}</p>
+        @error('reminder_send_at') <p class="text-xs text-danger">{{ $message }}</p> @enderror
+        @error('reminder_daily_cap') <p class="text-xs text-danger">{{ $message }}</p> @enderror
+    </div>
+
     <div class="card mt-4 overflow-x-auto">
         <p class="mb-3 text-xs text-ink-muted">
             {{ __('reminders.thresholds', ['amount' => Inr::format($minOutstanding), 'days' => $minDays]) }}

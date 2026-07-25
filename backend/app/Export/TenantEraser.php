@@ -48,6 +48,8 @@ class TenantEraser
         'suppliers',
         // Before customers: reminder_logs.customer_id FKs into it.
         'reminder_logs',
+        // After reminder_logs: its batch_id FKs into this.
+        'reminder_batches',
         'customers',
         'expenses',
         'subscription_payments',
