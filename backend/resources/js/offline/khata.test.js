@@ -268,3 +268,74 @@ describe('khata list', () => {
         expect((await khataList(db, { includeArchived: true }))).toHaveLength(2);
     });
 });
+
+describe('ledger line items', () => {
+    /** The catalog every item test needs: one product in one pack size. */
+    const seedCatalog = async () => {
+        await db.products.bulkPut([{ id: 'p1', name_en: 'Sev Mix', name_hi: 'सेव मिक्स' }]);
+        await db.product_packs.bulkPut([{ id: 'k1', product_id: 'p1', label: '1kg' }]);
+    };
+
+    it('lists the items of a synced sale at the price charged', async () => {
+        await db.customers.put(customer());
+        await seedCatalog();
+        await db.sales.put(sale({ uuid: 'sale-1', id: 'srv-sale-1', total: '210.00' }));
+        await db.sale_lines.bulkPut([
+            { id: 'l1', sale_id: 'srv-sale-1', product_pack_id: 'k1', qty: 2, rate: '105.00' },
+        ]);
+
+        const entries = await ledgerFor(db, customer());
+        const saleEntry = entries.find((e) => e.uuid === 'sale-1');
+
+        expect(saleEntry.items).toHaveLength(1);
+        expect(saleEntry.items[0].description).toBe('Sev Mix 1kg');
+        expect(saleEntry.items[0].subtotalPaise).toBe(21000);
+    });
+
+    it('reports the negotiated rate, not the pack default', async () => {
+        await db.customers.put(customer());
+        await seedCatalog();
+        await db.sales.put(sale({ uuid: 'sale-2', id: 'srv-sale-2', total: '160.00' }));
+        await db.sale_lines.bulkPut([
+            { id: 'l2', sale_id: 'srv-sale-2', product_pack_id: 'k1', qty: 2, rate: '80.00' },
+        ]);
+
+        const entries = await ledgerFor(db, customer());
+
+        expect(entries.find((e) => e.uuid === 'sale-2').items[0].ratePaise).toBe(8000);
+    });
+
+    it('lists the items of a queued sale from its outbox payload', async () => {
+        await db.customers.put(customer());
+        await seedCatalog();
+        await enqueue(db, {
+            type: 'sale',
+            tenantId: TENANT,
+            uuid: 'queued-1',
+            payload: {
+                customer_id: 'srv-cust-1',
+                sale_date: '2026-07-02',
+                total: '105.00',
+                lines: [{ product_pack_id: 'k1', qty: 1, rate: '105.00' }],
+            },
+        });
+
+        const entries = await ledgerFor(db, customer());
+        const queued = entries.find((e) => e.uuid === 'queued-1');
+
+        // A pending sale is shown, so it must carry its items too — otherwise it
+        // renders as a bare total with nothing under it.
+        expect(queued.pending).toBe(true);
+        expect(queued.items[0].description).toBe('Sev Mix 1kg');
+    });
+
+    it('gives a payment an empty item list so the entry shape is uniform', async () => {
+        await db.customers.put(customer());
+        await seedCatalog();
+        await db.payments.put(payment({ uuid: 'pay-1' }));
+
+        const entries = await ledgerFor(db, customer());
+
+        expect(entries.find((e) => e.uuid === 'pay-1').items).toEqual([]);
+    });
+});

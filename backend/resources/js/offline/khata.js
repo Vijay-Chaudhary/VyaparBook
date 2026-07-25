@@ -1,3 +1,5 @@
+import { getLocale } from '../i18n';
+import { describeLines } from './lineItems';
 import { sumPaise, toPaise } from './money';
 import { PENDING } from './outbox';
 
@@ -95,6 +97,14 @@ export async function ledgerFor(db, customer, { includePending = true } = {}) {
     const sales = await db.sales.filter((s) => customerKeys.includes(s.customer_id)).toArray();
     const payments = await db.payments.filter((p) => customerKeys.includes(p.customer_id)).toArray();
 
+    // Read the catalog once for the whole ledger rather than per sale. A synced
+    // sale's items come from cached sale_lines; a queued one's from its outbox
+    // payload, which is why both sources are resolved through the same formatter.
+    const packs = await db.product_packs.toArray();
+    const products = await db.products.toArray();
+    const allLines = await db.sale_lines.toArray();
+    const locale = getLocale();
+
     const entries = [
         ...sales.map((s) => ({
             kind: s.reverses_id ? 'sale_reversal' : 'sale',
@@ -103,6 +113,10 @@ export async function ledgerFor(db, customer, { includePending = true } = {}) {
             created_at: s.created_at,
             deltaPaise: toPaise(s.total),
             pending: false,
+            items: describeLines(
+                allLines.filter((l) => l.sale_id === s.id),
+                packs, products, locale
+            ),
         })),
         ...payments.map((p) => ({
             kind: p.reverses_id ? 'payment_reversal' : 'payment',
@@ -111,6 +125,7 @@ export async function ledgerFor(db, customer, { includePending = true } = {}) {
             created_at: p.created_at,
             deltaPaise: -toPaise(p.amount),
             pending: false,
+            items: [],   // a payment has no lines; keep the entry shape uniform
         })),
     ];
 
@@ -128,6 +143,7 @@ export async function ledgerFor(db, customer, { includePending = true } = {}) {
                     created_at: new Date(entry.created_at).toISOString(),
                     deltaPaise: toPaise(entry.payload.total ?? '0'),
                     pending: true, // shown as "not yet synced", never hidden
+                    items: describeLines(entry.payload.lines, packs, products, locale),
                 });
             } else if (entry.type === 'payment') {
                 entries.push({
@@ -137,6 +153,7 @@ export async function ledgerFor(db, customer, { includePending = true } = {}) {
                     created_at: new Date(entry.created_at).toISOString(),
                     deltaPaise: -toPaise(entry.payload.amount ?? '0'),
                     pending: true,
+                    items: [],
                 });
             }
         }

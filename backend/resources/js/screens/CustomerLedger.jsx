@@ -79,7 +79,8 @@ export function CustomerLedger({ customer, entries, outstandingPaise, readOnly =
                     {/* Newest first: the recent end of a khata is what gets
                         checked, and it saves scrolling past years of history. */}
                     {[...entries].reverse().map((entry) => (
-                        <li key={entry.uuid} className="card flex items-center gap-3 py-3">
+                        <li key={entry.uuid} className="card py-3">
+                          <div className="flex items-center gap-3">
                             <span className="min-w-0 flex-1">
                                 <span className="block font-medium">{t(entry.kind)}</span>
                                 <span className="block text-sm text-ink-muted">
@@ -107,6 +108,24 @@ export function CustomerLedger({ customer, entries, outstandingPaise, readOnly =
                                     {formatRupees(entry.runningPaise)}
                                 </span>
                             </span>
+                          </div>
+
+                          {/* What was actually sold, at the price actually charged.
+                              Shown inline rather than behind a tap: a sale total
+                              alone does not answer "what did I buy, and for how
+                              much" — the question this screen exists for. */}
+                          {entry.items?.length > 0 && (
+                              <ul className="mt-2 space-y-0.5 border-t border-hairline pt-2">
+                                  {entry.items.map((item, i) => (
+                                      <li key={i} className="flex justify-between gap-2 text-xs text-ink-muted">
+                                          <span className="min-w-0 truncate">{item.description || '—'}</span>
+                                          <span className="tabular shrink-0">
+                                              {item.qty} × {formatRupees(item.ratePaise)}
+                                          </span>
+                                      </li>
+                                  ))}
+                              </ul>
+                          )}
                         </li>
                     ))}
                 </ul>
