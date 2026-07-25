@@ -90,7 +90,7 @@ git checkout -b feat/whatsapp-reminders-phase-4a
 
 ## Task 1: Schema — `reminder_logs`, settings, opt-out
 
-- [ ] **Step 1: `reminder_logs` migration**
+- [x] **Step 1: `reminder_logs` migration**
 
 Copy the `expenses` migration's RLS block verbatim, changing the table name.
 Columns: `id` uuid pk; `business_id` fk→businesses cascade; `customer_id`
@@ -102,7 +102,7 @@ for the "already reminded today" check. **No** `version`/`sync_seq` — online-o
 never enters offline sync. No `uuid` idempotency column: a deliberate re-send is
 legitimate (spec §Error handling).
 
-- [ ] **Step 2: settings + opt-out migrations**
+- [x] **Step 2: settings + opt-out migrations**
 
 `businesses`: `reminder_min_outstanding` decimal(12,2) default `'500.00'`,
 `reminder_min_days` smallint default `30`. `customers`: `reminder_opt_out_at`
@@ -110,19 +110,19 @@ timestamp nullable. Both plain `Schema::connection('pgsql_migrate')->table(...)`
 `businesses` is platform-level and needs no policy change, `customers` already
 has its own.
 
-- [ ] **Step 3: models**
+- [x] **Step 3: models**
 
 `ReminderLog` — `BelongsToTenant`, `HasUuids`; `$fillable` excludes `created_by`.
 Cast `amount_at_send` decimal:2. Add casts to `Customer` (`reminder_opt_out_at`
 → datetime) and `Business` (`reminder_min_outstanding` decimal:2,
 `reminder_min_days` integer).
 
-- [ ] **Step 4: register for DPDP**
+- [x] **Step 4: register for DPDP**
 
 Add `'reminder_logs'` to `TenantEraser::TABLES` **before** `customers` (FK order:
 children first) and to `TenantExporter`'s list. Run the existing DPDP tests.
 
-- [ ] **Step 5: migrate + commit**
+- [x] **Step 5: migrate + commit**
 
 ```bash
 php artisan migrate
