@@ -125,7 +125,7 @@ transports.
 
 ## Task 4: The webhook (TDD)
 
-- [ ] **Step 1: write `tests/Feature/WhatsAppWebhookTest.php` first**
+- [x] **Step 1: write `tests/Feature/WhatsAppWebhookTest.php` first**
 
 - `GET` with the right `hub.verify_token` echoes `hub.challenge`; a wrong token
   is refused.
@@ -139,11 +139,11 @@ transports.
 - A stop-word embedded in an ordinary sentence does **not** opt out.
 - Unknown message id / unknown number are ignored without error.
 
-- [ ] **Step 2: `app/Reminders/StopWords.php`** — exact-match (after trim,
+- [x] **Step 2: `app/Reminders/StopWords.php`** — exact-match (after trim,
   case-fold, strip punctuation) against a configured en/hi list. Deliberately
   **not** a substring match: "please don't stop sending" must not opt out.
 
-- [ ] **Step 3: implement `WhatsAppWebhookController`**
+- [x] **Step 3: implement `WhatsAppWebhookController`**
 
 Raw-body HMAC compare with `hash_equals`, never `==`. Routed in `routes/web.php`
 **outside** every auth/tenant group, and CSRF-exempt via
@@ -154,17 +154,18 @@ The cross-tenant opt-out runs on the privileged `pgsql_migrate` connection in
 one transaction, selecting solely on `phone`, and writes a `PlatformAudit`
 entry — a cross-tenant write must never be invisible.
 
-- [ ] **Step 4: run, pass, commit.**
+- [x] **Step 4: run, pass, commit.**
 
 ---
 
 ## Task 5: Full suite, docs, wrap-up
 
-- [ ] **Step 1: `php artisan test`** — 558 baseline + the new cases, no regressions.
-- [ ] **Step 2: `.env.example`** — add the `WHATSAPP_*` keys, commented, with
+- [x] **Step 1: `php artisan test`** — 558 baseline + the new cases, no regressions.
+  **Result (2026-07-25):** 589 passed, 1713 assertions — 558 + 31 new (9 sender, 5 job, 4 controller, 13 webhook), 0 failures.
+- [x] **Step 2: `.env.example`** — add the `WHATSAPP_*` keys, commented, with
   `WHATSAPP_DRIVER=log` as the shipped default.
-- [ ] **Step 3: `docs/ui-backlog.md`** — `F-05`, noting it ships dark.
-- [ ] **Step 4: manual smoke test** — **cannot be done without credentials.**
+- [x] **Step 3: `docs/ui-backlog.md`** — `F-05`, noting it ships dark.
+- [ ] **Step 4: manual smoke test** — **NOT DONE; blocked on credentials.**
   Record it as outstanding rather than ticking it; the spec's runbook is what
   whoever has the credentials follows.
 - [ ] **Step 5: commit, PR, squash-merge** (`gh api` REST).
