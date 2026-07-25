@@ -137,7 +137,7 @@ git commit -m "feat: add reminder_logs, reminder thresholds and customer opt-out
 This is pure logic; test it first and hardest, because a malformed link is
 invisible until a customer gets a message meant for someone else.
 
-- [ ] **Step 1: write `tests/Unit/ReminderMessageTest.php` first**
+- [x] **Step 1: write `tests/Unit/ReminderMessageTest.php` first**
 
 Cover: bare 10-digit `9876543210` → `919876543210`; already-prefixed `+91 98765 43210`
 and `0091-9876543210`; embedded spaces/dashes/parens stripped; too short (`98765`),
@@ -147,9 +147,9 @@ Then: the URL is `https://wa.me/919876543210?text=…` with the text
 percent-encoded; the message contains the shop name, the formatted amount via
 `Inr::format`, and renders differently under `en` vs `hi`.
 
-- [ ] **Step 2: run it and watch it fail** — `./vendor/bin/pest tests/Unit/ReminderMessageTest.php`
+- [x] **Step 2: run it and watch it fail** — `./vendor/bin/pest tests/Unit/ReminderMessageTest.php`
 
-- [ ] **Step 3: implement `app/Reminders/ReminderMessage.php`**
+- [x] **Step 3: implement `app/Reminders/ReminderMessage.php`**
 
 ```php
 /** Digits-only E.164 for India; null when the number cannot be trusted. */
@@ -169,7 +169,7 @@ Text comes from `lang/{en,hi}/reminders.php` via `trans(..., locale: $locale)` �
 the **customer-facing** locale, not the owner's UI locale. Keep the whole
 composition in this class: 4b reuses it verbatim.
 
-- [ ] **Step 4: run it and watch it pass. Commit.**
+- [x] **Step 4: run it and watch it pass. Commit.**
 
 ---
 
