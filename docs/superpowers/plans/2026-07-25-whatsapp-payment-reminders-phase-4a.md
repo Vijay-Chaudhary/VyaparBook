@@ -257,11 +257,12 @@ including the **customer-facing** message body, which is what actually gets sent
 
 ## Task 5: Full-suite green + wrap-up
 
-- [ ] **Step 1: `php artisan test`** — expect 529 + the new cases, no regressions.
-- [ ] **Step 2: manual check** — `/reminders` as the demo owner; confirm the link
+- [x] **Step 1: `php artisan test`** — expect 529 + the new cases, no regressions.
+  **Result (2026-07-25):** 558 passed, 1637 assertions — 529 baseline + 29 new (9 message, 9 service, 11 feature), 0 failures.
+- [ ] **Step 2: manual check** — NOT DONE (needs a real WhatsApp handoff to judge). — `/reminders` as the demo owner; confirm the link
   opens WhatsApp with the right number and prefilled text, and that a no-phone
   and an opted-out customer both render as non-sendable.
-- [ ] **Step 3: `docs/ui-backlog.md`** — add `F-04`.
+- [x] **Step 3: `docs/ui-backlog.md`** — add `F-04`.
 - [ ] **Step 4: commit, then finish the branch** (PR → squash-merge, per the
   Phase 3 flow; `gh api` REST, since `gh pr` subcommands fail on this repo).
 
