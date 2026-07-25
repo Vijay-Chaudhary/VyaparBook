@@ -11,6 +11,7 @@ final readonly class DashboardReport
      * @param list<TrendRow>               $trend  exactly 12 rows, Jan..Dec
      * @param list<StockValuationRow>      $stockValuation
      * @param list<CashFlowRow>            $cashTrend  exactly 12 rows, Jan..Dec
+     * @param list<FinishedGoodsRow>      $finishedGoods  on-hand per product, biggest first
      */
     public function __construct(
         public ReportPeriod $period,
@@ -46,5 +47,8 @@ final readonly class DashboardReport
         public string $netCashMonthRupees,
         public string $cashPositionRupees,
         public array $cashTrend,   // list<CashFlowRow>, exactly 12 rows Jan..Dec
+        // Finished goods: produced kg minus sold kg per product, since
+        // inception. onHandKg may be negative — see FinishedGoodsRow.
+        public array $finishedGoods,
     ) {}
 }

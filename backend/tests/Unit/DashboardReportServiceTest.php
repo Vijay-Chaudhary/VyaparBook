@@ -245,6 +245,7 @@ it('assembles a full report, with highest-selling/profit and an empty-shop case'
     expect($report->netCashMonthRupees)->toBe('0.00');
     expect($report->cashPositionRupees)->toBe('0.00');
     expect($report->cashTrend)->toHaveCount(12);
+    expect($report->finishedGoods)->toBe([]);   // empty shop: nothing made, nothing sold
 
     Illuminate\Support\Carbon::setTestNow();
 });

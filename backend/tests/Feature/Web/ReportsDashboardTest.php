@@ -163,3 +163,28 @@ describe('phase 2b', function () {
             ->assertSee('₹1,000.00');       // the still-estimated half, flagged
     });
 });
+
+describe('finished goods', function () {
+    it('shows produced, sold and on-hand kg per product', function () {
+        [$owner, $business] = reportsOwner();
+
+        $product = App\Models\Product::on('pgsql_migrate')->create([
+            'business_id' => $business->id, 'name_hi' => 'Aloo Bhujia', 'name_en' => 'Aloo Bhujia',
+        ]);
+
+        $batch = new App\Models\ProductionBatch([
+            'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
+            'product_id' => $product->id, 'batch_date' => now()->toDateString(), 'output_kg' => '20.000',
+        ]);
+        $batch->setConnection('pgsql_migrate');
+        $batch->created_by = $owner->id;
+        $batch->save();
+
+        $this->actingAs($owner)->get('/reports/dashboard?business=' . $business->id)
+            ->assertOk()
+            ->assertSee(__('reports.finished_goods'))
+            ->assertSee(__('reports.on_hand_kg'))
+            ->assertSee('Aloo Bhujia')
+            ->assertSee('20');
+    });
+});
