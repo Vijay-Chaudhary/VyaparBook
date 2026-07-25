@@ -22,5 +22,6 @@ class Business extends Model
         'reminder_auto_enabled' => 'boolean',
         'reminder_cooldown_days' => 'integer',
         'reminder_daily_cap' => 'integer',
+        'default_gst_rate_percent' => 'decimal:2',
     ];
 }

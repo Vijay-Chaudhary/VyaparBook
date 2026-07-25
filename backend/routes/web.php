@@ -8,6 +8,8 @@ use App\Http\Controllers\Web\BillingController;
 use App\Http\Controllers\Web\LoginController;
 use App\Http\Controllers\Web\OnboardingController;
 use App\Http\Controllers\Web\ExpenseController;
+use App\Http\Controllers\Web\GstSettingsController;
+use App\Http\Controllers\Web\InvoiceController;
 use App\Http\Controllers\Web\PurchaseController;
 use App\Http\Controllers\Web\RegisterController;
 use App\Http\Controllers\Web\ReminderController;
@@ -139,6 +141,23 @@ Route::middleware('auth')->group(function () {
     Route::post('reminders/{customer}', [ReminderController::class, 'send'])->name('reminders.send');
     Route::post('reminders/{customer}/opt-out', [ReminderController::class, 'optOut'])->name('reminders.opt_out');
     Route::post('reminders/{customer}/opt-in', [ReminderController::class, 'optIn'])->name('reminders.opt_in');
+
+    /*
+     | GST invoicing (PRD Phase 3) — Blade, online-only, owner-only.
+     |
+     | Online by necessity, not habit: issuing allocates a GAPLESS invoice
+     | number, which an offline device cannot safely do. Sales stay
+     | offline-first; only invoicing one needs a connection.
+     |
+     | {invoice} is resolved owner-scoped inside the controller, never via
+     | implicit binding (no tenant is pinned during route resolution).
+     */
+    Route::get('invoices', [InvoiceController::class, 'index'])->name('invoices');
+    Route::post('invoices', [InvoiceController::class, 'store'])->name('invoices.store');
+    Route::get('invoices/{invoice}', [InvoiceController::class, 'show'])->name('invoices.show');
+
+    Route::get('gst', [GstSettingsController::class, 'edit'])->name('gst');
+    Route::post('gst', [GstSettingsController::class, 'update'])->name('gst.save');
 
     // Session -> JWT exchange for the React layer. Throttled because it mints
     // credentials: a valid session should not make it freely spammable.

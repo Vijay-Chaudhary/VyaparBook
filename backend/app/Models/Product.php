@@ -20,6 +20,9 @@ class Product extends Model
     protected $fillable = ['business_id', 'name_hi', 'name_en', 'base_cost_per_kg'];
 
     protected $casts = [
+        // Server-side only: deliberately absent from the API whitelist so the
+        // offline sync payload is unchanged (GST spec, Schema note).
+        'gst_rate_percent' => 'decimal:2',
         'base_cost_per_kg' => 'decimal:2',
         'archived_at' => 'datetime',
         'version' => 'integer',

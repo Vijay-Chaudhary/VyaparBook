@@ -36,6 +36,11 @@ class TenantEraser
         'material_consumptions',
         'stock_movements',
         'purchases',
+        // Before sales: invoices.sale_id FKs into it, and invoice_lines into
+        // invoices. invoice_counters is standalone but belongs with them.
+        'invoice_lines',
+        'invoices',
+        'invoice_counters',
         'sale_lines',
         'payments',
         'sales',
