@@ -22,6 +22,7 @@ use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Validator;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 class SyncController extends Controller
 {
@@ -164,6 +165,11 @@ class SyncController extends Controller
                 // A referenced customer/pack the caller cannot see (RLS) or that
                 // does not exist. Report, do not fail the batch.
                 $results[] = ['uuid' => $uuid, 'status' => 'rejected', 'reason' => 'not_found'];
+            } catch (ValidationException) {
+                // A domain rule the writer enforces (e.g. a line below its cost
+                // floor). Same shape as the other rejection branches: report,
+                // do not fail the batch, and let the savepoint's rollback stand.
+                $results[] = ['uuid' => $uuid, 'status' => 'rejected', 'reason' => 'invalid'];
             }
         }
 

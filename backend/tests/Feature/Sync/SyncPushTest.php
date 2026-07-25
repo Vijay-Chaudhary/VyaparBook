@@ -7,6 +7,7 @@ use App\Models\Membership;
 use App\Models\Payment;
 use App\Models\User;
 use App\Services\TokenService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 function syncSetup(string $role = 'owner'): array
@@ -111,4 +112,47 @@ it('rejects a mutation referencing a customer the caller cannot see', function (
 
     expect($response->json('results.0.status'))->toBe('rejected');
     expect($response->json('results.0.reason'))->toBe('not_found');
+});
+
+it('rejects only the below-floor line and still applies the rest of the batch', function () {
+    [$business, $token, $customer] = syncSetup();
+
+    // syncSetup has no catalog, so build one with a cost floor of 70.00.
+    $product = App\Models\Product::on('pgsql_migrate')->create([
+        'business_id' => $business->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
+    ]);
+    $size = App\Models\PackSize::on('pgsql_migrate')->create([
+        'business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500',
+    ]);
+    $pack = App\Models\ProductPack::on('pgsql_migrate')->create([
+        'business_id' => $business->id, 'product_id' => $product->id,
+        'pack_size_id' => $size->id, 'default_sell_price' => '90.00',
+        'default_cost_price' => '70.00',
+    ]);
+
+    $good = (string) Str::uuid();
+    $bad = (string) Str::uuid();
+
+    $saleMutation = fn (string $uuid, string $rate) => [
+        'type' => 'sale', 'tenant_id' => $business->id, 'uuid' => $uuid,
+        'payload' => [
+            'uuid' => $uuid, 'customer_id' => $customer->id, 'sale_date' => '2026-07-20',
+            'lines' => [['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => $rate]],
+        ],
+    ];
+
+    $response = push($token, [$saleMutation($good, '80.00'), $saleMutation($bad, '10.00')])->assertOk();
+
+    // The promise is that the bad mutation is REPORTED, not merely absent: a
+    // results array that mislabelled it would still leave the DB looking right.
+    $byUuid = collect($response->json('results'))->keyBy('uuid');
+    expect($byUuid[$good]['status'])->toBe('applied');
+    expect($byUuid[$bad]['status'])->toBe('rejected');
+    expect($byUuid[$bad]['reason'])->toBe('invalid');
+
+    // The legitimate sale survives its neighbour's rejection.
+    expect(DB::connection('pgsql_migrate')->table('sales')
+        ->where('business_id', $business->id)->where('uuid', $good)->count())->toBe(1);
+    expect(DB::connection('pgsql_migrate')->table('sales')
+        ->where('business_id', $business->id)->where('uuid', $bad)->count())->toBe(0);
 });

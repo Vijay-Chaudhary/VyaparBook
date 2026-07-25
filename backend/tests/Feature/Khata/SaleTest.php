@@ -11,6 +11,7 @@ use App\Models\Sale;
 use App\Models\User;
 use App\Services\KhataService;
 use App\Services\TokenService;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /**
@@ -149,4 +150,148 @@ it('returns 404 posting a sale for another businesses customer', function () {
 
     postSale($token, $foreignCustomer, [['product_pack_id' => $pack->id, 'qty' => 1]])
         ->assertStatus(404);
+});
+
+it('honours a negotiated rate from the client', function () {
+    [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
+
+    postSale($token, $customer, [
+        ['product_pack_id' => $pack->id, 'qty' => 2, 'rate' => '80.00'],
+    ])->assertCreated();
+
+    $line = DB::connection('pgsql_migrate')->table('sale_lines')
+        ->where('business_id', $business->id)->sole();
+
+    expect((string) $line->rate)->toBe('80.00');
+    expect((string) $line->line_total)->toBe('160.00');
+    // Server-authored, and it records what list WAS that day.
+    expect((string) $line->list_rate)->toBe('90.00');
+});
+
+it('falls back to the default when no rate is sent, so older clients still work', function () {
+    [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
+
+    postSale($token, $customer, [
+        ['product_pack_id' => $pack->id, 'qty' => 1],
+    ])->assertCreated();
+
+    $line = DB::connection('pgsql_migrate')->table('sale_lines')
+        ->where('business_id', $business->id)->sole();
+
+    expect((string) $line->rate)->toBe('90.00');
+    expect((string) $line->list_rate)->toBe('90.00');
+});
+
+it('ignores a client-sent list_rate, so a discount cannot be faked', function () {
+    [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
+
+    postSale($token, $customer, [
+        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '80.00', 'list_rate' => '80.00'],
+    ])->assertCreated();
+
+    $line = DB::connection('pgsql_migrate')->table('sale_lines')
+        ->where('business_id', $business->id)->sole();
+
+    expect((string) $line->list_rate)->toBe('90.00');   // the server's, not the client's
+});
+
+it('refuses a rate below the pack cost floor', function () {
+    [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
+    DB::connection('pgsql_migrate')->table('product_packs')
+        ->where('id', $pack->id)->update(['default_cost_price' => '70.00']);
+
+    postSale($token, $customer, [
+        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '69.99'],
+    ])
+        ->assertStatus(422)
+        // The test product only has name_hi set (saleSetup does not set name_en),
+        // so the fallback chain in LedgerWriter lands on the Hindi name — this
+        // also incidentally proves the `sales.rate_below_floor` key resolves and
+        // both placeholders are filled, not just that some 422 came back.
+        ->assertJsonPath('errors.lines.0', 'Rate for सेव cannot be below 70.00.');
+
+    expect(DB::connection('pgsql_migrate')->table('sale_lines')
+        ->where('business_id', $business->id)->count())->toBe(0);
+});
+
+it('allows a rate exactly at the floor', function () {
+    [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
+    DB::connection('pgsql_migrate')->table('product_packs')
+        ->where('id', $pack->id)->update(['default_cost_price' => '70.00']);
+
+    postSale($token, $customer, [
+        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '70.00'],
+    ])->assertCreated();
+});
+
+it('allows a rate above list — negotiating upward is legitimate', function () {
+    [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
+
+    postSale($token, $customer, [
+        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '120.00'],
+    ])->assertCreated();
+
+    $line = DB::connection('pgsql_migrate')->table('sale_lines')
+        ->where('business_id', $business->id)->sole();
+
+    expect((string) $line->rate)->toBe('120.00');
+    expect((string) $line->list_rate)->toBe('90.00');
+});
+
+it('voids a sale by copying both rates unchanged and negating only qty and total', function () {
+    // owner, not salesman: voiding is an owner/admin-only act (KhataPolicy::voidSale) —
+    // this test is about list_rate surviving a void, not about who may void.
+    [$business, $token, $customer, $pack] = saleSetup('owner', '90.00');
+
+    $created = postSale($token, $customer, [
+        ['product_pack_id' => $pack->id, 'qty' => 2, 'rate' => '80.00'],
+    ])->assertCreated();
+
+    test()->withHeader('Authorization', "Bearer {$token}")
+        ->postJson('/api/v1/sales/'.$created->json('id').'/void')
+        ->assertCreated();
+
+    $reversal = DB::connection('pgsql_migrate')->table('sale_lines')
+        ->where('business_id', $business->id)->where('qty', -2)->sole();
+
+    // The price is mirrored, not re-derived: today's default may have moved.
+    expect((string) $reversal->rate)->toBe('80.00');
+    expect((string) $reversal->list_rate)->toBe('90.00');
+    expect((string) $reversal->line_total)->toBe('-160.00');
+});
+
+it('rejects a negative rate — a return is a negative qty, not a negative price', function () {
+    [, $token, $customer, $pack] = saleSetup('salesman', '90.00');
+
+    postSale($token, $customer, [
+        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '-5.00'],
+    ])->assertStatus(422);
+});
+
+it('applies the floor to a return line too, independent of the qty sign', function () {
+    [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
+    DB::connection('pgsql_migrate')->table('product_packs')
+        ->where('id', $pack->id)->update(['default_cost_price' => '70.00']);
+
+    postSale($token, $customer, [
+        ['product_pack_id' => $pack->id, 'qty' => -1, 'rate' => '60.00'],
+    ])->assertStatus(422);
+});
+
+it('rolls back the whole sale when only a later line breaks the floor', function () {
+    [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
+    DB::connection('pgsql_migrate')->table('product_packs')
+        ->where('id', $pack->id)->update(['default_cost_price' => '70.00']);
+
+    postSale($token, $customer, [
+        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '90.00'],   // valid on its own
+        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '60.00'],  // below the floor
+    ])->assertStatus(422);
+
+    // The transaction boundary in LedgerWriter::createSale must undo the first
+    // line too — a partial write would leave a sale with only its valid line.
+    expect(DB::connection('pgsql_migrate')->table('sales')
+        ->where('business_id', $business->id)->count())->toBe(0);
+    expect(DB::connection('pgsql_migrate')->table('sale_lines')
+        ->where('business_id', $business->id)->count())->toBe(0);
 });
