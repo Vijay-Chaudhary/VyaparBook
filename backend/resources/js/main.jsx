@@ -4,11 +4,12 @@ import { getActiveBusiness, getImpersonation, getToken, setActiveBusiness } from
 import { apiWrite } from './api/write';
 import { closeTenantDb, deleteTenantDb, openTenantDb } from './offline/db';
 import { enqueue, pendingCount, stalenessState } from './offline/outbox';
+import { productName } from './offline/catalog';
 import { khataList, ledgerFor, outstandingFor } from './offline/khata';
 import { movementsFor, stockList } from './offline/stock';
 import { assertSafeToSwitch, sync } from './offline/sync';
 import { registerServiceWorker } from './offline/register-sw';
-import { setLocale, t, today } from './i18n';
+import { getLocale, setLocale, t, today } from './i18n';
 import { matchRoute, navigate, useRoute } from './router';
 import { BottomNav, BusinessSwitcher, ImpersonationBanner, StalenessBanner, SyncBar } from './components/Chrome';
 import { Home } from './screens/Home';
@@ -253,7 +254,9 @@ function App({ userName, locale }) {
                 // Batches newest first. sync/pull sends the raw rows (no joined
                 // product_name, unlike the index endpoint), so resolve the name
                 // from the cached products loaded above.
-                const nameById = Object.fromEntries(productRows.map((p) => [p.id, p.name_hi]));
+                const nameById = Object.fromEntries(
+                    productRows.map((p) => [p.id, productName(p, getLocale())])
+                );
                 const rows = await database.production_batches.toArray();
 
                 setBatches(

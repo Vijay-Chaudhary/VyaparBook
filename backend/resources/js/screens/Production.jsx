@@ -1,5 +1,6 @@
 import { useState } from 'react';
-import { formatDate, t, today } from '../i18n';
+import { formatDate, getLocale, t, today } from '../i18n';
+import { productName } from '../offline/catalog';
 import { navigate } from '../router';
 import { Screen } from '../components/Chrome';
 
@@ -127,7 +128,7 @@ export function RecordBatch({ products, materials, onSave }) {
                             onChange={(e) => setProductId(e.target.value)} data-testid="batch-product">
                         <option value="">—</option>
                         {products.map((p) => (
-                            <option key={p.id} value={p.id}>{p.name_hi}</option>
+                            <option key={p.id} value={p.id}>{productName(p, getLocale())}</option>
                         ))}
                     </select>
                 </div>
