@@ -205,7 +205,7 @@ speculatively. Compare money with `bccomp`, never `<`.
 
 ## Task 4: Controller, routes, view, translations (TDD)
 
-- [ ] **Step 1: write `tests/Feature/Web/RemindersTest.php` first**
+- [x] **Step 1: write `tests/Feature/Web/RemindersTest.php` first**
 
 `access →` guest redirected to login; a user owning no business bounced to `/app`;
 an owner asking for a business they do not own refused.
@@ -217,7 +217,7 @@ containing the normalised number; posting another tenant's customer id 404s;
 posting for an opted-out customer is refused (no log row written).
 `opt-out →` toggles `reminder_opt_out_at` and makes the row non-sendable.
 
-- [ ] **Step 2: implement the controller**
+- [x] **Step 2: implement the controller**
 
 `use ResolvesOwnedTenant;` and follow `ExpenseController` exactly:
 `ownedBusinessId($request->query('business'))` → redirect to `app` when null →
@@ -229,7 +229,7 @@ resolution — the existing controllers all note this).
 customer is opted out or the phone is not normalisable — the UI disables it, but
 the server must not rely on the UI.
 
-- [ ] **Step 3: routes** — inside the same owner group as `expenses`, with a
+- [x] **Step 3: routes** — inside the same owner group as `expenses`, with a
   comment block matching the house style:
 
 ```php
@@ -239,7 +239,7 @@ Route::post('reminders/{customer}/opt-out', [ReminderController::class, 'optOut'
 Route::post('reminders/{customer}/opt-in', [ReminderController::class, 'optIn'])->name('reminders.opt_in');
 ```
 
-- [ ] **Step 4: view + translations**
+- [x] **Step 4: view + translations**
 
 `resources/views/reminders/index.blade.php` extending `layouts.app`, matching
 `expenses/index.blade.php`: header, a short explainer that this opens the owner's
@@ -248,10 +248,10 @@ outstanding, days overdue, action). Non-sendable rows show the reason instead of
 the button. Empty state names the current thresholds. Full `en` + `hi` keys —
 including the **customer-facing** message body, which is what actually gets sent.
 
-- [ ] **Step 5: link it from the dashboard** so the owner can find it — a link
+- [x] **Step 5: link it from the dashboard** so the owner can find it — a link
   near the outstanding tile through to `route('reminders')`.
 
-- [ ] **Step 6: run** `php artisan view:clear && ./vendor/bin/pest tests/Feature/Web/RemindersTest.php`, then commit.
+- [x] **Step 6: run** `php artisan view:clear && ./vendor/bin/pest tests/Feature/Web/RemindersTest.php`, then commit.
 
 ---
 
