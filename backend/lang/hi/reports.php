@@ -94,7 +94,7 @@ return [
     'on_hand_kg' => 'स्टॉक में (कि.ग्रा.)',
 
     // डैशबोर्ड हेडर के मालिक-टूल लिंक।
-    'manage_orders' => 'ऑर्डर',
+    'manage_orders' => 'स्वीकृतियाँ',
     'manage_beats' => 'बीट',
     'manage_gst' => 'GST',
 ];

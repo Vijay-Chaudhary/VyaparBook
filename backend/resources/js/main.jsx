@@ -46,6 +46,13 @@ const ROUTES = {
 /** Roles that may see and manage stock (PRD §7). */
 const STOCK_MANAGERS = ['owner', 'admin'];
 
+/**
+ * Who may accept an order. Same two roles, but a different reason — acceptance
+ * is an online-only Blade screen outside this app, so the phone can only link
+ * to it, never do it.
+ */
+const ORDER_APPROVERS = ['owner', 'admin'];
+
 function useOnline() {
     const [online, setOnline] = useState(navigator.onLine);
 
@@ -193,6 +200,7 @@ function App({ userName, locale }) {
     );
 
     const canManageStock = STOCK_MANAGERS.includes(role);
+    const canAcceptOrders = ORDER_APPROVERS.includes(role);
     const readOnly = impersonation !== null;
 
     /**
@@ -525,6 +533,9 @@ function App({ userName, locale }) {
                         orders={orders}
                         customersById={new Map(customers.map((c) => [c.id, c]))}
                         onAction={orderAction}
+                        // An impersonating operator is read-only, so do not send
+                        // them to a screen whose whole purpose is to write.
+                        canAccept={canAcceptOrders && !readOnly}
                     />
                 );
 
