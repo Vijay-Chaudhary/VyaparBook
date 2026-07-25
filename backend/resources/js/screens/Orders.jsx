@@ -53,12 +53,30 @@ export function Orders({ orders, customersById, onAction, canAccept = false }) {
                                         </span>
                                     </div>
 
+                                    {order.items?.length > 0 && (
+                                        <ul className="mt-2 space-y-0.5 border-t border-hairline pt-2">
+                                            {order.items.map((item, i) => (
+                                                <li key={i} className="flex justify-between gap-2 text-xs text-ink-muted">
+                                                    <span className="min-w-0 truncate">{item.description || '—'}</span>
+                                                    <span className="tabular shrink-0">
+                                                        {item.qty} × {formatRupees(item.ratePaise)}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+
                                     {status === 'pending' && (
-                                        <p className="mt-1 text-xs text-ink-muted">{t('awaiting_acceptance')}</p>
+                                        <p className="mt-1 text-xs text-ink-muted">
+                                            {order.pending ? t('pending_sync') : t('awaiting_acceptance')}
+                                        </p>
                                     )}
 
                                     <div className="mt-2 flex gap-2">
-                                        {actionsFor(status).map((action) => (
+                                        {/* A queued order has never reached the server, so acting on
+                                            it would push a mutation naming an order that does not
+                                            exist — and park. */}
+                                        {(order.pending ? [] : actionsFor(status)).map((action) => (
                                             <button
                                                 key={action}
                                                 type="button"
