@@ -1,5 +1,5 @@
 import { formatDate, t } from '../i18n';
-import { actionsFor, groupByStatus, ORDER_STATUSES } from '../offline/orders';
+import { actionsFor, groupByStatus, isOverdue, OPEN_STATUSES } from '../offline/orders';
 import { formatRupees, toPaise } from '../offline/money';
 import { navigate } from '../router';
 import { Screen } from '../components/Chrome';
@@ -34,31 +34,60 @@ export function Orders({ orders, customersById, onAction, canAccept = false }) {
                 + {t('take_order')}
             </button>
 
-            {ORDER_STATUSES.map((status) => (
+            {OPEN_STATUSES.map((status) => (
                 grouped[status].length > 0 && (
                     <section key={status} className="mb-4">
                         <h2 className="mb-2 text-sm font-semibold text-ink-muted">{t(status)}</h2>
                         <ul className="space-y-2">
-                            {grouped[status].map((order) => (
-                                <li key={order.uuid} className="card py-3">
+                            {grouped[status].map((order) => {
+                                const late = isOverdue(order);
+
+                                return (
+                                <li
+                                    key={order.uuid}
+                                    /* Colour alone would not reach a colour-blind
+                                       salesman, so the row also says "Late". */
+                                    className={`card py-3 ${late ? 'border border-danger' : ''}`}
+                                >
                                     <div className="flex items-center justify-between gap-3">
                                         <span className="min-w-0 flex-1">
                                             <span className="block font-medium">
                                                 {customersById.get(order.customer_id)?.name ?? '—'}
                                             </span>
-                                            <span className="block text-sm text-ink-muted">{formatDate(order.order_date)}</span>
+                                            <span className={`block text-sm ${late ? 'font-medium text-danger' : 'text-ink-muted'}`}>
+                                                {formatDate(order.order_date)}
+                                                {late && <span className="ml-2">{t('overdue')}</span>}
+                                            </span>
                                         </span>
                                         <span className="tabular shrink-0 font-medium">
                                             {formatRupees(toPaise(order.total ?? '0'))}
                                         </span>
                                     </div>
 
+                                    {order.items?.length > 0 && (
+                                        <ul className="mt-2 space-y-0.5 border-t border-hairline pt-2">
+                                            {order.items.map((item, i) => (
+                                                <li key={i} className="flex justify-between gap-2 text-xs text-ink-muted">
+                                                    <span className="min-w-0 truncate">{item.description || '—'}</span>
+                                                    <span className="tabular shrink-0">
+                                                        {item.qty} × {formatRupees(item.ratePaise)}
+                                                    </span>
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
+
                                     {status === 'pending' && (
-                                        <p className="mt-1 text-xs text-ink-muted">{t('awaiting_acceptance')}</p>
+                                        <p className="mt-1 text-xs text-ink-muted">
+                                            {order.pending ? t('pending_sync') : t('awaiting_acceptance')}
+                                        </p>
                                     )}
 
                                     <div className="mt-2 flex gap-2">
-                                        {actionsFor(status).map((action) => (
+                                        {/* A queued order has never reached the server, so acting on
+                                            it would push a mutation naming an order that does not
+                                            exist — and park. */}
+                                        {(order.pending ? [] : actionsFor(status)).map((action) => (
                                             <button
                                                 key={action}
                                                 type="button"
@@ -71,7 +100,8 @@ export function Orders({ orders, customersById, onAction, canAccept = false }) {
                                         ))}
                                     </div>
                                 </li>
-                            ))}
+                                );
+                            })}
                         </ul>
                     </section>
                 )

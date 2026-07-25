@@ -168,3 +168,18 @@ describe('accepting', function () {
             ->toBe(OrderStatus::CANCELLED);
     });
 });
+
+it('shows what was in a decided order, not just its total', function () {
+    // A decided order showing only a total cannot answer "what did we agree to
+    // send them?" — the question the owner opens this list to settle.
+    [$owner, $business, $orderId] = pendingOrder();
+    DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)
+        ->update(['status' => OrderStatus::DELIVERED]);
+
+    $this->actingAs($owner)->get('/orders?business=' . $business->id)
+        ->assertOk()
+        ->assertSee(__('orders.recent'))
+        ->assertSee('Sev')            // the product on the line
+        ->assertSee('500g')           // its pack size
+        ->assertSee('₹85.00');        // the rate that was agreed
+});

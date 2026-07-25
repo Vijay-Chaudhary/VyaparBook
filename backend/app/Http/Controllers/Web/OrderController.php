@@ -41,8 +41,11 @@ class OrderController extends Controller
             Order::query()->where('status', OrderStatus::PENDING)
                 ->with(['customer', 'lines.productPack.product', 'lines.productPack.packSize'])
                 ->orderBy('order_date')->get(),
+            // Lines eager-loaded here too: a decided order that shows only a
+            // total cannot answer "what did we actually agree to send them?".
             Order::query()->whereNot('status', OrderStatus::PENDING)
-                ->with('customer')->orderByDesc('updated_at')->limit(50)->get(),
+                ->with(['customer', 'lines.productPack.product', 'lines.productPack.packSize'])
+                ->orderByDesc('updated_at')->limit(50)->get(),
         ]);
 
         return view('orders.index', [

@@ -3,7 +3,8 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getActiveBusiness, getImpersonation, getToken, setActiveBusiness } from './api/token';
 import { apiWrite } from './api/write';
 import { closeTenantDb, deleteTenantDb, openTenantDb } from './offline/db';
-import { enqueue, pendingCount, stalenessState } from './offline/outbox';
+import { buildOrderList } from './offline/orders';
+import { enqueue, pending, pendingCount, stalenessState } from './offline/outbox';
 import { productName } from './offline/catalog';
 import { khataList, ledgerFor, outstandingFor } from './offline/khata';
 import { movementsFor, stockList } from './offline/stock';
@@ -251,14 +252,29 @@ function App({ userName, locale }) {
             if (!database) return;
 
             setCustomers(await khataList(database));
-            setOrders(await database.orders.toArray());
-            setPacks(await database.product_packs.toArray());
+
+            const packRows = await database.product_packs.toArray();
+            setPacks(packRows);
             // Every role caches the catalog (CatalogPolicy leaves reads ungated:
             // a salesman cannot sell without it), so products load for everyone.
             // Gating this behind canManageStock left the sale dropdown nameless
             // for exactly the person who records sales.
             const productRows = await database.products.toArray();
             setProducts(productRows);
+
+            // Two sources: synced rows with their lines, plus anything still in
+            // the outbox — an order taken offline must not vanish until sync.
+            // Reads the catalog loaded just above rather than fetching it twice.
+            setOrders(buildOrderList({
+                orders: await database.orders.toArray(),
+                orderLines: await database.order_lines.toArray(),
+                // pending() ends in sortBy(), which already resolves to an array —
+                // it is not a Dexie Collection, so there is nothing to toArray().
+                outbox: await pending(database),
+                packs: packRows,
+                products: productRows,
+                locale: getLocale(),
+            }));
             setQueued(await pendingCount(database));
             setStaleness(await stalenessState(database));
 
