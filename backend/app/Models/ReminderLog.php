@@ -26,7 +26,7 @@ class ReminderLog extends Model
 
     // created_by is absent: stamped from app('tenant.user_id'), never request
     // input. Online-only, so no version/sync_seq traits.
-    protected $fillable = ['business_id', 'customer_id', 'channel', 'amount_at_send', 'locale', 'phone_e164'];
+    protected $fillable = ['business_id', 'customer_id', 'channel', 'amount_at_send', 'locale', 'phone_e164', 'batch_id'];
 
     protected $casts = [
         'amount_at_send' => 'decimal:2',

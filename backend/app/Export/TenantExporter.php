@@ -33,6 +33,7 @@ class TenantExporter
         'customers',
         'expenses',
         'reminder_logs',
+        'reminder_batches',
         'suppliers',
         'purchases',
         'supplier_payments',

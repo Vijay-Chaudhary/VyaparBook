@@ -38,26 +38,26 @@ git checkout -b feat/scheduled-reminders-phase-4c
 
 ## Task 1: Schema + settings
 
-- [ ] **Step 1: migration** — `businesses`: `reminder_auto_enabled` bool default
+- [x] **Step 1: migration** — `businesses`: `reminder_auto_enabled` bool default
   false, `reminder_send_at` time default `'10:00'`, `reminder_cooldown_days`
   smallint default 7, `reminder_daily_cap` smallint default 25.
 
-- [ ] **Step 2: migration** — `reminder_batches` (uuid id, business_id FK,
+- [x] **Step 2: migration** — `reminder_batches` (uuid id, business_id FK,
   `scheduled_for` date, `status` string(12) default `'planned'`, `planned_count`
   int, `sent_count` int default 0, `stopped_reason` string(24) nullable,
   timestamps). **Unique `(business_id, scheduled_for)`** — the idempotency
   guarantee. RLS enable + force + isolation policy, copied from `expenses`.
 
-- [ ] **Step 3: migration** — `reminder_logs.batch_id` nullable FK →
+- [x] **Step 3: migration** — `reminder_logs.batch_id` nullable FK →
   `reminder_batches`, indexed. Null for manual sends.
 
-- [ ] **Step 4: models** — `ReminderBatch`; casts on `Business` for the four new
+- [x] **Step 4: models** — `ReminderBatch`; casts on `Business` for the four new
   settings; `batch_id` fillable on `ReminderLog`.
 
-- [ ] **Step 5: DPDP** — `reminder_batches` into `TenantEraser` (before
+- [x] **Step 5: DPDP** — `reminder_batches` into `TenantEraser` (before
   `reminder_logs`, FK order) and `TenantExporter`. Run the DPDP tests.
 
-- [ ] **Step 6: migrate, run suite, commit.**
+- [x] **Step 6: migrate, run suite, commit.**
 
 ---
 

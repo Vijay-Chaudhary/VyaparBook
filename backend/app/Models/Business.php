@@ -17,5 +17,10 @@ class Business extends Model
         // Phase 4a reminder thresholds: who counts as overdue, per shop.
         'reminder_min_outstanding' => 'decimal:2',
         'reminder_min_days' => 'integer',
+        // Phase 4c automation settings. auto_enabled defaults false: a shop must
+        // never discover this feature by having it message their customers.
+        'reminder_auto_enabled' => 'boolean',
+        'reminder_cooldown_days' => 'integer',
+        'reminder_daily_cap' => 'integer',
     ];
 }
