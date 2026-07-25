@@ -25,12 +25,12 @@ final class CloudApiSender implements WhatsAppSender
 {
     public function send(string $toE164, string $text, string $locale, array $templateParams = []): SendResult
     {
-        $version = (string) config('services.whatsapp.api_version');
-        $phoneNumberId = (string) config('services.whatsapp.phone_number_id');
+        $version = (string) WhatsAppConfig::get('api_version');
+        $phoneNumberId = (string) WhatsAppConfig::get('phone_number_id');
         $url = "https://graph.facebook.com/{$version}/{$phoneNumberId}/messages";
 
         try {
-            $response = Http::withToken((string) config('services.whatsapp.token'))
+            $response = Http::withToken((string) WhatsAppConfig::get('token'))
                 ->asJson()
                 ->timeout(15)
                 ->post($url, [
@@ -38,7 +38,7 @@ final class CloudApiSender implements WhatsAppSender
                     'to' => $toE164,
                     'type' => 'template',
                     'template' => [
-                        'name' => (string) config('services.whatsapp.template'),
+                        'name' => (string) WhatsAppConfig::get('template'),
                         'language' => ['code' => $locale],
                         'components' => [[
                             'type' => 'body',

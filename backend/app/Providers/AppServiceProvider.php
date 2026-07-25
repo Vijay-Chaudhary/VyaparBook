@@ -5,6 +5,7 @@ namespace App\Providers;
 use App\Reminders\CloudApiSender;
 use App\Reminders\Contracts\WhatsAppSender;
 use App\Reminders\LogSender;
+use App\Reminders\WhatsAppConfig;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
@@ -41,11 +42,11 @@ class AppServiceProvider extends ServiceProvider
         // An unknown driver throws rather than falling back to 'log': a typo in
         // WHATSAPP_DRIVER must not look exactly like a working install that
         // silently delivers nothing.
-        $this->app->bind(WhatsAppSender::class, fn () => match ((string) config('services.whatsapp.driver')) {
+        $this->app->bind(WhatsAppSender::class, fn () => match (WhatsAppConfig::driver()) {
             'cloud_api' => new CloudApiSender,
             'log' => new LogSender,
             default => throw new InvalidArgumentException(
-                'Unknown whatsapp driver ['.config('services.whatsapp.driver').']; expected "log" or "cloud_api".'
+                'Unknown whatsapp driver ['.WhatsAppConfig::driver().']; expected "log" or "cloud_api".'
             ),
         });
     }
