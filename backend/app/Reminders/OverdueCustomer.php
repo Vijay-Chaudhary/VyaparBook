@@ -20,6 +20,8 @@ final readonly class OverdueCustomer
      * @param  string|null  $lastPaymentOn    Y-m-d, null when never paid
      * @param  string|null  $phoneE164        normalised, null when unusable
      * @param  string|null  $blockedReason    'no_phone' | 'bad_phone' | 'opted_out'
+     * @param  string|null  $lastReminderStatus  Phase 4b: queued|sent|delivered|read|failed, null if never reminded
+     * @param  string|null  $lastRemindedAt      when that last reminder was recorded
      */
     public function __construct(
         public string $customerId,
@@ -32,5 +34,7 @@ final readonly class OverdueCustomer
         public ?string $lastPaymentOn,
         public bool $sendable,
         public ?string $blockedReason,
+        public ?string $lastReminderStatus = null,
+        public ?string $lastRemindedAt = null,
     ) {}
 }

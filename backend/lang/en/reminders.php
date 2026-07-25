@@ -40,4 +40,14 @@ return [
     'opted_out' => 'Reminders stopped for :name.',
     'opted_in' => 'Reminders allowed for :name.',
     'cannot_send' => 'That customer cannot be reminded right now.',
+    'queued' => 'Reminder queued — it will be sent from the VyaparBook WhatsApp number shortly.',
+
+    // Delivery status (Phase 4b), shown per row once a send has been attempted.
+    'status' => [
+        'queued' => 'Sending…',
+        'sent' => 'Sent',
+        'delivered' => 'Delivered',
+        'read' => 'Read',
+        'failed' => 'Failed',
+    ],
 ];

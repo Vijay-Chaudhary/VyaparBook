@@ -58,6 +58,13 @@
                                 @endif
                             </td>
                             <td class="text-right">
+                                {{-- Phase 4b: what happened last time, so the owner is not
+                                     re-tapping blind while a send is still in flight. --}}
+                                @if ($row->lastReminderStatus !== null)
+                                    <span class="block text-xs {{ $row->lastReminderStatus === 'failed' ? 'text-danger' : 'text-ink-muted' }}">
+                                        {{ __('reminders.status.' . $row->lastReminderStatus) }}
+                                    </span>
+                                @endif
                                 @if ($row->sendable)
                                     <form method="POST" action="{{ route('reminders.send', ['customer' => $row->customerId]) }}"
                                           class="inline">

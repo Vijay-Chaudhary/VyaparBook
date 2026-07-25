@@ -8,6 +8,7 @@ use App\Http\Controllers\Controller;
 use App\Models\Business;
 use App\Models\Customer;
 use App\Models\ReminderLog;
+use App\Jobs\SendReminderJob;
 use App\Reminders\ReminderMessage;
 use App\Services\KhataService;
 use App\Services\ReminderService;
@@ -18,15 +19,23 @@ use Illuminate\View\View;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
- * Payment reminders (Phase 4a): Blade, online-only, owner-only. Same owner-tool
+ * Payment reminders (Phase 4a/4b): Blade, online-only, owner-only. Same owner-tool
  * pattern as ExpenseController/SupplierController — the caller's OWNED business
  * is resolved from their membership (never the request), and work runs
  * tenant-pinned (RLS + app scope + owner). Not behind the write plan-gate: a
  * lapsed owner may still chase their own money.
  *
- * Nothing here sends anything. `send` records that the owner asked to remind
- * someone and hands them a wa.me link; the message leaves the owner's own
- * WhatsApp. Phase 4b replaces that redirect with a Cloud API call.
+ * `send` always records the owner's intent first, then routes it by the
+ * configured transport (Phase 4b):
+ *
+ *   - driver 'log' (the default): hands back a wa.me link, so the message
+ *     leaves the OWNER's own WhatsApp — Phase 4a's behaviour, unchanged.
+ *   - driver 'cloud_api': queues SendReminderJob, so the message leaves the
+ *     PLATFORM's number and the owner stays in the app.
+ *
+ * The opt-out and phone checks guard both paths: the UI hides the button, but
+ * the UI is not a security boundary, and an opted-out customer must not be
+ * reachable by replaying a URL.
  */
 class ReminderController extends Controller
 {
@@ -68,7 +77,9 @@ class ReminderController extends Controller
             return redirect()->route('app');
         }
 
-        $url = $this->runInTenant($businessId, function () use ($businessId, $customer, $khata) {
+        $viaCloudApi = config('services.whatsapp.driver') === 'cloud_api';
+
+        $result = $this->runInTenant($businessId, function () use ($businessId, $customer, $khata, $viaCloudApi) {
             // Resolved inside the pin, never via implicit binding — no tenant is
             // pinned during route resolution, so binding would bypass RLS.
             $model = Customer::query()
@@ -85,7 +96,7 @@ class ReminderController extends Controller
             $e164 = ReminderMessage::normalisePhone($model->phone);
 
             if ($model->reminder_opt_out_at !== null || $e164 === null) {
-                return null;
+                return ['outcome' => 'blocked'];
             }
 
             $outstanding = $khata->outstandingFor($model);
@@ -93,23 +104,42 @@ class ReminderController extends Controller
             $log = new ReminderLog([
                 'business_id' => $businessId,
                 'customer_id' => $model->id,
-                'channel' => 'wa_link',
+                'channel' => $viaCloudApi ? 'cloud_api' : 'wa_link',
                 'amount_at_send' => $outstanding,
                 'locale' => $locale,
                 'phone_e164' => $e164,
             ]);
+            // Phase 4a's deep link is as "sent" as that channel can report; the
+            // Cloud API row stays queued until the worker hears back from Meta.
+            $log->status = $viaCloudApi ? 'queued' : 'sent';
+            $log->status_at = $viaCloudApi ? null : now();
             $log->created_by = (int) app('tenant.user_id');
             $log->save();
 
-            return ReminderMessage::url($model->phone, $business->name, $outstanding, $locale);
+            if ($viaCloudApi) {
+                // Row first, dispatch second: a reminder must never be invisible
+                // just because a worker is behind.
+                SendReminderJob::dispatch($log->id, $businessId);
+
+                return ['outcome' => 'queued'];
+            }
+
+            return [
+                'outcome' => 'link',
+                'url' => ReminderMessage::url($model->phone, $business->name, $outstanding, $locale),
+            ];
         });
 
-        if ($url === null) {
-            return redirect()->route('reminders', ['business' => $businessId])
-                ->with('error', __('reminders.cannot_send'));
-        }
-
-        return redirect()->away($url);
+        return match ($result['outcome']) {
+            // Queued for the platform number — the owner stays in the app.
+            'queued' => redirect()->route('reminders', ['business' => $businessId])
+                ->with('status', __('reminders.queued')),
+            // Opted out or an unusable number: say so rather than pretending.
+            'blocked' => redirect()->route('reminders', ['business' => $businessId])
+                ->with('error', __('reminders.cannot_send')),
+            // Phase 4a: hand off to the owner's own WhatsApp.
+            default => redirect()->away($result['url']),
+        };
     }
 
     /** Customer asked not to be reminded (DPDP — see the migration's note). */

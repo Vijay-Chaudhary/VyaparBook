@@ -104,22 +104,22 @@ a queue worker has no request context. `tries = 3`, exponential `backoff`, and
 
 ## Task 3: Wire the controller to the driver
 
-- [ ] **Step 1: extend `RemindersTest`** — with the default `log` driver the 4a
+- [x] **Step 1: extend `RemindersTest`** — with the default `log` driver the 4a
   behaviour must be **unchanged** (still redirects to `wa.me`); with
   `cloud_api` configured the same tap writes a `queued` row with
   `channel = 'cloud_api'`, dispatches the job (`Queue::fake()`), and redirects
   back to `/reminders` with a confirmation instead of leaving the app.
 
-- [ ] **Step 2: implement the branch in `ReminderController::send`.**
+- [x] **Step 2: implement the branch in `ReminderController::send`.**
 
 Keep the server-side opt-out/phone checks exactly as they are — they guard both
 transports.
 
-- [ ] **Step 3: show status on the list** — a sent/failed indicator per row from
+- [x] **Step 3: show status on the list** — a sent/failed indicator per row from
   the latest `reminder_logs` entry, so the owner can see what happened. Add
   `lang/{en,hi}` keys for the statuses.
 
-- [ ] **Step 4: run, pass, commit.**
+- [x] **Step 4: run, pass, commit.**
 
 ---
 
