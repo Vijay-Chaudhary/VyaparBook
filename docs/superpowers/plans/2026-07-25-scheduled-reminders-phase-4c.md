@@ -63,7 +63,7 @@ git checkout -b feat/scheduled-reminders-phase-4c
 
 ## Task 2: `ReminderPlanner` (TDD)
 
-- [ ] **Step 1: write `tests/Unit/ReminderPlannerTest.php` first**
+- [x] **Step 1: write `tests/Unit/ReminderPlannerTest.php` first**
 
 - A sendable overdue customer is planned; a non-sendable one (no phone, opted
   out) never is.
@@ -76,14 +76,14 @@ git checkout -b feat/scheduled-reminders-phase-4c
 - A tenant with automation off is not planned at all.
 - Tenant isolation.
 
-- [ ] **Step 2: implement `app/Services/ReminderPlanner.php`**
+- [x] **Step 2: implement `app/Services/ReminderPlanner.php`**
 
 Reuses `ReminderService::overdue()` — the definition of "overdue" must not fork.
 Filters `sendable`, applies the cooldown from the last **automated**
 (`batch_id is not null`) reminder, sorts by outstanding desc (already sorted),
 takes the cap, writes the batch + `planned` rows in one transaction.
 
-- [ ] **Step 3: run, pass, commit.**
+- [x] **Step 3: run, pass, commit.**
 
 ---
 
