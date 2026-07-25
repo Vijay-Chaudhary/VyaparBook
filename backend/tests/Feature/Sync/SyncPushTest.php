@@ -141,7 +141,14 @@ it('rejects only the below-floor line and still applies the rest of the batch', 
         ],
     ];
 
-    push($token, [$saleMutation($good, '80.00'), $saleMutation($bad, '10.00')])->assertOk();
+    $response = push($token, [$saleMutation($good, '80.00'), $saleMutation($bad, '10.00')])->assertOk();
+
+    // The promise is that the bad mutation is REPORTED, not merely absent: a
+    // results array that mislabelled it would still leave the DB looking right.
+    $byUuid = collect($response->json('results'))->keyBy('uuid');
+    expect($byUuid[$good]['status'])->toBe('applied');
+    expect($byUuid[$bad]['status'])->toBe('rejected');
+    expect($byUuid[$bad]['reason'])->toBe('invalid');
 
     // The legitimate sale survives its neighbour's rejection.
     expect(DB::connection('pgsql_migrate')->table('sales')
