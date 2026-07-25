@@ -240,6 +240,12 @@ export function setLocale(next) {
     if (strings[next]) locale = next;
 }
 
+/** The active locale, for content that is data rather than a translation key —
+ *  product names, for instance, which come from the tenant's own catalog. */
+export function getLocale() {
+    return locale;
+}
+
 /** Translate. Falls back to English (the default), then to the key itself. */
 export function t(key) {
     return strings[locale]?.[key] ?? strings.en[key] ?? key;

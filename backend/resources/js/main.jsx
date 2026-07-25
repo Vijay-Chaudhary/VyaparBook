@@ -236,6 +236,12 @@ function App({ userName, locale }) {
 
             setCustomers(await khataList(database));
             setPacks(await database.product_packs.toArray());
+            // Every role caches the catalog (CatalogPolicy leaves reads ungated:
+            // a salesman cannot sell without it), so products load for everyone.
+            // Gating this behind canManageStock left the sale dropdown nameless
+            // for exactly the person who records sales.
+            const productRows = await database.products.toArray();
+            setProducts(productRows);
             setQueued(await pendingCount(database));
             setStaleness(await stalenessState(database));
 
@@ -246,10 +252,7 @@ function App({ userName, locale }) {
 
                 // Batches newest first. sync/pull sends the raw rows (no joined
                 // product_name, unlike the index endpoint), so resolve the name
-                // from the cached products here.
-                const productRows = await database.products.toArray();
-                setProducts(productRows);
-
+                // from the cached products loaded above.
                 const nameById = Object.fromEntries(productRows.map((p) => [p.id, p.name_hi]));
                 const rows = await database.production_batches.toArray();
 
@@ -487,7 +490,7 @@ function App({ userName, locale }) {
 
             case 'sale':
                 return activeCustomer ? (
-                    <RecordSale customer={activeCustomer} packs={packs} onSave={saveSale} />
+                    <RecordSale customer={activeCustomer} packs={packs} products={products} onSave={saveSale} />
                 ) : null;
 
             case 'pick-customer':

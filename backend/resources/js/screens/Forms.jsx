@@ -1,5 +1,6 @@
-import { useState } from 'react';
-import { t, today } from '../i18n';
+import { useMemo, useState } from 'react';
+import { getLocale, t, today } from '../i18n';
+import { productName } from '../offline/catalog';
 import { formatRupees, toPaise } from '../offline/money';
 import { navigate } from '../router';
 import { Screen } from '../components/Chrome';
@@ -222,8 +223,15 @@ export function RecordPayment({ customer, onSave }) {
 
 /* ------------------------------------------------------------------ */
 
-export function RecordSale({ customer, packs, onSave }) {
+export function RecordSale({ customer, packs, products = [], onSave }) {
     const [lines, setLines] = useState([{ product_pack_id: '', qty: '1' }]);
+
+    // Pack rows carry product_id but not the product's name, so the join
+    // happens here. Built once rather than scanning products per option.
+    const productsById = useMemo(
+        () => new Map(products.map((product) => [product.id, product])),
+        [products]
+    );
     const [date, setDate] = useState(today());
     const [error, setError] = useState(null);
     const [saving, setSaving] = useState(false);
@@ -304,11 +312,15 @@ export function RecordSale({ customer, packs, onSave }) {
                                 data-testid={`sale-pack-${index}`}
                             >
                                 <option value="">—</option>
-                                {packs.map((pack) => (
-                                    <option key={pack.id} value={pack.id}>
-                                        {line.name_en} . {pack.label} · {formatRupees(toPaise(pack.default_sell_price))}
-                                    </option>
-                                ))}
+                                {packs.map((pack) => {
+                                    const name = productName(productsById.get(pack.product_id), getLocale());
+
+                                    return (
+                                        <option key={pack.id} value={pack.id}>
+                                            {name ? `${name} · ` : ''}{pack.label} · {formatRupees(toPaise(pack.default_sell_price))}
+                                        </option>
+                                    );
+                                })}
                             </select>
                         </div>
 
