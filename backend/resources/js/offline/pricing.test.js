@@ -44,6 +44,8 @@ describe('floorPaise', () => {
         expect(floorPaise(pack(), product())).toBeNull();
     });
 
+    // JS-only: PHP's PriceFloor::for(ProductPack) is non-nullable, so its type
+    // system rules this case out. The rest of the table is shared.
     it('returns null when the pack or product is missing entirely', () => {
         expect(floorPaise(undefined, product({ base_cost_per_kg: '180.00' }))).toBeNull();
         expect(floorPaise(pack({ weight_kg: '0.500' }), undefined)).toBeNull();

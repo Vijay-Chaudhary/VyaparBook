@@ -8,6 +8,13 @@
  * table — see pricing.test.js and tests/Unit/PriceFloorTest.php.
  *
  * Works in integer paise throughout; money never touches a float.
+ *
+ * Exactness holds across every price and pack weight a distributor would enter.
+ * The multiply-then-divide below is Number arithmetic, so it would drift past
+ * 2^53 — reachable only by pairing the very top of decimal(10,2) with the very
+ * top of decimal(8,3), which no pack of namkeen is. The PHP twin uses bcmul and
+ * is exact over the whole column domain; if this ever prices bulk commodities,
+ * revisit here first.
  */
 
 import { toPaise } from './money';
