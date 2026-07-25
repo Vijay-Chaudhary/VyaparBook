@@ -76,14 +76,14 @@ retryable.
 
 ## Task 2: Status columns + `SendReminderJob` (TDD)
 
-- [ ] **Step 1: migration** — add to `reminder_logs`: `status` string(12) default
+- [x] **Step 1: migration** — add to `reminder_logs`: `status` string(12) default
   `'queued'`, `status_at` timestamp nullable, `provider_message_id` string(128)
   nullable **indexed** (the webhook looks rows up by it), `error_code` string(32)
   nullable, `error_message` string(255) nullable. Backfill existing 4a rows to
   `status = 'sent'` — they were handed to the owner's WhatsApp and are as
   "sent" as that channel can report.
 
-- [ ] **Step 2: write `tests/Feature/SendReminderJobTest.php` first**
+- [x] **Step 2: write `tests/Feature/SendReminderJobTest.php` first**
 
 Cover: a queued row becomes `sent` with the provider id; a 4xx failure becomes
 `failed` with the code and is **not** retried; a customer who opted out between
@@ -91,14 +91,14 @@ the tap and the job running causes the job to abort **without** sending
 (assert `Http::assertNothingSent()`); the job runs tenant-pinned and touches only
 its own tenant's row.
 
-- [ ] **Step 3: implement `app/Jobs/SendReminderJob.php`**
+- [x] **Step 3: implement `app/Jobs/SendReminderJob.php`**
 
 Carries `reminderLogId` + `businessId` (ids, never models — the model would
 serialise a tenant-scoped query into the payload). Pins the tenant itself, since
 a queue worker has no request context. `tries = 3`, exponential `backoff`, and
 `failed()` writes `status = 'failed'` so a dead job is never silent.
 
-- [ ] **Step 4: run, pass, commit.**
+- [x] **Step 4: run, pass, commit.**
 
 ---
 
