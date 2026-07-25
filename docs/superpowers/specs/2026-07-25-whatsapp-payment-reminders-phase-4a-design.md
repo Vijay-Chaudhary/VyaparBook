@@ -70,7 +70,10 @@ approval, and it is exactly how the Indian khata apps this product competes with
 5. **Overdue is `outstanding ≥ threshold` AND `days since last payment ≥ N`,
    both tenant-configurable with sane defaults.** A single "has any balance"
    rule would list every credit customer, which is noise. Defaults: `₹500` and
-   `30` days. Configuration lives on `businesses` as two columns, not a new
+   `30` days. **Superseded 2026-07-25: the day threshold default is now 7, and
+   both thresholds are editable on `/reminders` (they had no UI when this spec
+   was written). See ui-backlog F-08.** Configuration lives on `businesses` as
+   two columns, not a new
    settings table — two scalars do not earn a table.
 
 6. **A customer with no phone is shown, not hidden.** They still owe money and

@@ -71,8 +71,12 @@ afterEach(function () {
 });
 
 it('includes a customer exactly at both thresholds, and excludes one just under', function () {
-    $b = Business::factory()->create();  // defaults: 500.00 / 30 days
+    $b = Business::factory()->create();
     $u = User::factory()->create();
+    // Thresholds set explicitly: this test is about the BOUNDARY, and must not
+    // silently change meaning when a default is retuned.
+    DB::connection('pgsql_migrate')->table('businesses')->where('id', $b->id)
+        ->update(['reminder_min_outstanding' => '500.00', 'reminder_min_days' => 30]);
 
     // Exactly 500.00 owed, last paid exactly 30 days ago → included.
     $atThreshold = remCustomer($b, 'Exactly At');
@@ -209,4 +213,27 @@ it('ignores archived customers', function () {
     $gone->save();
 
     expect(overdueFor($b))->toBeEmpty();
+});
+
+it('treats seven days without payment as overdue by default', function () {
+    // The product definition of "late" (changed from 30): a customer who has
+    // not paid in a week is who the owner actually wants to chase.
+    $b = Business::factory()->create();
+    $u = User::factory()->create();
+
+    // fresh(): the DB-side default is not reflected on the in-memory model.
+    expect($b->fresh()->reminder_min_days)->toBe(7);
+
+    $justOverdue = remCustomer($b, 'Seven Days');
+    remSale($justOverdue, $u, '2000.00', '2026-06-01');
+    remPayment($justOverdue, $u, '1000.00', '2026-07-18');   // 7 days before 07-25
+
+    $tooRecent = remCustomer($b, 'Six Days');
+    remSale($tooRecent, $u, '2000.00', '2026-06-01');
+    remPayment($tooRecent, $u, '1000.00', '2026-07-19');     // 6 days
+
+    $names = array_map(fn ($r) => $r->name, overdueFor($b));
+
+    expect($names)->toContain('Seven Days');
+    expect($names)->not->toContain('Six Days');
 });

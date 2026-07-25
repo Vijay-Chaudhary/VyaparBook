@@ -240,6 +240,8 @@ describe('scheduled reminders (Phase 4c)', function () {
 
         $this->actingAs($owner)->post('/reminders/settings', [
             'business' => $business->id,
+            'reminder_min_days' => '7',
+            'reminder_min_outstanding' => '500',
             'reminder_auto_enabled' => '1',
             'reminder_send_at' => '11:30',
             'reminder_cooldown_days' => '10',
@@ -247,6 +249,7 @@ describe('scheduled reminders (Phase 4c)', function () {
         ])->assertRedirect(route('reminders', ['business' => $business->id]));
 
         $fresh = App\Models\Business::on('pgsql_migrate')->find($business->id);
+        expect($fresh->reminder_min_days)->toBe(7);
         expect($fresh->reminder_auto_enabled)->toBeTrue();
         expect($fresh->reminder_cooldown_days)->toBe(10);
         expect($fresh->reminder_daily_cap)->toBe(40);
@@ -261,6 +264,8 @@ describe('scheduled reminders (Phase 4c)', function () {
 
         $this->actingAs($owner)->post('/reminders/settings', [
             'business' => $business->id,
+            'reminder_min_days' => '7',
+            'reminder_min_outstanding' => '500',
             'reminder_send_at' => '03:00',
             'reminder_cooldown_days' => '7',
             'reminder_daily_cap' => '25',
@@ -272,6 +277,8 @@ describe('scheduled reminders (Phase 4c)', function () {
 
         $this->actingAs($owner)->post('/reminders/settings', [
             'business' => $business->id,
+            'reminder_min_days' => '7',
+            'reminder_min_outstanding' => '500',
             'reminder_send_at' => '10:00',
             'reminder_cooldown_days' => '7',
             'reminder_daily_cap' => '5000',
@@ -360,4 +367,34 @@ describe('scheduled reminders (Phase 4c)', function () {
 
         expect($response->headers->get('Location'))->toStartWith('https://wa.me/');
     });
+});
+
+it('lets the shop change what counts as overdue', function () {
+    [$owner, $business] = pwOwner();
+
+    $this->actingAs($owner)->post('/reminders/settings', [
+        'business' => $business->id,
+        'reminder_min_days' => '3',
+        'reminder_min_outstanding' => '250.50',
+        'reminder_send_at' => '10:00',
+        'reminder_cooldown_days' => '7',
+        'reminder_daily_cap' => '25',
+    ])->assertRedirect(route('reminders', ['business' => $business->id]));
+
+    $fresh = App\Models\Business::on('pgsql_migrate')->find($business->id);
+    expect($fresh->reminder_min_days)->toBe(3);
+    expect((string) $fresh->reminder_min_outstanding)->toBe('250.50');
+});
+
+it('rejects a nonsensical overdue window', function () {
+    [$owner, $business] = pwOwner();
+
+    $this->actingAs($owner)->post('/reminders/settings', [
+        'business' => $business->id,
+        'reminder_min_days' => '0',
+        'reminder_min_outstanding' => '500',
+        'reminder_send_at' => '10:00',
+        'reminder_cooldown_days' => '7',
+        'reminder_daily_cap' => '25',
+    ])->assertSessionHasErrors('reminder_min_days');
 });
