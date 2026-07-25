@@ -42,6 +42,41 @@ export function floorPaise(pack, product) {
     return Math.ceil((toPaise(perKg) * grams) / 1000);
 }
 
+/**
+ * A typed rate in paise, or null when the text is not money.
+ *
+ * toPaise throws on anything its decimal regex rejects, and the rate field is
+ * free text — 'abc', '12..3' and '1e5' are all reachable mid-keystroke. Callers
+ * that display a figure can treat null as zero; the one place that must NOT is
+ * submit, because sending unreadable text to the server just parks the sale.
+ */
+export function readRatePaise(value) {
+    try {
+        return toPaise(value || '0');
+    } catch {
+        return null;
+    }
+}
+
+/**
+ * Whether a typed rate may be sent to the server at all.
+ *
+ * Two ways it may not: the text is not money, or it is negative. Both would be
+ * rejected server-side and park the sale in the outbox — which the salesman
+ * only discovers later, after the goods have gone. Catching it at submit keeps
+ * the failure in front of the person who can still fix it.
+ */
+export function sendableRate(value) {
+    // Checked on the text, not the number: toPaise accepts a bare '-' and
+    // yields -0, and `-0 >= 0` is true in JavaScript — so a sign test on the
+    // parsed value would wave it through.
+    if (String(value ?? '').includes('-')) {
+        return false;
+    }
+
+    return readRatePaise(value) !== null;
+}
+
 /** True when the rate is under the floor. Equal to the floor is allowed. */
 export function belowFloor(ratePaise, floor) {
     if (floor === null || floor === undefined) return false;

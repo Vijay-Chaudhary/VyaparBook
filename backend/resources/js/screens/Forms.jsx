@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { getLocale, t, today } from '../i18n';
 import { productName } from '../offline/catalog';
 import { formatRupees, toPaise } from '../offline/money';
-import { belowFloor, floorPaise } from '../offline/pricing';
+import { belowFloor, floorPaise, readRatePaise, sendableRate } from '../offline/pricing';
 import { navigate } from '../router';
 import { Screen } from '../components/Chrome';
 
@@ -237,17 +237,10 @@ export function RecordSale({ customer, packs, products = [], onSave }) {
     const [error, setError] = useState(null);
     const [saving, setSaving] = useState(false);
 
-    // A rate the salesman is still typing may not parse yet (mid-keystroke:
-    // 'abc', '12..3', '-'). toPaise() throws on those, which would crash the
-    // form on every keystroke, so treat anything unparseable as zero here —
-    // the render layer never sees the exception.
-    const ratePaise = (value) => {
-        try {
-            return toPaise(value || '0');
-        } catch {
-            return 0;
-        }
-    };
+    // A rate being typed may not parse yet ('12..3', 'abc'), and toPaise throws
+    // on those — which would crash the form mid-keystroke. Display therefore
+    // reads an unparseable rate as zero. Submit does NOT: see sendableRate.
+    const ratePaise = (value) => readRatePaise(value) ?? 0;
 
     const setLine = (index, key) => (e) =>
         setLines((current) =>
@@ -301,6 +294,15 @@ export function RecordSale({ customer, packs, products = [], onSave }) {
         // Server rule: at least one line, qty not zero.
         if (valid.length === 0) {
             setError(t('select_product'));
+            return;
+        }
+
+        // Before the floor check: an unreadable rate would otherwise be reported
+        // as "below cost", which is confusing and wrong. Without this the raw
+        // text reaches the server, gets rejected, and parks the sale — which the
+        // salesman only finds out about long after the customer has gone.
+        if (valid.some((l) => !sendableRate(l.rate))) {
+            setError(t('invalid_rate'));
             return;
         }
 

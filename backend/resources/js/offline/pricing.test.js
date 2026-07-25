@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { belowFloor, floorPaise } from './pricing';
+import { belowFloor, floorPaise, readRatePaise, sendableRate } from './pricing';
 
 /**
  * THE SHARED CASE TABLE — the mirror of tests/Unit/PriceFloorTest.php.
@@ -63,5 +63,54 @@ describe('belowFloor', () => {
 
     it('allows anything when there is no floor', () => {
         expect(belowFloor(1, null)).toBe(false);
+    });
+});
+
+describe('readRatePaise', () => {
+    it('reads a normal rate', () => {
+        expect(readRatePaise('105.00')).toBe(10500);
+    });
+
+    it('treats blank as zero rather than unreadable', () => {
+        // An empty field is a rate not yet typed, not a broken one.
+        expect(readRatePaise('')).toBe(0);
+        expect(readRatePaise(undefined)).toBe(0);
+    });
+
+    it('accepts a rate still being typed', () => {
+        expect(readRatePaise('12.')).toBe(1200);
+    });
+
+    it('returns null for text that is not money, so submit can refuse it', () => {
+        expect(readRatePaise('abc')).toBeNull();
+        expect(readRatePaise('12..3')).toBeNull();
+        expect(readRatePaise('1e5')).toBeNull();
+    });
+
+    it('parses a lone minus sign rather than throwing', () => {
+        // toPaise's regex accepts a bare sign, so this is -0, not unreadable.
+        // It is still not submittable — see sendableRate, which rejects
+        // anything negative as well as anything unreadable.
+        expect(readRatePaise('-')).toBe(-0);
+    });
+});
+
+describe('sendableRate', () => {
+    it('accepts an ordinary rate', () => {
+        expect(sendableRate('105.00')).toBe(true);
+    });
+
+    it('accepts a blank rate, which the server reads as the shop default', () => {
+        expect(sendableRate('')).toBe(true);
+    });
+
+    it('refuses text that is not money', () => {
+        expect(sendableRate('abc')).toBe(false);
+        expect(sendableRate('12..3')).toBe(false);
+    });
+
+    it('refuses a negative rate — a return is a negative qty, not a negative price', () => {
+        expect(sendableRate('-5.00')).toBe(false);
+        expect(sendableRate('-')).toBe(false);
     });
 });
