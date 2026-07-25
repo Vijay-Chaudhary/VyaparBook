@@ -114,20 +114,20 @@ refuses to do is recorded, never silent.
 
 ## Task 4: Commands + scheduler
 
-- [ ] **Step 1: `reminders:plan`** and **`reminders:dispatch`** artisan commands
+- [x] **Step 1: `reminders:plan`** and **`reminders:dispatch`** artisan commands
   — thin wrappers that iterate tenants and delegate; each prints a summary line
   per tenant so a cron log is readable.
 
-- [ ] **Step 2: register in `bootstrap/app.php`** via `->withSchedule()`:
+- [x] **Step 2: register in `bootstrap/app.php`** via `->withSchedule()`:
   `reminders:plan` daily at 06:00, `reminders:dispatch` every fifteen minutes.
   Both `withoutOverlapping()`. **This is the app's first scheduler** — add the
   comment explaining that cron + a queue worker are required, per the spec's ops
   note.
 
-- [ ] **Step 3: command tests** — `reminders:plan` creates batches only for
+- [x] **Step 3: command tests** — `reminders:plan` creates batches only for
   opted-in tenants and exits 0 with no tenants at all.
 
-- [ ] **Step 4: run, pass, commit.**
+- [x] **Step 4: run, pass, commit.**
 
 ---
 
