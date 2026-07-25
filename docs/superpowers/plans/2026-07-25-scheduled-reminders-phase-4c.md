@@ -89,7 +89,7 @@ takes the cap, writes the batch + `planned` rows in one transaction.
 
 ## Task 3: `ReminderDispatcher` (TDD)
 
-- [ ] **Step 1: write `tests/Feature/ReminderDispatcherTest.php` first**
+- [x] **Step 1: write `tests/Feature/ReminderDispatcherTest.php` first**
 
 - Inside quiet hours with `cloud_api`: planned rows become `queued` and
   `SendReminderJob` is pushed (`Queue::fake()`), `sent_count` updated.
@@ -101,14 +101,14 @@ takes the cap, writes the batch + `planned` rows in one transaction.
 - Automation disabled after planning: nothing dispatches.
 - Before `reminder_send_at`: nothing dispatches yet.
 
-- [ ] **Step 2: implement `app/Services/ReminderDispatcher.php`**
+- [x] **Step 2: implement `app/Services/ReminderDispatcher.php`**
 
 Re-checks, in this order: automation still on → driver is `cloud_api` → inside
 quiet hours → send time reached. Then per row: outstanding still over the
 threshold (via `KhataService`) → flip to `queued` → dispatch. Everything it
 refuses to do is recorded, never silent.
 
-- [ ] **Step 3: run, pass, commit.**
+- [x] **Step 3: run, pass, commit.**
 
 ---
 
