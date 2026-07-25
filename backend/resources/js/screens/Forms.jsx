@@ -351,8 +351,10 @@ export function RecordSale({ customer, packs, products = [], onSave }) {
 
                 {lines.map((line, index) => (
                     <Fragment key={index}>
-                        <div className="flex gap-2">
-                            <div className="min-w-0 flex-1">
+                        {/* Product gets its own row: with qty, rate and subtotal
+                            beside it the select was crushed to ~64px on a phone. */}
+                        <div className="space-y-2">
+                            <div className="min-w-0">
                                 <label htmlFor={`pack-${index}`} className="field-label">
                                     {t('select_product')}
                                 </label>
@@ -376,6 +378,7 @@ export function RecordSale({ customer, packs, products = [], onSave }) {
                                 </select>
                             </div>
 
+                            <div className="flex gap-2">
                             <div className="w-16 shrink-0">
                                 <label htmlFor={`qty-${index}`} className="field-label">{t('qty')}</label>
                                 <input
@@ -398,6 +401,16 @@ export function RecordSale({ customer, packs, products = [], onSave }) {
                                     onChange={setLine(index, 'rate')}
                                     data-testid={`sale-rate-${index}`}
                                 />
+                            </div>
+
+                            {/* Read-only, and computed from the NEGOTIATED rate — it is
+                                what lets a salesman check a six-item order before saving. */}
+                            <div className="w-20 shrink-0">
+                                <span className="field-label">{t('subtotal')}</span>
+                                <p className="tabular pt-2 text-sm" data-testid={`sale-subtotal-${index}`}>
+                                    {formatRupees(line.product_pack_id ? linePaise(line) : 0)}
+                                </p>
+                            </div>
                             </div>
                         </div>
 
