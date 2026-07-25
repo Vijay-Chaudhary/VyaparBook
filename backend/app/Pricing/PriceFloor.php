@@ -8,10 +8,12 @@ use App\Models\ProductPack;
 /**
  * The lowest price a line may be sold at.
  *
- * Pure and DB-free apart from reading the pack it is handed, because the phone
- * must reach the identical answer offline — see resources/js/offline/pricing.js,
- * which implements this same rule. The two are tested against one shared case
- * table; a change to either must be mirrored.
+ * Callers MUST eager-load `product` and `packSize` on the pack before calling
+ * this. This runs once per sale line, so leaving those relations lazy would
+ * turn a sale into an N+1. The rule itself must reach the identical answer
+ * offline — see resources/js/offline/pricing.js, which implements this same
+ * logic. The two are tested against one shared case table; a change to either
+ * must be mirrored.
  *
  * Returns a scale-2 decimal string, or null when the pack has no cost basis at
  * all, in which case the line is unbounded (stated in the spec, not silently
@@ -24,6 +26,9 @@ final class PriceFloor
         $cost = $pack->default_cost_price;
 
         // A zero cost is a real floor of zero; only null/'' means "not set".
+        // The '' arm mirrors the JS client's guard, where a blank form field
+        // really can produce ''; the decimal:2 cast here never yields '', but
+        // the check is kept for symmetry with the offline implementation.
         if ($cost !== null && trim((string) $cost) !== '') {
             return bcadd((string) $cost, '0', 2);
         }
@@ -39,7 +44,12 @@ final class PriceFloor
         return self::ceilToPaisa(bcmul((string) $perKg, (string) $weightKg, 6));
     }
 
-    /** Round UP to the paisa so the floor never lands below true cost. */
+    /**
+     * Round UP to the paisa so the floor never lands below true cost.
+     *
+     * Truncation toward zero only equals rounding up because costs are
+     * non-negative by domain; this would need a sign check to hold in general.
+     */
     private static function ceilToPaisa(string $value): string
     {
         $truncated = bcadd($value, '0', 2);   // bcadd truncates toward zero
