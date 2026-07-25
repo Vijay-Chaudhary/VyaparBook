@@ -7,9 +7,14 @@
     <header class="mb-4 flex items-center justify-between">
         <h1 class="text-xl font-bold">{{ __('reports.heading') }}</h1>
         <nav class="flex gap-3 text-sm">
+            {{-- Orders first: accepting them is time-sensitive, and a salesman
+                 cannot pack until the owner has decided. --}}
+            <a href="{{ route('orders', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_orders') }}</a>
             <a href="{{ route('expenses', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_expenses') }}</a>
             <a href="{{ route('purchases', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_purchases') }}</a>
             <a href="{{ route('suppliers', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_suppliers') }}</a>
+            <a href="{{ route('beats', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_beats') }}</a>
+            <a href="{{ route('gst', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_gst') }}</a>
             <a href="{{ route('app') }}" class="text-brand">{{ __('reports.back_to_app') }}</a>
         </nav>
     </header>
