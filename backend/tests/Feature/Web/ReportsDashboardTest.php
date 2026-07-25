@@ -69,7 +69,11 @@ describe('render', function () {
             ->assertSee(__('reports.expenses'))          // expenses line in P&L
             ->assertSee(__('reports.monthly_money_chart')) // grouped ₹ chart title
             ->assertSee('₹0')                             // a y-axis tick label renders
-            ->assertSee('Net profit: −₹1,200.00');        // hover tooltip carries the full value
+            ->assertSee('Net profit: −₹1,200.00')         // hover tooltip carries the full value
+            ->assertSee(__('reports.cash_flow'))          // cash-flow section renders
+            ->assertSee(__('reports.cash_position'))      // cash position tile + column
+            ->assertSee(__('reports.net_cash'))           // net-cash column + chart
+            ->assertSee(__('reports.cash_position_hint')); // "not a bank balance" caption
     });
 
     it('clamps an out-of-range month without erroring', function () {

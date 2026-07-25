@@ -68,6 +68,17 @@ return [
     'manage_suppliers' => 'Suppliers',
     'monthly_net_profit_chart' => 'Monthly net profit',
 
+    // Cash flow (Phase 3)
+    'cash_flow' => 'Cash flow (this year)',
+    'cash_position' => 'Cash position',
+    'cash_position_hint' => 'Recorded in VyaparBook — not a bank balance',
+    'cash_in' => 'Cash in',
+    'cash_out' => 'Cash out',
+    'net_cash' => 'Net cash',
+    'net_cash_month' => 'Net cash (this month)',
+    'monthly_net_cash_chart' => 'Monthly net cash',
+    'cash_flow_caption' => 'Cash actually collected (customer payments) minus cash actually paid out (suppliers + expenses). Credit sales and unpaid purchases are not counted until money changes hands.',
+
     // Trend
     'monthly_trend' => 'Monthly trend (this year)',
     'month' => 'Month',
