@@ -175,11 +175,11 @@ composition in this class: 4b reuses it verbatim.
 
 ## Task 3: `OverdueCustomer` VO + `ReminderService` (TDD)
 
-- [ ] **Step 1: the VO** — `name`, `village`, `phone` (raw), `phoneE164` (?string),
+- [x] **Step 1: the VO** — `name`, `village`, `phone` (raw), `phoneE164` (?string),
   `outstandingRupees`, `daysOverdue` (int), `lastPaymentOn` (?string),
   `sendable` (bool), `blockedReason` (?string: `no_phone`|`bad_phone`|`opted_out`).
 
-- [ ] **Step 2: write `tests/Unit/ReminderServiceTest.php` first**
+- [x] **Step 2: write `tests/Unit/ReminderServiceTest.php` first**
 
 Boundaries matter — assert **at** the threshold, not comfortably past it:
 outstanding exactly `500.00` with exactly `30` days is included; `499.99` or
@@ -189,7 +189,7 @@ no-phone likewise with `blockedReason === 'no_phone'`; negative outstanding
 first sale; another tenant's overdue customer never appears; ordering is by
 outstanding descending.
 
-- [ ] **Step 3: implement `app/Services/ReminderService.php`**
+- [x] **Step 3: implement `app/Services/ReminderService.php`**
 
 Read the two thresholds off the pinned `Business`. Load non-archived customers
 with their last payment date in one query (`leftJoin` a grouped
@@ -199,7 +199,7 @@ for the never-paid case) — **not** N+1 per customer. Outstanding comes from
 does it; if that proves slow on a large book, note it rather than optimising
 speculatively. Compare money with `bccomp`, never `<`.
 
-- [ ] **Step 4: run, pass, commit.**
+- [x] **Step 4: run, pass, commit.**
 
 ---
 
