@@ -25,6 +25,9 @@ const PULL_TABLES = [
     'stock_movements',
     'production_batches',
     'material_consumptions',
+    // Read-only server data: pulled like the rest, never pushed.
+    'beats',
+    'beat_customers',
 ];
 
 /** One batch per push. Bounded so a long-offline device does not send a huge body. */

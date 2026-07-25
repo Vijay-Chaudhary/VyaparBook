@@ -37,6 +37,8 @@ class TenantExporter
         'invoices',
         'invoice_lines',
         'invoice_counters',
+        'beats',
+        'beat_customers',
         'suppliers',
         'purchases',
         'supplier_payments',

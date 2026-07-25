@@ -4,6 +4,8 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Models\Beat;
+use App\Models\BeatCustomer;
 use App\Models\Customer;
 use App\Models\MaterialConsumption;
 use App\Models\Payment;
@@ -55,13 +57,33 @@ class SyncController extends Controller
         $canSeeStock = (new StockPolicy())->manage();
         $stockDelta = fn (string $model) => $canSeeStock ? $delta($model) : collect();
 
+        // Beats are pure server data the phone only reads. A salesman gets only
+        // the beats assigned to them — another salesman's route is not their
+        // business, and withholding it at the app layer is defense in depth over
+        // RLS's tenant scope, exactly as stock is withheld above.
+        $isManager = (new StockPolicy())->manage();
+        $beats = $isManager
+            ? $delta(Beat::class)
+            : Beat::where('sync_seq', '>', $since)
+                ->where('assigned_user_id', (int) app('tenant.user_id'))
+                ->orderBy('sync_seq')
+                ->get();
+
+        // Membership rows follow their beat: a row whose beat was withheld would
+        // point at nothing on the device.
+        $beatIds = $beats->pluck('id');
+        $beatCustomers = BeatCustomer::where('sync_seq', '>', $since)
+            ->whereIn('beat_id', $beatIds)
+            ->orderBy('sync_seq')
+            ->get();
+
         $rawMaterials = $stockDelta(RawMaterial::class);
         $stockMovements = $stockDelta(StockMovement::class);
         $productionBatches = $stockDelta(ProductionBatch::class);
         $materialConsumptions = $stockDelta(MaterialConsumption::class);
 
         $maxSeqs = collect([
-            $customers, $sales, $saleLines, $payments,
+            $customers, $sales, $saleLines, $payments, $beats, $beatCustomers,
             $rawMaterials, $stockMovements, $productionBatches, $materialConsumptions,
         ])
             ->map(fn ($rows) => $rows->max('sync_seq'))
@@ -77,6 +99,8 @@ class SyncController extends Controller
             'stock_movements' => $stockMovements,
             'production_batches' => $productionBatches,
             'material_consumptions' => $materialConsumptions,
+            'beats' => $beats,
+            'beat_customers' => $beatCustomers,
         ]);
     }
 

@@ -4,6 +4,7 @@ use App\Http\Controllers\Web\Admin\ConsoleController;
 use App\Http\Controllers\Web\Admin\TenantActionController;
 use App\Http\Controllers\Web\Admin\WhatsAppSettingsController;
 use App\Http\Controllers\Web\ApiTokenController;
+use App\Http\Controllers\Web\BeatController;
 use App\Http\Controllers\Web\BillingController;
 use App\Http\Controllers\Web\LoginController;
 use App\Http\Controllers\Web\OnboardingController;
@@ -141,6 +142,18 @@ Route::middleware('auth')->group(function () {
     Route::post('reminders/{customer}', [ReminderController::class, 'send'])->name('reminders.send');
     Route::post('reminders/{customer}/opt-out', [ReminderController::class, 'optOut'])->name('reminders.opt_out');
     Route::post('reminders/{customer}/opt-in', [ReminderController::class, 'optIn'])->name('reminders.opt_in');
+
+    /*
+     | Beat planning (PRD Phase 3) — Blade, online-only, owner-only.
+     |
+     | Planning happens here; the salesman's phone only READS the result through
+     | the delta pull, so there is no push path and no conflict rule in the
+     | field. {beat} is resolved owner-scoped inside the controller.
+     */
+    Route::get('beats', [BeatController::class, 'index'])->name('beats');
+    Route::post('beats', [BeatController::class, 'store'])->name('beats.store');
+    Route::post('beats/{beat}/customers', [BeatController::class, 'updateCustomers'])->name('beats.customers');
+    Route::post('beats/{beat}/archive', [BeatController::class, 'archive'])->name('beats.archive');
 
     /*
      | GST invoicing (PRD Phase 3) — Blade, online-only, owner-only.

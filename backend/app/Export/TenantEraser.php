@@ -38,6 +38,9 @@ class TenantEraser
         'purchases',
         // Before sales: invoices.sale_id FKs into it, and invoice_lines into
         // invoices. invoice_counters is standalone but belongs with them.
+        // Before customers: beat_customers.customer_id FKs into it.
+        'beat_customers',
+        'beats',
         'invoice_lines',
         'invoices',
         'invoice_counters',
