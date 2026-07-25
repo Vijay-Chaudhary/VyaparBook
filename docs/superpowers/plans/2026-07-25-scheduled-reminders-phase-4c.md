@@ -133,27 +133,28 @@ refuses to do is recorded, never silent.
 
 ## Task 5: Preview + settings UI
 
-- [ ] **Step 1: extend `RemindersTest`** — the preview section lists tomorrow's
+- [x] **Step 1: extend `RemindersTest`** — the preview section lists tomorrow's
   planned customers; cancelling a row sets `cancelled` and it stops being
   dispatchable; cancelling the batch cancels all; the settings form saves the
   four fields and validates (`send_at` inside quiet hours, cap 1–200, cooldown
   0–90); **manual send is still unaffected by the cooldown**; another tenant's
   batch 404s.
 
-- [ ] **Step 2: controller + view + `lang/{en,hi}`** — a "Scheduled for
+- [x] **Step 2: controller + view + `lang/{en,hi}`** — a "Scheduled for
   tomorrow" card above the overdue table, and a settings form. The form must
   state plainly that enabling means messages send without further approval.
 
-- [ ] **Step 3: run, pass, commit.**
+- [x] **Step 3: run, pass, commit.**
 
 ---
 
 ## Task 6: Full suite, docs, wrap-up
 
-- [ ] **Step 1: `php artisan test`** — 589 baseline + new, no regressions.
-- [ ] **Step 2: `docs/ui-backlog.md`** — `F-06`, noting automation is
+- [x] **Step 1: `php artisan test`** — 589 baseline + new, no regressions.
+  **Result (2026-07-25):** 617 passed, 1782 assertions — 589 + 28 new (8 planner, 9 dispatcher, 5 commands, 6 UI), 0 failures.
+- [x] **Step 2: `docs/ui-backlog.md`** — `F-06`, noting automation is
   per-tenant opt-in AND blocked on the 4b smoke test.
-- [ ] **Step 3: manual check** — **blocked**: needs cron, a queue worker and
+- [ ] **Step 3: manual check** — **NOT DONE; blocked**: needs cron, a queue worker and
   real credentials. Record as outstanding; do not tick.
 - [ ] **Step 4: commit, PR, squash-merge** (`gh api` REST).
 

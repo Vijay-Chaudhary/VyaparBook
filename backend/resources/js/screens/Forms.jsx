@@ -306,7 +306,7 @@ export function RecordSale({ customer, packs, onSave }) {
                                 <option value="">—</option>
                                 {packs.map((pack) => (
                                     <option key={pack.id} value={pack.id}>
-                                        {pack.label} · {formatRupees(toPaise(pack.default_sell_price))}
+                                        {line.name_en} . {pack.label} · {formatRupees(toPaise(pack.default_sell_price))}
                                     </option>
                                 ))}
                             </select>

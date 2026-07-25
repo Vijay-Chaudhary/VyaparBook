@@ -50,4 +50,20 @@ return [
         'read' => 'Read',
         'failed' => 'Failed',
     ],
+
+    // --- Scheduled reminders (Phase 4c) ------------------------------------
+    'scheduled_heading' => 'Scheduled to send',
+    'scheduled_none' => 'Nothing is scheduled. Reminders are planned each morning once automation is on.',
+    'automation' => 'Automatic reminders',
+    'auto_enabled' => 'Send reminders automatically',
+    'auto_warning' => 'When this is on, reminders are sent without asking you again. You can cancel any scheduled reminder before it goes out.',
+    'send_at' => 'Send at',
+    'send_at_hint' => 'Between 9:00 and 20:00 only.',
+    'cooldown_days' => 'Wait between reminders (days)',
+    'cooldown_hint' => 'The same customer will not be reminded automatically again within this many days.',
+    'daily_cap' => 'Most reminders per day',
+    'cancel' => 'Cancel',
+    'cancelled' => 'Scheduled reminder cancelled.',
+    'settings_saved' => 'Reminder settings saved.',
+    'save' => 'Save',
 ];
