@@ -133,3 +133,86 @@ it('refuses another tenant\'s customer', function () {
     // Invisible under RLS, so it 404s rather than leaking that it exists.
     expect($call)->toThrow(Illuminate\Database\Eloquent\ModelNotFoundException::class);
 });
+
+/** Create an order and push it to $status through the writer's own methods. */
+function orderAt(Business $b, User $u, Customer $c, ProductPack $pack, string $status): Order
+{
+    [$order] = inOrderTenant($b, $u, fn () => app(OrderWriter::class)->createOrder(orderPayload($c, $pack)));
+
+    if ($status === OrderStatus::PENDING) {
+        return $order;
+    }
+
+    // Acceptance is the online step and has no writer method — the Blade screen
+    // does it. Set it directly so the field transitions can be exercised.
+    DB::connection('pgsql_migrate')->table('orders')->where('id', $order->id)
+        ->update(['status' => OrderStatus::ACCEPTED, 'accepted_by' => $u->id, 'accepted_at' => now()]);
+
+    // NOTE (deviation from the plan): TenantContext::switchTo uses SET LOCAL,
+    // scoped to inOrderTenant's own transaction; this suite (RefreshesTenantDatabase)
+    // deliberately does not wrap tests in an outer transaction, so once that
+    // transaction commits the tenant GUC is gone and $order->fresh() would run
+    // with no tenant set — RLS (FORCE ROW LEVEL SECURITY) then hides the row and
+    // fresh() returns null. Read post-transaction state via the pgsql_migrate
+    // superuser connection instead, exactly as PurchaseWriterTest does.
+    if ($status === OrderStatus::ACCEPTED) {
+        return Order::on('pgsql_migrate')->find($order->id);
+    }
+
+    inOrderTenant($b, $u, fn () => app(OrderWriter::class)->pack($order->uuid));
+
+    return Order::on('pgsql_migrate')->find($order->id);
+}
+
+it('packs an accepted order', function () {
+    [$b, $u, $c, $pack] = orderSetup();
+    $order = orderAt($b, $u, $c, $pack, OrderStatus::ACCEPTED);
+
+    [$packed, $changed] = inOrderTenant($b, $u, fn () => app(OrderWriter::class)->pack($order->uuid));
+
+    expect($changed)->toBeTrue();
+    expect($packed->status)->toBe(OrderStatus::PACKED);
+});
+
+it('treats a replayed pack as a duplicate rather than an error', function () {
+    [$b, $u, $c, $pack] = orderSetup();
+    $order = orderAt($b, $u, $c, $pack, OrderStatus::PACKED);
+
+    [, $changed] = inOrderTenant($b, $u, fn () => app(OrderWriter::class)->pack($order->uuid));
+
+    // Same state, no complaint: the phone resent its outbox.
+    expect($changed)->toBeFalse();
+});
+
+it('refuses to pack an order the owner has not accepted yet', function () {
+    [$b, $u, $c, $pack] = orderSetup();
+    $order = orderAt($b, $u, $c, $pack, OrderStatus::PENDING);
+
+    $call = fn () => inOrderTenant($b, $u, fn () => app(OrderWriter::class)->pack($order->uuid));
+
+    expect($call)->toThrow(Illuminate\Validation\ValidationException::class);
+    // Same reason as orderAt()'s ->fresh() swap above: read via pgsql_migrate,
+    // not ->fresh(), since we're outside the tenant-pinned transaction here.
+    expect(Order::on('pgsql_migrate')->find($order->id)->status)->toBe(OrderStatus::PENDING);
+});
+
+it('cancels an order at any open stage, keeping the reason', function () {
+    [$b, $u, $c, $pack] = orderSetup();
+    $order = orderAt($b, $u, $c, $pack, OrderStatus::PACKED);
+
+    [$cancelled] = inOrderTenant($b, $u, fn () => app(OrderWriter::class)
+        ->cancel($order->uuid, 'Shop refused delivery'));
+
+    expect($cancelled->status)->toBe(OrderStatus::CANCELLED);
+    expect($cancelled->status_note)->toBe('Shop refused delivery');
+});
+
+it('refuses to cancel an order that is already terminal', function () {
+    [$b, $u, $c, $pack] = orderSetup();
+    $order = orderAt($b, $u, $c, $pack, OrderStatus::PENDING);
+    inOrderTenant($b, $u, fn () => app(OrderWriter::class)->cancel($order->uuid, 'changed mind'));
+
+    $call = fn () => inOrderTenant($b, $u, fn () => app(OrderWriter::class)->cancel($order->uuid, 'again'));
+
+    expect($call)->toThrow(Illuminate\Validation\ValidationException::class);
+});
