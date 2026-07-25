@@ -35,4 +35,26 @@ return [
         ],
     ],
 
+    /*
+    | WhatsApp Cloud API (Phase 4b) — payment reminders sent from the single
+    | platform business number.
+    |
+    | driver defaults to 'log', which sends NOTHING: the integration ships dark
+    | and only goes live when someone deliberately sets WHATSAPP_DRIVER=cloud_api
+    | with credentials present. See the runbook in the Phase 4b spec.
+    |
+    | 'template' must name a template APPROVED in Meta whose body matches
+    | lang/{en,hi}/reminders.php `message`, with {{1}} = shop and {{2}} = amount.
+    | Meta rejects free-form business-initiated messages.
+    */
+    'whatsapp' => [
+        'driver' => env('WHATSAPP_DRIVER', 'log'),
+        'api_version' => env('WHATSAPP_API_VERSION', 'v21.0'),
+        'phone_number_id' => env('WHATSAPP_PHONE_NUMBER_ID'),
+        'token' => env('WHATSAPP_TOKEN'),
+        'template' => env('WHATSAPP_TEMPLATE', 'payment_reminder'),
+        'verify_token' => env('WHATSAPP_VERIFY_TOKEN'),
+        'app_secret' => env('WHATSAPP_APP_SECRET'),
+    ],
+
 ];

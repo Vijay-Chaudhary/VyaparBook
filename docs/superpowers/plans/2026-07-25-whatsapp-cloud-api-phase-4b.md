@@ -43,16 +43,16 @@ git checkout -b feat/whatsapp-cloud-api-phase-4b
 
 ## Task 1: Config, contracts and the two drivers (TDD)
 
-- [ ] **Step 1: `config/services.php`** — add the `whatsapp` block from the spec,
+- [x] **Step 1: `config/services.php`** — add the `whatsapp` block from the spec,
   `driver` defaulting to `log`.
 
-- [ ] **Step 2: `SendResult` VO + `WhatsAppSender` interface**
+- [x] **Step 2: `SendResult` VO + `WhatsAppSender` interface**
 
 `send(string $toE164, string $text, string $locale): SendResult`. The interface
 takes the *rendered* text so `ReminderMessage` stays the single source of
 wording; `CloudApiSender` maps it onto template params internally.
 
-- [ ] **Step 3: write `tests/Unit/LogSenderTest.php` + `tests/Unit/CloudApiSenderTest.php` first**
+- [x] **Step 3: write `tests/Unit/LogSenderTest.php` + `tests/Unit/CloudApiSenderTest.php` first**
 
 `LogSender`: returns `accepted`, a synthetic id, and — asserted with
 `Http::preventStrayRequests()` — performs **no** HTTP.
@@ -64,13 +64,13 @@ locale's language code, and `{{1}}`/`{{2}}` as the shop and amount; a 200 parses
 the Meta error code **and** is marked non-retryable; a 500 is surfaced as
 retryable.
 
-- [ ] **Step 4: run, watch fail, implement both drivers, run, pass.**
+- [x] **Step 4: run, watch fail, implement both drivers, run, pass.**
 
-- [ ] **Step 5: bind in a service provider** — `WhatsAppSender` resolves from
+- [x] **Step 5: bind in a service provider** — `WhatsAppSender` resolves from
   `config('services.whatsapp.driver')`. Unknown driver → throw at boot rather
   than silently degrade to `log` (a typo must not look like success).
 
-- [ ] **Step 6: commit.**
+- [x] **Step 6: commit.**
 
 ---
 
