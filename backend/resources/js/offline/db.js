@@ -110,6 +110,16 @@ export function openTenantDb(tenantId) {
         beat_customers: 'id, beat_id, customer_id, sync_seq',
     });
 
+    /**
+     * Orders (order workflow). Keyed on `uuid` like sales: an order is created
+     * on the phone, so it has a client idempotency key before it has a server
+     * id — and the sale created on delivery reuses that same uuid.
+     */
+    db.version(6).stores({
+        orders: 'uuid, id, customer_id, status, order_date, sync_seq',
+        order_lines: 'id, order_id, sync_seq',
+    });
+
     current = db;
     currentTenantId = tenantId;
 
