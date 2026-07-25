@@ -65,7 +65,7 @@ export function CustomerLedger({ customer, entries, outstandingPaise, readOnly =
                         onClick={() => navigate(`/sale/${customer.uuid}`)}
                         data-testid="record-sale"
                     >
-                        {t('record_sale')}
+                        {t('take_order')}
                     </button>
                 </div>
             )}

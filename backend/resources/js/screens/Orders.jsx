@@ -14,6 +14,16 @@ export function Orders({ orders, customersById, onAction }) {
 
     return (
         <Screen title={t('orders')} onBack={() => navigate('/khata')}>
+            {/* The nav tab lands here, so this is where a new order starts too. */}
+            <button
+                type="button"
+                className="btn-primary mb-4 w-full"
+                onClick={() => navigate('/order')}
+                data-testid="take-order"
+            >
+                + {t('take_order')}
+            </button>
+
             {ORDER_STATUSES.map((status) => (
                 grouped[status].length > 0 && (
                     <section key={status} className="mb-4">

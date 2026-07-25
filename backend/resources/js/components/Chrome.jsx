@@ -13,7 +13,11 @@ const TABS = [
     { route: '/', key: 'home', icon: HomeIcon },
     { route: '/khata', key: 'khata', icon: BookIcon },
     // The only write entry in the nav — dropped in a read-only support view.
-    { route: '/sale', key: 'sales', icon: PlusIcon, write: true },
+    // Points at the ORDER LIST, not at order-taking: a salesman lives in this
+    // screen during a round (packing and delivering), and a new order starts
+    // from the customer you are standing in front of. The list carries its own
+    // "take order" button so both are one tap from here, without a 6th tab.
+    { route: '/orders', key: 'orders', icon: PlusIcon, write: true },
     // Manager-only. Hidden for salesman/accountant, matching StockPolicy and
     // what sync/pull actually sends them — never render a tab that 403s.
     { route: '/stock', key: 'stock', icon: BoxIcon, managerOnly: true },
