@@ -46,6 +46,8 @@ class TenantEraser
         'raw_materials',
         'supplier_payments',
         'suppliers',
+        // Before customers: reminder_logs.customer_id FKs into it.
+        'reminder_logs',
         'customers',
         'expenses',
         'subscription_payments',

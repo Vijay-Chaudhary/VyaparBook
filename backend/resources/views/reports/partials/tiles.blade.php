@@ -12,6 +12,9 @@
     <div class="card">
         <p class="text-sm text-ink-muted">{{ __('reports.customer_outstanding') }}</p>
         <p class="tabular text-lg font-bold text-danger">{{ Inr::format($report->outstanding->totalRupees) }}</p>
+        {{-- Phase 4a: the one action this figure implies — chase it. --}}
+        <a href="{{ route('reminders', ['business' => $businessId]) }}"
+           class="text-xs text-brand">{{ __('reminders.heading') }}</a>
     </div>
     <div class="card">
         <p class="text-sm text-ink-muted">{{ __('reports.production_month') }}</p>

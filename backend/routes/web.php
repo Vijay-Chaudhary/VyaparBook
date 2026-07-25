@@ -9,6 +9,7 @@ use App\Http\Controllers\Web\OnboardingController;
 use App\Http\Controllers\Web\ExpenseController;
 use App\Http\Controllers\Web\PurchaseController;
 use App\Http\Controllers\Web\RegisterController;
+use App\Http\Controllers\Web\ReminderController;
 use App\Http\Controllers\Web\ReportController;
 use App\Http\Controllers\Web\SupplierController;
 use Illuminate\Support\Facades\Route;
@@ -100,6 +101,22 @@ Route::middleware('auth')->group(function () {
     Route::post('suppliers', [SupplierController::class, 'store'])->name('suppliers.store');
     Route::get('suppliers/{supplier}', [SupplierController::class, 'show'])->name('suppliers.show');
     Route::post('suppliers/{supplier}/payments', [SupplierController::class, 'storePayment'])->name('suppliers.payments.store');
+
+    /*
+     | Payment reminders (Phase 4a) — Blade, online-only, owner-only, same
+     | owner-tool pattern as expenses/suppliers and not plan-gated.
+     |
+     | Nothing is sent server-side: `send` logs the owner's intent and redirects
+     | to a wa.me deep link, so the message leaves the owner's own WhatsApp.
+     | Phase 4b swaps that redirect for a Cloud API call on the same log row.
+     |
+     | {customer} is resolved owner-scoped inside the controller, never via
+     | implicit binding (no tenant is pinned during route resolution).
+     */
+    Route::get('reminders', [ReminderController::class, 'index'])->name('reminders');
+    Route::post('reminders/{customer}', [ReminderController::class, 'send'])->name('reminders.send');
+    Route::post('reminders/{customer}/opt-out', [ReminderController::class, 'optOut'])->name('reminders.opt_out');
+    Route::post('reminders/{customer}/opt-in', [ReminderController::class, 'optIn'])->name('reminders.opt_in');
 
     // Session -> JWT exchange for the React layer. Throttled because it mints
     // credentials: a valid session should not make it freely spammable.

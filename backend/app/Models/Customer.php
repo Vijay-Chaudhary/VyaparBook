@@ -24,6 +24,9 @@ class Customer extends Model
     protected $casts = [
         'opening_balance' => 'decimal:2',
         'archived_at' => 'datetime',
+        // Phase 4a: per-customer messaging opt-out. Owner-side only — never
+        // added to KhataController's API whitelist, so sync is unaffected.
+        'reminder_opt_out_at' => 'datetime',
         'version' => 'integer',
         'sync_seq' => 'integer',
     ];

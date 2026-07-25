@@ -12,4 +12,10 @@ class Business extends Model
     use HasFactory, HasUuids;
 
     protected $fillable = ['name', 'city', 'gstin', 'default_language', 'plan'];
+
+    protected $casts = [
+        // Phase 4a reminder thresholds: who counts as overdue, per shop.
+        'reminder_min_outstanding' => 'decimal:2',
+        'reminder_min_days' => 'integer',
+    ];
 }
