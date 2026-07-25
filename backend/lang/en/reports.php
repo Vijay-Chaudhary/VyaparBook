@@ -92,4 +92,12 @@ return [
     'no_materials' => 'No raw materials yet.',
     'no_products' => 'No sales recorded this year yet.',
     'no_low_stock' => 'All materials are above their reorder level.',
+
+    // Finished goods (PRD Phase 3)
+    'finished_goods' => 'Finished goods in stock',
+    'finished_goods_caption' => 'Produced minus sold, in kilograms, since you started. Sales are converted using each pack size. A negative figure means more was sold than was recorded as produced — check for missing production entries.',
+    'finished_goods_empty' => 'Nothing produced or sold yet.',
+    'produced_kg' => 'Produced (Kg)',
+    'sold_kg' => 'Sold (Kg)',
+    'on_hand_kg' => 'In stock (Kg)',
 ];

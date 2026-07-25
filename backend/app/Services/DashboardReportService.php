@@ -43,6 +43,7 @@ class DashboardReportService
         private readonly SupplierService $suppliers,
         private readonly CogsService $cogs,
         private readonly CashFlowService $cash,
+        private readonly FinishedGoodsService $finishedGoods,
     ) {}
 
     public function forMonth(string $businessId, ReportPeriod $period): DashboardReport
@@ -136,6 +137,7 @@ class DashboardReportService
             netCashMonthRupees: $cashMonth->netCashRupees,
             cashPositionRupees: $cashMonth->positionRupees,
             cashTrend: $cashTrend,
+            finishedGoods: $this->finishedGoods->onHand($businessId),
         );
     }
 
