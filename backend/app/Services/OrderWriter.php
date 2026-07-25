@@ -139,14 +139,11 @@ class OrderWriter
                 throw (new ModelNotFoundException)->setModel(Order::class, [$orderUuid]);
             }
 
-            // A repeat of the SAME status is a duplicate, not an error — the
-            // phone resent its outbox. But that grace does not extend to an
-            // order already in a terminal state: cancelling an already-cancelled
-            // order is not "the same cancel resent", it's acting on a closed
-            // order, and OrderStatus::canTransition would refuse it below
-            // anyway — checking isTerminal here just makes that explicit rather
-            // than silently reporting a false "duplicate".
-            if ($order->status === $to && ! OrderStatus::isTerminal($order->status)) {
+            // Same status is an idempotent repeat, not an error — a phone
+            // retrying its outbox must not have a succeeded cancel parked.
+            // Moving to a DIFFERENT terminal state is caught by canTransition
+            // below.
+            if ($order->status === $to) {
                 return [$order, false];
             }
 

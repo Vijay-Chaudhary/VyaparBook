@@ -207,13 +207,25 @@ it('cancels an order at any open stage, keeping the reason', function () {
     expect($cancelled->status_note)->toBe('Shop refused delivery');
 });
 
-it('refuses to cancel an order that is already terminal', function () {
+it('treats a replayed cancel as a duplicate, so an offline retry is not parked', function () {
     [$b, $u, $c, $pack] = orderSetup();
     $order = orderAt($b, $u, $c, $pack, OrderStatus::PENDING);
+
     inOrderTenant($b, $u, fn () => app(OrderWriter::class)->cancel($order->uuid, 'changed mind'));
+    [, $changed] = inOrderTenant($b, $u, fn () => app(OrderWriter::class)->cancel($order->uuid, 'changed mind'));
 
-    $call = fn () => inOrderTenant($b, $u, fn () => app(OrderWriter::class)->cancel($order->uuid, 'again'));
+    // The push succeeded the first time; the phone simply resent it.
+    expect($changed)->toBeFalse();
+});
 
+it('refuses to cancel an order that has already been delivered', function () {
+    [$b, $u, $c, $pack] = orderSetup();
+    $order = orderAt($b, $u, $c, $pack, OrderStatus::PACKED);
+    inOrderTenant($b, $u, fn () => app(OrderWriter::class)->deliver($order->uuid));
+
+    $call = fn () => inOrderTenant($b, $u, fn () => app(OrderWriter::class)->cancel($order->uuid, 'too late'));
+
+    // The goods are gone and the sale exists — cancelling now would be a lie.
     expect($call)->toThrow(Illuminate\Validation\ValidationException::class);
 });
 
