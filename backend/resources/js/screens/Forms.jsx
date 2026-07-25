@@ -1,7 +1,8 @@
-import { useMemo, useState } from 'react';
+import { Fragment, useMemo, useState } from 'react';
 import { getLocale, t, today } from '../i18n';
 import { productName } from '../offline/catalog';
 import { formatRupees, toPaise } from '../offline/money';
+import { belowFloor, floorPaise } from '../offline/pricing';
 import { navigate } from '../router';
 import { Screen } from '../components/Chrome';
 
@@ -224,7 +225,7 @@ export function RecordPayment({ customer, onSave }) {
 /* ------------------------------------------------------------------ */
 
 export function RecordSale({ customer, packs, products = [], onSave }) {
-    const [lines, setLines] = useState([{ product_pack_id: '', qty: '1' }]);
+    const [lines, setLines] = useState([{ product_pack_id: '', qty: '1', rate: '' }]);
 
     // Pack rows carry product_id but not the product's name, so the join
     // happens here. Built once rather than scanning products per option.
@@ -236,20 +237,61 @@ export function RecordSale({ customer, packs, products = [], onSave }) {
     const [error, setError] = useState(null);
     const [saving, setSaving] = useState(false);
 
+    // A rate the salesman is still typing may not parse yet (mid-keystroke:
+    // 'abc', '12..3', '-'). toPaise() throws on those, which would crash the
+    // form on every keystroke, so treat anything unparseable as zero here —
+    // the render layer never sees the exception.
+    const ratePaise = (value) => {
+        try {
+            return toPaise(value || '0');
+        } catch {
+            return 0;
+        }
+    };
+
     const setLine = (index, key) => (e) =>
         setLines((current) =>
-            current.map((line, i) => (i === index ? { ...line, [key]: e.target.value } : line))
+            current.map((line, i) => {
+                if (i !== index) return line;
+
+                const next = { ...line, [key]: e.target.value };
+
+                if (key === 'product_pack_id') {
+                    const pack = packs.find((p) => p.id === e.target.value);
+                    next.rate = pack ? String(pack.default_sell_price) : '';
+                }
+
+                return next;
+            })
         );
 
-    const totalPaise = lines.reduce((sum, line) => {
-        const pack = packs.find((p) => p.id === line.product_pack_id);
+    const linePaise = (line) => {
         const qty = Number(line.qty);
+        const rate = ratePaise(line.rate);
 
-        if (!pack || !Number.isFinite(qty)) return sum;
+        return Number.isFinite(qty) ? rate * qty : 0;
+    };
 
-        // Mirrors LedgerWriter: line_total = rate * qty, in exact paise.
-        return sum + toPaise(pack.default_sell_price) * qty;
-    }, 0);
+    const totalPaise = lines.reduce((sum, line) => sum + (line.product_pack_id ? linePaise(line) : 0), 0);
+
+    const floorFor = (line) => {
+        const pack = packs.find((p) => p.id === line.product_pack_id);
+
+        return pack ? floorPaise(pack, productsById.get(pack.product_id)) : null;
+    };
+
+    // A half-typed rate parses as 0 paise (see ratePaise above), which is
+    // below almost any floor. That's deliberate, not a false positive: the
+    // salesman hasn't finished typing a real rate yet, so treating the field
+    // as "not yet valid" and showing the warning is correct — it clears the
+    // moment the rate they mean to charge is fully entered. Suppressing the
+    // check for unparseable input would let an incomplete-but-still-below-floor
+    // rate slip through submit's `some(v => v !== null)` gate undetected.
+    const violations = lines.map((line) =>
+        line.product_pack_id && belowFloor(ratePaise(line.rate), floorFor(line))
+            ? floorFor(line)
+            : null
+    );
 
     const submit = async (e) => {
         e.preventDefault();
@@ -262,13 +304,22 @@ export function RecordSale({ customer, packs, products = [], onSave }) {
             return;
         }
 
+        if (violations.some((v) => v !== null)) {
+            setError(t('below_floor'));
+            return;
+        }
+
         setSaving(true);
 
         try {
             await onSave({
                 customer,
                 sale_date: date,
-                lines: valid.map((l) => ({ product_pack_id: l.product_pack_id, qty: Number(l.qty) })),
+                lines: valid.map((l) => ({
+                    product_pack_id: l.product_pack_id,
+                    qty: Number(l.qty),
+                    rate: l.rate,
+                })),
                 total: (totalPaise / 100).toFixed(2),
             });
             navigate(`/khata/${customer.uuid}`);
@@ -299,51 +350,69 @@ export function RecordSale({ customer, packs, products = [], onSave }) {
                 )}
 
                 {lines.map((line, index) => (
-                    <div key={index} className="flex gap-2">
-                        <div className="min-w-0 flex-1">
-                            <label htmlFor={`pack-${index}`} className="field-label">
-                                {t('select_product')}
-                            </label>
-                            <select
-                                id={`pack-${index}`}
-                                className="field-input"
-                                value={line.product_pack_id}
-                                onChange={setLine(index, 'product_pack_id')}
-                                data-testid={`sale-pack-${index}`}
-                            >
-                                <option value="">—</option>
-                                {packs.map((pack) => {
-                                    const name = productName(productsById.get(pack.product_id), getLocale());
+                    <Fragment key={index}>
+                        <div className="flex gap-2">
+                            <div className="min-w-0 flex-1">
+                                <label htmlFor={`pack-${index}`} className="field-label">
+                                    {t('select_product')}
+                                </label>
+                                <select
+                                    id={`pack-${index}`}
+                                    className="field-input"
+                                    value={line.product_pack_id}
+                                    onChange={setLine(index, 'product_pack_id')}
+                                    data-testid={`sale-pack-${index}`}
+                                >
+                                    <option value="">—</option>
+                                    {packs.map((pack) => {
+                                        const name = productName(productsById.get(pack.product_id), getLocale());
 
-                                    return (
-                                        <option key={pack.id} value={pack.id}>
-                                            {name ? `${name} · ` : ''}{pack.label} · {formatRupees(toPaise(pack.default_sell_price))}
-                                        </option>
-                                    );
-                                })}
-                            </select>
+                                        return (
+                                            <option key={pack.id} value={pack.id}>
+                                                {name ? `${name} · ` : ''}{pack.label} · {formatRupees(toPaise(pack.default_sell_price))}
+                                            </option>
+                                        );
+                                    })}
+                                </select>
+                            </div>
+
+                            <div className="w-16 shrink-0">
+                                <label htmlFor={`qty-${index}`} className="field-label">{t('qty')}</label>
+                                <input
+                                    id={`qty-${index}`}
+                                    inputMode="numeric"
+                                    className="field-input tabular"
+                                    value={line.qty}
+                                    onChange={setLine(index, 'qty')}
+                                    data-testid={`sale-qty-${index}`}
+                                />
+                            </div>
+
+                            <div className="w-24 shrink-0">
+                                <label htmlFor={`rate-${index}`} className="field-label">{t('rate')}</label>
+                                <input
+                                    id={`rate-${index}`}
+                                    inputMode="decimal"
+                                    className="field-input tabular"
+                                    value={line.rate}
+                                    onChange={setLine(index, 'rate')}
+                                    data-testid={`sale-rate-${index}`}
+                                />
+                            </div>
                         </div>
 
-                        <div className="w-20 shrink-0">
-                            <label htmlFor={`qty-${index}`} className="field-label">
-                                {t('qty')}
-                            </label>
-                            <input
-                                id={`qty-${index}`}
-                                inputMode="numeric"
-                                className="field-input tabular"
-                                value={line.qty}
-                                onChange={setLine(index, 'qty')}
-                                data-testid={`sale-qty-${index}`}
-                            />
-                        </div>
-                    </div>
+                        {violations[index] !== null && (
+                            <p className="field-error" data-testid={`sale-floor-${index}`}>
+                                {t('below_floor')} {formatRupees(violations[index])}
+                            </p>
+                        )}
+                    </Fragment>
                 ))}
 
                 <button
                     type="button"
                     className="btn-secondary w-full"
-                    onClick={() => setLines((l) => [...l, { product_pack_id: '', qty: '1' }])}
+                    onClick={() => setLines((l) => [...l, { product_pack_id: '', qty: '1', rate: '' }])}
                 >
                     + {t('add_line')}
                 </button>
