@@ -31,12 +31,35 @@ use Illuminate\Support\Facades\DB;
 class CogsService
 {
     /**
+     * Per-request memo, keyed by businessId. forMonth() asks for the same
+     * tenant's pack costs three times (gross-profit trend, estimated-share,
+     * product performance); without this each call re-ran the whole chain.
+     * The service is request-scoped and the key is the tenant, so nothing
+     * bleeds across tenants or across requests.
+     *
+     * @var array<string, array<string, string>>
+     */
+    private array $materialCostMemo = [];
+
+    /** @var array<string, array<string, string>> */
+    private array $productCostMemo = [];
+
+    /** @var array<string, array<string, PackCost>> */
+    private array $packCostMemo = [];
+
+    /**
      * Weighted-average ₹/kg per raw material, from non-archived purchases.
      * Mirrors PurchaseService::costPerKgFor set-wide.
      *
      * @return array<string, string> materialId => ₹/kg, scale 2
      */
     public function materialCostPerKg(string $businessId): array
+    {
+        return $this->materialCostMemo[$businessId] ??= $this->computeMaterialCostPerKg($businessId);
+    }
+
+    /** @return array<string, string> */
+    private function computeMaterialCostPerKg(string $businessId): array
     {
         $rows = DB::table('purchases')
             ->where('business_id', $businessId)
@@ -63,6 +86,12 @@ class CogsService
      * @return array<string, string> productId => ₹/kg, scale 2
      */
     public function productCostPerKg(string $businessId): array
+    {
+        return $this->productCostMemo[$businessId] ??= $this->computeProductCostPerKg($businessId);
+    }
+
+    /** @return array<string, string> */
+    private function computeProductCostPerKg(string $businessId): array
     {
         $materialCost = $this->materialCostPerKg($businessId);
 
@@ -115,6 +144,12 @@ class CogsService
      * @return array<string, PackCost> packId => cost
      */
     public function packCosts(string $businessId): array
+    {
+        return $this->packCostMemo[$businessId] ??= $this->computePackCosts($businessId);
+    }
+
+    /** @return array<string, PackCost> */
+    private function computePackCosts(string $businessId): array
     {
         $productCost = $this->productCostPerKg($businessId);
 
