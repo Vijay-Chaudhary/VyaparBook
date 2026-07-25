@@ -8,8 +8,8 @@ final readonly class ProductPerf
         public string $name,
         public int $qtySold,
         public string $salesRupees,
-        public string $estCostRupees,
-        public string $estProfitRupees,
+        public string $costRupees,
+        public string $profitRupees,
         public string $marginPercent, // "4.9" (one decimal), "0.0" when sales are 0
     ) {}
 }

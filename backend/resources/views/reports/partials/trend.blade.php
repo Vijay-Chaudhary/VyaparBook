@@ -7,7 +7,7 @@
             <tr class="text-left text-ink-muted">
                 <th>{{ __('reports.month') }}</th>
                 <th class="text-right">{{ __('reports.sales') }}</th>
-                <th class="text-right">{{ __('reports.est_gross_profit') }}</th>
+                <th class="text-right">{{ __('reports.gross_profit') }}</th>
                 <th class="text-right">{{ __('reports.expenses') }}</th>
                 <th class="text-right">{{ __('reports.net_profit') }}</th>
                 <th class="text-right">{{ __('reports.production') }}</th>

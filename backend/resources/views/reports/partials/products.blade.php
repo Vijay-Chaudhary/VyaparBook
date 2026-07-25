@@ -11,7 +11,7 @@
                     <th>{{ __('reports.product') }}</th>
                     <th class="text-right">{{ __('reports.qty_sold') }}</th>
                     <th class="text-right">{{ __('reports.sales') }}</th>
-                    <th class="text-right">{{ __('reports.est_cost') }}</th>
+                    <th class="text-right">{{ __('reports.cogs') }}</th>
                     <th class="text-right">{{ __('reports.est_profit') }}</th>
                     <th class="text-right">{{ __('reports.margin') }}</th>
                 </tr>
@@ -22,8 +22,8 @@
                         <td>{{ $row->name }}</td>
                         <td class="tabular text-right">{{ $row->qtySold }}</td>
                         <td class="tabular text-right">{{ Inr::format($row->salesRupees) }}</td>
-                        <td class="tabular text-right">{{ Inr::format($row->estCostRupees) }}</td>
-                        <td class="tabular text-right">{{ Inr::format($row->estProfitRupees) }}</td>
+                        <td class="tabular text-right">{{ Inr::format($row->costRupees) }}</td>
+                        <td class="tabular text-right">{{ Inr::format($row->profitRupees) }}</td>
                         <td class="tabular text-right">{{ $row->marginPercent }}%</td>
                     </tr>
                 @endforeach

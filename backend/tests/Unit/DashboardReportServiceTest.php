@@ -23,30 +23,7 @@ function inTenant(string $businessId, callable $fn): mixed
     });
 }
 
-function dashCustomer(Business $b, string $name, string $opening = '0.00', ?string $village = null): Customer
-{
-    return Customer::on('pgsql_migrate')->create([
-        'business_id' => $b->id,
-        'uuid' => (string) Str::uuid(),
-        'name' => $name,
-        'village' => $village,
-        'opening_balance' => $opening,
-    ]);
-}
 
-function dashSale(Customer $c, User $u, string $total, string $date): Sale
-{
-    $s = new Sale([
-        'business_id' => $c->business_id, 'uuid' => (string) Str::uuid(),
-        'customer_id' => $c->id, 'sale_date' => $date,
-    ]);
-    $s->setConnection('pgsql_migrate');
-    $s->created_by = $u->id;
-    $s->total = $total;
-    $s->save();
-
-    return $s;
-}
 
 function dashPayment(Customer $c, User $u, string $amount, string $date): Payment
 {
@@ -134,16 +111,6 @@ function stockIn(App\Models\RawMaterial $m, User $u, string $qty): void
     $mv->save();
 }
 
-function saleLine(App\Models\Sale $s, App\Models\ProductPack $pack, int $qty, string $rate): void
-{
-    $line = new App\Models\SaleLine([
-        'business_id' => $s->business_id, 'sale_id' => $s->id,
-        'product_pack_id' => $pack->id, 'qty' => $qty, 'rate' => $rate,
-    ]);
-    $line->setConnection('pgsql_migrate');
-    $line->line_total = bcmul($rate, (string) $qty, 2);
-    $line->save();
-}
 
 function dashBatch(Business $b, User $u, string $kg, string $date): void
 {
@@ -237,8 +204,8 @@ it('flags materials below reorder and ranks product performance', function () {
     expect($perf[0]->name)->toBe('Sev 1kg');
     expect($perf[0]->qtySold)->toBe(10);
     expect($perf[0]->salesRupees)->toBe('1000.00');
-    expect($perf[0]->estCostRupees)->toBe('930.00');
-    expect($perf[0]->estProfitRupees)->toBe('70.00');
+    expect($perf[0]->costRupees)->toBe('930.00');
+    expect($perf[0]->profitRupees)->toBe('70.00');
     expect($perf[0]->marginPercent)->toBe('7.0');
 });
 
@@ -255,7 +222,7 @@ it('assembles a full report, with highest-selling/profit and an empty-shop case'
     expect($report->lowStockCount)->toBe(0);
     expect($report->highestSellingName)->toBeNull();
     expect($report->trend)->toHaveCount(12);
-    expect($report->estGrossProfitMonthRupees)->toBe('0.00');
+    expect($report->grossProfitMonthRupees)->toBe('0.00');
     expect($report->expensesMonthRupees)->toBe('0.00');
     expect($report->netProfitMonthRupees)->toBe('0.00');
     expect($report->netProfitMarginPercent)->toBe('0.0');
@@ -289,7 +256,7 @@ it('computes an estimated monthly gross profit: sales minus product cost, before
 
         return [
             $svc->grossProfitTrend($a->id, 2026),
-            $svc->forMonth($a->id, App\Reports\ReportPeriod::fromInput(2026, 7))->estGrossProfitMonthRupees,
+            $svc->forMonth($a->id, App\Reports\ReportPeriod::fromInput(2026, 7))->grossProfitMonthRupees,
         ];
     });
 
@@ -394,4 +361,73 @@ it('reports a zero net margin when there are no sales (no divide-by-zero)', func
     expect($report->salesMonthRupees)->toBe('0.00');
     expect($report->netProfitMonthRupees)->toBe('-500.00');  // 0 gross − 500 expenses
     expect($report->netProfitMarginPercent)->toBe('0.0');    // guarded
+});
+
+it('costs gross profit from production, falling back to the estimate per product', function () {
+    // Two products sold in the same month: one produced (so it has an ACTUAL
+    // cost that differs from the owner's guess), one bought in (no batches, so
+    // the guess still stands). The month's gross profit must mix both, and the
+    // marker must report only the bought-in half as estimated.
+    $a = Business::factory()->create();
+    $u = User::factory()->create();
+
+    $besan = pwMaterial($a, 'Besan');
+    cogsBuy($a, $u, $besan, '100', '40');                    // ₹40/kg
+
+    // Sev: 10kg produced from 10kg besan → ₹40/kg actual, though the owner
+    // typed ₹93.00. A 1kg pack therefore costs ₹40.00, not ₹93.00.
+    [$sev, $sevPack] = cogsProduct($a, 'Sev', '1.000', '93.00');
+    cogsBatch($a, $u, $sev, '10.000', [$besan->id => '10.000']);
+
+    // Namkeen: bought in, never produced → the ₹77.00 estimate stands.
+    [, $namkeenPack] = cogsProduct($a, 'Namkeen', '1.000', '77.00');
+
+    $c = dashCustomer($a, 'Ramesh');
+    $sale = dashSale($c, $u, '2000.00', '2026-07-10');
+    saleLine($sale, $sevPack, 10, '100.00');      // 1000 revenue, cost 10 × 40 = 400
+    saleLine($sale, $namkeenPack, 10, '100.00');  // 1000 revenue, cost 10 × 77 = 770
+
+    [$trend, $report, $perf] = inTenant($a->id, function () use ($a) {
+        $svc = app(DashboardReportService::class);
+        $r = $svc->forMonth($a->id, App\Reports\ReportPeriod::fromInput(2026, 7));
+
+        return [$svc->grossProfitTrend($a->id, 2026), $r, $r->productPerformance];
+    });
+
+    // 2000 − (400 + 770) = 830. Under the old estimate it would have been
+    // 2000 − (930 + 770) = 300 — production costing is what moves it.
+    expect($trend[6])->toBe('830.00');
+    expect($report->grossProfitMonthRupees)->toBe('830.00');
+
+    // Only the bought-in product's revenue is still estimated.
+    expect($report->estimatedCostRevenueRupees)->toBe('1000.00');
+
+    // Product performance uses the same costing, so it cannot contradict above:
+    // Σ of its per-pack profit is the headline gross profit.
+    $sumOfPerf = collect($perf)->reduce(fn ($carry, $p) => bcadd($carry, $p->profitRupees, 2), '0.00');
+    expect($sumOfPerf)->toBe('830.00');
+
+    $sevRow = collect($perf)->firstWhere('name', 'Sev 1.000kg');
+    expect($sevRow->costRupees)->toBe('400.00');   // actual, not 930.00
+});
+
+it('reports nothing as estimated once every product sold has been produced', function () {
+    $a = Business::factory()->create();
+    $u = User::factory()->create();
+
+    $besan = pwMaterial($a, 'Besan');
+    cogsBuy($a, $u, $besan, '100', '40');
+
+    [$sev, $pack] = cogsProduct($a, 'Sev', '1.000', '93.00');
+    cogsBatch($a, $u, $sev, '10.000', [$besan->id => '10.000']);
+
+    $c = dashCustomer($a, 'Ramesh');
+    $sale = dashSale($c, $u, '500.00', '2026-07-10');
+    saleLine($sale, $pack, 5, '100.00');
+
+    $report = inTenant($a->id, fn () => app(DashboardReportService::class)
+        ->forMonth($a->id, App\Reports\ReportPeriod::fromInput(2026, 7)));
+
+    expect($report->estimatedCostRevenueRupees)->toBe('0.00');
+    expect($report->grossProfitMonthRupees)->toBe('300.00');   // 500 − 5 × 40
 });
