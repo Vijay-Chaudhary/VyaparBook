@@ -100,6 +100,16 @@ export function openTenantDb(tenantId) {
         material_consumptions: 'id, production_batch_id, sync_seq',
     });
 
+    /**
+     * Beats (PRD Phase 3). Keyed on `id`, not `uuid`: these are server-written
+     * only — the phone reads a beat and never creates one — so there is no
+     * client-generated idempotency key, and no outbox path for them.
+     */
+    db.version(5).stores({
+        beats: 'id, assigned_user_id, archived_at, sync_seq',
+        beat_customers: 'id, beat_id, customer_id, sync_seq',
+    });
+
     current = db;
     currentTenantId = tenantId;
 
