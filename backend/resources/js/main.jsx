@@ -15,7 +15,8 @@ import { BottomNav, BusinessSwitcher, ImpersonationBanner, StalenessBanner, Sync
 import { Home } from './screens/Home';
 import { KhataList } from './screens/KhataList';
 import { CustomerLedger } from './screens/CustomerLedger';
-import { NewCustomer, RecordPayment, RecordSale } from './screens/Forms';
+import { NewCustomer, RecordPayment, RecordOrder } from './screens/Forms';
+import { Orders } from './screens/Orders';
 import { StockList } from './screens/StockList';
 import { MaterialDetail, NewMaterial, RecordMovement } from './screens/StockForms';
 import { ProductionList, RecordBatch } from './screens/Production';
@@ -27,8 +28,13 @@ const ROUTES = {
     '/khata/:uuid': 'ledger',
     '/customer/new': 'new-customer',
     '/payment/:uuid': 'payment',
-    '/sale/:uuid': 'sale',
+    // Kept mapped to the same names as before the order-workflow rename, so an
+    // old bookmark or home-screen shortcut still resolves.
+    '/sale/:uuid': 'order',
     '/sale': 'pick-customer',
+    '/order/:uuid': 'order',
+    '/order': 'pick-customer',
+    '/orders': 'orders',
     '/stock': 'stock',
     '/stock/:id': 'material',
     '/material/new': 'new-material',
@@ -75,6 +81,7 @@ function App({ userName, locale }) {
     const [memberships, setMemberships] = useState([]);
     const [needsPick, setNeedsPick] = useState(false);
     const [customers, setCustomers] = useState([]);
+    const [orders, setOrders] = useState([]);
     const [materials, setMaterials] = useState([]);
     const [batches, setBatches] = useState([]);
     const [products, setProducts] = useState([]);
@@ -236,6 +243,7 @@ function App({ userName, locale }) {
             if (!database) return;
 
             setCustomers(await khataList(database));
+            setOrders(await database.orders.toArray());
             setPacks(await database.product_packs.toArray());
             // Every role caches the catalog (CatalogPolicy leaves reads ungated:
             // a salesman cannot sell without it), so products load for everyone.
@@ -356,17 +364,32 @@ function App({ userName, locale }) {
         if (online) runSync();
     };
 
-    const saveSale = async ({ customer, sale_date, lines, total }) => {
+    const saveOrder = async ({ customer, sale_date, lines, total }) => {
         if (blockedByImpersonation()) return;
 
         await enqueue(db, {
-            type: 'sale',
+            type: 'order',
             tenantId,
             uuid: crypto.randomUUID(),
             // `total` is carried for the local balance only; the server
             // recomputes it from the lines and its own frozen rates.
-            payload: { customer_id: customer.id ?? customer.uuid, sale_date, lines, total },
+            payload: { customer_id: customer.id ?? customer.uuid, order_date: sale_date, lines, total },
             dependsOnUuid: customer.id ? null : customer.uuid,
+        });
+
+        await refresh(db);
+        if (online) runSync();
+    };
+
+    /** pack | deliver | cancel — each is its own outbox mutation. */
+    const orderAction = async (order, action) => {
+        if (blockedByImpersonation()) return;
+
+        await enqueue(db, {
+            type: `order_${action}`,
+            tenantId,
+            uuid: crypto.randomUUID(),
+            payload: { order_uuid: order.uuid },
         });
 
         await refresh(db);
@@ -491,10 +514,19 @@ function App({ userName, locale }) {
                     <RecordPayment customer={activeCustomer} onSave={savePayment} />
                 ) : null;
 
-            case 'sale':
+            case 'order':
                 return activeCustomer ? (
-                    <RecordSale customer={activeCustomer} packs={packs} products={products} onSave={saveSale} />
+                    <RecordOrder customer={activeCustomer} packs={packs} products={products} onSave={saveOrder} />
                 ) : null;
+
+            case 'orders':
+                return (
+                    <Orders
+                        orders={orders}
+                        customersById={new Map(customers.map((c) => [c.id, c]))}
+                        onAction={orderAction}
+                    />
+                );
 
             case 'pick-customer':
                 // "Sales" tab with no customer chosen yet: the khata list IS the

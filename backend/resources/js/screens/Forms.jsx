@@ -224,7 +224,7 @@ export function RecordPayment({ customer, onSave }) {
 
 /* ------------------------------------------------------------------ */
 
-export function RecordSale({ customer, packs, products = [], onSave }) {
+export function RecordOrder({ customer, packs, products = [], onSave }) {
     const [lines, setLines] = useState([{ product_pack_id: '', qty: '1', rate: '' }]);
 
     // Pack rows carry product_id but not the product's name, so the join
@@ -334,14 +334,14 @@ export function RecordSale({ customer, packs, products = [], onSave }) {
     if (packs.length === 0) {
         // The catalog is cached on sync; without it a sale cannot be described.
         return (
-            <Screen title={t('record_sale')} onBack={() => navigate(`/khata/${customer.uuid}`)}>
+            <Screen title={t('take_order')} onBack={() => navigate(`/khata/${customer.uuid}`)}>
                 <p className="card text-center text-warning">{t('no_catalog')}</p>
             </Screen>
         );
     }
 
     return (
-        <Screen title={t('record_sale')} onBack={() => navigate(`/khata/${customer.uuid}`)}>
+        <Screen title={t('take_order')} onBack={() => navigate(`/khata/${customer.uuid}`)}>
             <form onSubmit={submit} className="card space-y-4" noValidate>
                 <p className="text-sm text-ink-muted">{customer.name}</p>
 

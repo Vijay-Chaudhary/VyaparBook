@@ -8,6 +8,7 @@ use App\Http\Controllers\Web\BeatController;
 use App\Http\Controllers\Web\BillingController;
 use App\Http\Controllers\Web\LoginController;
 use App\Http\Controllers\Web\OnboardingController;
+use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\ExpenseController;
 use App\Http\Controllers\Web\GstSettingsController;
 use App\Http\Controllers\Web\InvoiceController;
@@ -171,6 +172,15 @@ Route::middleware('auth')->group(function () {
 
     Route::get('gst', [GstSettingsController::class, 'edit'])->name('gst');
     Route::post('gst', [GstSettingsController::class, 'update'])->name('gst.save');
+
+    /*
+     | Order acceptance — Blade, online-only, owner/admin. This is deliberately
+     | the only online step in the order workflow: it is the sync boundary the
+     | field depends on. {order} is resolved owner-scoped inside the controller.
+     */
+    Route::get('orders', [OrderController::class, 'index'])->name('orders');
+    Route::post('orders/{order}/accept', [OrderController::class, 'accept'])->name('orders.accept');
+    Route::post('orders/{order}/reject', [OrderController::class, 'reject'])->name('orders.reject');
 
     // Session -> JWT exchange for the React layer. Throttled because it mints
     // credentials: a valid session should not make it freely spammable.

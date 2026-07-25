@@ -19,7 +19,10 @@ export const PARKED = 'parked'; // permanently rejected — needs a human
 const SUCCESS = ['applied', 'duplicate'];
 
 /** The only mutation types /sync/push accepts (SyncController::push). */
-export const PUSHABLE_TYPES = ['customer', 'sale', 'payment'];
+export const PUSHABLE_TYPES = [
+    'customer', 'sale', 'payment',
+    'order', 'order_pack', 'order_deliver', 'order_cancel',
+];
 
 /* ------------------------------------------------------------------ */
 /* staleness cap (§2)                                                  */

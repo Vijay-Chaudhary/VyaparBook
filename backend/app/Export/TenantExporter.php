@@ -48,6 +48,10 @@ class TenantExporter
         'raw_materials',
         'sales',
         'sale_lines',
+        // After sales: orders.sale_id FKs into it. After product_packs (above):
+        // order_lines.product_pack_id FKs into it.
+        'orders',
+        'order_lines',
         'payments',
         'stock_movements',
         'production_batches',

@@ -44,6 +44,10 @@ class TenantEraser
         'invoice_lines',
         'invoices',
         'invoice_counters',
+        // Before sales: orders.sale_id FKs into it. order_lines.order_id FKs
+        // into orders, so it goes first of the pair.
+        'order_lines',
+        'orders',
         'sale_lines',
         'payments',
         'sales',
