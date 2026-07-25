@@ -334,7 +334,7 @@ A Django management command reading the existing `.xlsx` (openpyxl) does this pe
 
 > **Phase 3 status (2026-07-25).** Done: actual cost-per-kg (shipped as reporting Phase 2b), sweets/spices templates, finished-goods inventory (F-09), GST invoicing (F-10).
 > **Dropped:** Tally/accounting export — owner decision, not a deferral; do not re-plan it.
-> Remaining: salesman route/beat planning, regional languages.
+> Remaining: regional languages (F-11 shipped salesman beat planning).
 
 **Phase 4:** Multi-outlet businesses, B2B reorder links between tenants, analytics benchmarking, marketplace ideas.
 
