@@ -17,12 +17,12 @@
             <dd class="tabular">{{ Inr::format($report->salesMonthRupees) }}</dd>
         </div>
         <div class="flex justify-between text-ink-muted">
-            <dt>− {{ __('reports.est_cost') }}</dt>
-            <dd class="tabular">{{ Inr::format(bcsub($report->salesMonthRupees, $report->estGrossProfitMonthRupees, 2)) }}</dd>
+            <dt>− {{ __('reports.cogs') }}</dt>
+            <dd class="tabular">{{ Inr::format(bcsub($report->salesMonthRupees, $report->grossProfitMonthRupees, 2)) }}</dd>
         </div>
         <div class="flex justify-between border-t pt-1">
-            <dt>= {{ __('reports.est_gross_profit') }}</dt>
-            <dd class="tabular">{{ Inr::format($report->estGrossProfitMonthRupees) }}</dd>
+            <dt>= {{ __('reports.gross_profit') }}</dt>
+            <dd class="tabular">{{ Inr::format($report->grossProfitMonthRupees) }}</dd>
         </div>
         <div class="flex justify-between text-ink-muted">
             <dt>− {{ __('reports.expenses') }}</dt>
@@ -35,6 +35,15 @@
     </dl>
 
     <p class="mt-2 text-xs text-ink-muted">{{ __('reports.gross_profit_caveat') }}</p>
+
+    {{-- Phase 2b: gross profit is actual wherever production exists. Say plainly
+         how much of it still rests on the owner's typed-in estimate, rather than
+         letting a part-estimated figure read as fully measured. --}}
+    @if (bccomp($report->estimatedCostRevenueRupees, '0.00', 2) > 0)
+        <p class="mt-1 text-xs text-ink-muted">
+            {{ __('reports.gross_profit_estimated', ['amount' => Inr::format($report->estimatedCostRevenueRupees)]) }}
+        </p>
+    @endif
 
     @if ($report->expenseBreakdown !== [])
         <h3 class="mt-3 mb-1 text-sm font-semibold">{{ __('reports.expenses_by_category') }}</h3>

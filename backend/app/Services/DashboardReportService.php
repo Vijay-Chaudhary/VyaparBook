@@ -14,6 +14,7 @@ use App\Reports\DashboardReport;
 use App\Reports\ExpenseCategoryTotal;
 use App\Reports\LowStockRow;
 use App\Reports\OutstandingSummary;
+use App\Reports\PackCost;
 use App\Reports\ProductPerf;
 use App\Reports\ReportPeriod;
 use App\Reports\StockValuationRow;
@@ -39,6 +40,7 @@ class DashboardReportService
         private readonly StockService $stock,
         private readonly PurchaseService $purchases,
         private readonly SupplierService $suppliers,
+        private readonly CogsService $cogs,
     ) {}
 
     public function forMonth(string $businessId, ReportPeriod $period): DashboardReport
@@ -75,7 +77,7 @@ class DashboardReportService
         $highestSelling = collect($performance)
             ->sortByDesc(fn (ProductPerf $p) => $p->qtySold)->first();
         $highestProfit = collect($performance)
-            ->sortByDesc(fn (ProductPerf $p) => (float) $p->estProfitRupees)->first();
+            ->sortByDesc(fn (ProductPerf $p) => (float) $p->profitRupees)->first();
 
         // Selected-month P&L figures. Gross and expenses come from the trends we
         // already fetched (index month-1); net = gross − expenses.
@@ -92,7 +94,7 @@ class DashboardReportService
             period: $period,
             salesTodayRupees: $this->salesToday($businessId),
             salesMonthRupees: $salesMonth,
-            estGrossProfitMonthRupees: $grossMonth,
+            grossProfitMonthRupees: $grossMonth,
             expensesMonthRupees: $expensesMonth,
             netProfitMonthRupees: $netProfitMonth,
             netProfitMarginPercent: $netMargin,
@@ -104,6 +106,7 @@ class DashboardReportService
             highestSellingName: $highestSelling?->name,
             highestProfitName: $highestProfit?->name,
             expenseBreakdown: $this->expensesByCategory($businessId, $period->year, $period->month),
+            estimatedCostRevenueRupees: $this->estimatedCostRevenueForMonth($businessId, $period->year, $period->month),
             trend: $trend,
             stockValueRupees: $stockValue,
             stockValuation: $stockValuation,
@@ -219,23 +222,75 @@ class DashboardReportService
      *
      * @return list<string> 12 scale-2 decimal strings, index 0 = January.
      */
+    /**
+     * Gross profit per month: revenue − actual COGS, 12 entries Jan..Dec.
+     *
+     * Costs come from CogsService (production wherever batches exist, the
+     * owner's estimate otherwise), so the SQL groups sales by (month, pack) and
+     * the money arithmetic stays in bcmath — a per-pack cost cannot be folded
+     * into the aggregate without pushing a division into SQL.
+     *
+     * @return list<string>
+     */
     public function grossProfitTrend(string $businessId, int $year): array
     {
-        $byMonth = DB::table('sale_lines as sl')
+        $rows = $this->salesByMonthAndPack($businessId, $year);
+        $packCosts = $this->cogs->packCosts($businessId);
+
+        $byMonth = array_fill(1, 12, '0.00');
+        foreach ($rows as $r) {
+            $profit = bcsub(
+                bcadd($r->sales, '0', 2),
+                $this->costOf($packCosts, $r->pack_id, (int) $r->qty),
+                2,
+            );
+            $byMonth[(int) $r->m] = bcadd($byMonth[(int) $r->m], $profit, 2);
+        }
+
+        return array_values($byMonth);
+    }
+
+    /**
+     * The month's revenue whose cost is still the owner's estimate rather than
+     * actual production. Zero once every product sold has been produced at
+     * least once — until then it says how much of gross profit to trust.
+     */
+    public function estimatedCostRevenueForMonth(string $businessId, int $year, int $month): string
+    {
+        $packCosts = $this->cogs->packCosts($businessId);
+
+        return collect($this->salesByMonthAndPack($businessId, $year))
+            ->filter(fn ($r) => (int) $r->m === $month)
+            // Absent from the map = a pack with no sales-year row; treat an
+            // unknown pack as estimated, never as silently actual.
+            ->filter(fn ($r) => ! ($packCosts[$r->pack_id]->fromProduction ?? false))
+            ->reduce(fn (string $carry, $r) => bcadd($carry, $r->sales, 2), '0.00');
+    }
+
+    /** Sales grouped by (month, pack) for the year — the shape costing needs. */
+    private function salesByMonthAndPack(string $businessId, int $year): \Illuminate\Support\Collection
+    {
+        return DB::table('sale_lines as sl')
             ->join('sales as s', 's.id', '=', 'sl.sale_id')
-            ->join('product_packs as pp', 'pp.id', '=', 'sl.product_pack_id')
             ->where('sl.business_id', $businessId)
             ->whereRaw('extract(year from s.sale_date) = ?', [$year])
-            ->groupByRaw('extract(month from s.sale_date)')
+            ->groupByRaw('extract(month from s.sale_date), sl.product_pack_id')
             ->selectRaw('extract(month from s.sale_date)::int as m,
-                (coalesce(sum(sl.line_total), 0)
-                 - coalesce(sum(sl.qty * coalesce(pp.default_cost_price, 0)), 0))::text as agg')
-            ->pluck('agg', 'm');
+                sl.product_pack_id as pack_id,
+                sum(sl.qty)::int as qty,
+                coalesce(sum(sl.line_total), 0)::text as sales')
+            ->get();
+    }
 
-        return array_map(
-            fn (int $m) => bcadd((string) ($byMonth[$m] ?? '0'), '0', 2),
-            range(1, 12),
-        );
+    /**
+     * qty packs at the pack's cost. An unknown pack costs 0 — the same
+     * behaviour a null default_cost_price had before Phase 2b.
+     *
+     * @param  array<string, PackCost>  $packCosts
+     */
+    private function costOf(array $packCosts, string $packId, int $qty): string
+    {
+        return bcmul((string) $qty, $packCosts[$packId]->costRupees ?? '0.00', 2);
     }
 
     public function expensesForMonth(string $businessId, int $year, int $month): string
@@ -319,14 +374,18 @@ class DashboardReportService
     }
 
     /**
-     * Per product-pack sales for the year: qty, revenue, estimated cost
-     * (qty × default_cost_price, treated as 0 when unpriced) and margin.
+     * Per product-pack sales for the year: qty, revenue, cost and margin.
+     *
+     * Costed through CogsService — the SAME costing the headline gross profit
+     * uses, so "highest profit product" can never contradict the P&L above it.
      * Ordered by revenue, highest first.
      *
      * @return list<ProductPerf>
      */
     public function productPerformance(string $businessId, int $year): array
     {
+        $packCosts = $this->cogs->packCosts($businessId);
+
         $rows = DB::table('sale_lines as sl')
             ->join('sales as s', 's.id', '=', 'sl.sale_id')
             ->join('product_packs as pp', 'pp.id', '=', 'sl.product_pack_id')
@@ -334,19 +393,19 @@ class DashboardReportService
             ->join('pack_sizes as ps', 'ps.id', '=', 'pp.pack_size_id')
             ->where('sl.business_id', $businessId)
             ->whereRaw('extract(year from s.sale_date) = ?', [$year])
-            ->groupBy('pp.id', 'prod.name_en', 'prod.name_hi', 'ps.label', 'pp.default_cost_price')
+            ->groupBy('pp.id', 'prod.name_en', 'prod.name_hi', 'ps.label')
             ->selectRaw("
+                pp.id as pack_id,
                 coalesce(prod.name_en, prod.name_hi) || ' ' || ps.label as name,
                 sum(sl.qty)::int as qty,
-                sum(sl.line_total)::text as sales,
-                sum(sl.qty * coalesce(pp.default_cost_price, 0))::text as est_cost
+                sum(sl.line_total)::text as sales
             ")
             ->get();
 
         return $rows
-            ->map(function ($r) {
+            ->map(function ($r) use ($packCosts) {
                 $sales = bcadd($r->sales, '0', 2);
-                $cost = bcadd($r->est_cost, '0', 2);
+                $cost = $this->costOf($packCosts, $r->pack_id, (int) $r->qty);
                 $profit = bcsub($sales, $cost, 2);
                 $margin = bccomp($sales, '0.00', 2) === 0
                     ? '0.0'

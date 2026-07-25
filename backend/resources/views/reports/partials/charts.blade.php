@@ -7,7 +7,7 @@
     $moneySeries = [
         ['label' => __('reports.sales'), 'color' => '#4472C4',
          'values' => collect($report->trend)->map(fn ($t) => $t->salesRupees)->all()],
-        ['label' => __('reports.est_gross_profit'), 'color' => '#16a34a',
+        ['label' => __('reports.gross_profit'), 'color' => '#16a34a',
          'values' => collect($report->trend)->map(fn ($t) => $t->grossProfitRupees)->all()],
         ['label' => __('reports.net_profit'), 'color' => '#7c3aed',
          'values' => collect($report->trend)->map(fn ($t) => $t->netProfitRupees)->all()],

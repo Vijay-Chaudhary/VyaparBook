@@ -173,3 +173,110 @@ function pendingPayment(string $businessId, string $plan = 'pro'): \App\Models\S
         'status' => 'pending',
     ]);
 }
+
+/*
+|--------------------------------------------------------------------------
+| Production costing test helpers (Phase 2b)
+|--------------------------------------------------------------------------
+|
+| Shared across the CogsService and dashboard tests. In tests/Pest.php, not in
+| a test file, so any one of them can be run on its own.
+*/
+
+/** A product with one pack of $weightKg, carrying the owner's estimate. */
+function cogsProduct(\App\Models\Business $b, string $name, string $weightKg, ?string $estimate): array
+{
+    $product = \App\Models\Product::on('pgsql_migrate')->create([
+        'business_id' => $b->id, 'name_hi' => $name, 'name_en' => $name,
+    ]);
+    // Pack sizes are shared across a tenant's products (unique on business+label),
+    // so reuse rather than mint a duplicate when two products share a weight.
+    $size = \App\Models\PackSize::on('pgsql_migrate')->firstOrCreate(
+        ['business_id' => $b->id, 'label' => $weightKg . 'kg'],
+        ['weight_kg' => $weightKg],
+    );
+    $pack = \App\Models\ProductPack::on('pgsql_migrate')->create([
+        'business_id' => $b->id, 'product_id' => $product->id, 'pack_size_id' => $size->id,
+        'default_sell_price' => '100.00', 'default_cost_price' => $estimate,
+    ]);
+
+    return [$product, $pack];
+}
+
+/** A completed batch: $outputKg produced from [materialId => qty consumed]. */
+function cogsBatch(\App\Models\Business $b, \App\Models\User $u, \App\Models\Product $p, string $outputKg, array $consumed): void
+{
+    $batch = new \App\Models\ProductionBatch([
+        'business_id' => $b->id, 'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'product_id' => $p->id, 'batch_date' => '2026-07-04', 'output_kg' => $outputKg,
+    ]);
+    $batch->setConnection('pgsql_migrate');
+    $batch->created_by = $u->id;
+    $batch->save();
+
+    foreach ($consumed as $materialId => $qty) {
+        $mc = new \App\Models\MaterialConsumption([
+            'business_id' => $b->id, 'production_batch_id' => $batch->id,
+            'raw_material_id' => $materialId, 'qty' => $qty,
+        ]);
+        $mc->setConnection('pgsql_migrate');
+        $mc->save();
+    }
+}
+
+/** Buy $qty kg of $material at $rate, so Phase 2a can price it. */
+function cogsBuy(\App\Models\Business $b, \App\Models\User $u, \App\Models\RawMaterial $m, string $qty, string $rate): void
+{
+    $sup = pwSupplier($b, 'Supplier ' . \Illuminate\Support\Str::random(5));
+    pwInTenant($b->id, function () use ($sup, $m, $qty, $rate, $u) {
+        app()->bind('tenant.user_id', fn () => $u->id);
+        (new \App\Services\PurchaseWriter())->record([
+            'uuid' => (string) \Illuminate\Support\Str::uuid(), 'supplier_id' => $sup->id, 'raw_material_id' => $m->id,
+            'purchase_date' => '2026-07-01', 'qty' => $qty, 'unit_cost' => $rate, 'note' => null,
+        ]);
+    });
+}
+
+/*
+|--------------------------------------------------------------------------
+| Sales seeding helpers (customer, sale, sale line)
+|--------------------------------------------------------------------------
+|
+| Shared by the dashboard unit tests and the dashboard feature tests.
+*/
+
+function dashCustomer(\App\Models\Business $b, string $name, string $opening = '0.00', ?string $village = null): \App\Models\Customer
+{
+    return \App\Models\Customer::on('pgsql_migrate')->create([
+        'business_id' => $b->id,
+        'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'name' => $name,
+        'village' => $village,
+        'opening_balance' => $opening,
+    ]);
+}
+
+function dashSale(\App\Models\Customer $c, \App\Models\User $u, string $total, string $date): \App\Models\Sale
+{
+    $s = new \App\Models\Sale([
+        'business_id' => $c->business_id, 'uuid' => (string) \Illuminate\Support\Str::uuid(),
+        'customer_id' => $c->id, 'sale_date' => $date,
+    ]);
+    $s->setConnection('pgsql_migrate');
+    $s->created_by = $u->id;
+    $s->total = $total;
+    $s->save();
+
+    return $s;
+}
+
+function saleLine(App\Models\Sale $s, App\Models\ProductPack $pack, int $qty, string $rate): void
+{
+    $line = new App\Models\SaleLine([
+        'business_id' => $s->business_id, 'sale_id' => $s->id,
+        'product_pack_id' => $pack->id, 'qty' => $qty, 'rate' => $rate,
+    ]);
+    $line->setConnection('pgsql_migrate');
+    $line->line_total = bcmul($rate, (string) $qty, 2);
+    $line->save();
+}

@@ -45,14 +45,15 @@ return [
     'product' => 'Product',
     'qty_sold' => 'Qty sold',
     'sales' => 'Sales',
-    'est_cost' => 'Est. cost',
+    'cogs' => 'Cost of goods sold',
     'est_profit' => 'Est. profit',
     'margin' => 'Margin %',
 
     // Estimated gross profit (before operating expenses)
     'est_gross_profit_month' => 'Est. gross profit (this month)',
-    'est_gross_profit' => 'Est. gross profit',
-    'gross_profit_caveat' => '= Sales − estimated product cost; before operating expenses',
+    'gross_profit' => 'Gross profit',
+    'gross_profit_caveat' => '= Sales − what the goods cost to make; before operating expenses. Labour and electricity are counted below, as expenses.',
+    'gross_profit_estimated' => ':amount of this month’s sales is still costed from your typed-in estimate, because those products have no production batches yet.',
     'monthly_gross_profit_chart' => 'Monthly est. gross profit',
     'monthly_money_chart' => 'Monthly performance (₹)',
 

@@ -63,7 +63,7 @@ describe('render', function () {
             ->assertSee('₹1,500.00')    // Inr-formatted total outstanding
             ->assertSee('Ramesh')       // per-customer summary list renders the name
             ->assertSee('Rampur')       // ...and the village
-            ->assertSee(__('reports.est_gross_profit'))  // gross-profit row in the P&L block
+            ->assertSee(__('reports.gross_profit'))  // gross-profit row in the P&L block
             ->assertSee(__('reports.gross_profit_caveat'))
             ->assertSee(__('reports.net_profit'))        // P&L block renders
             ->assertSee(__('reports.expenses'))          // expenses line in P&L
@@ -124,5 +124,38 @@ describe('phase 2a', function () {
             ->assertDontSee('Other Shop Supplier')
             ->assertDontSee('Foreign Material')
             ->assertDontSee('₹9,000.00');   // the other tenant's stock value
+    });
+});
+
+describe('phase 2b', function () {
+    it('shows gross profit costed from production, and flags the estimated share', function () {
+        [$owner, $business] = pwOwner();
+        $u = App\Models\User::factory()->create();
+
+        $besan = pwMaterial($business, 'Besan');
+        cogsBuy($business, $u, $besan, '100', '40');          // ₹40/kg
+
+        // Produced: actual ₹40/pack, though the owner typed ₹93.
+        [$sev, $sevPack] = cogsProduct($business, 'Sev', '1.000', '93.00');
+        cogsBatch($business, $u, $sev, '10.000', [$besan->id => '10.000']);
+
+        // Bought in: never produced, so ₹77 estimate stands and is flagged.
+        [, $namkeenPack] = cogsProduct($business, 'Namkeen', '1.000', '77.00');
+
+        $c = App\Models\Customer::on('pgsql_migrate')->create([
+            'business_id' => $business->id, 'uuid' => (string) Illuminate\Support\Str::uuid(),
+            'name' => 'Ramesh', 'opening_balance' => '0.00',
+        ]);
+        $sale = dashSale($c, $u, '2000.00', now()->format('Y-m-d'));
+        saleLine($sale, $sevPack, 10, '100.00');
+        saleLine($sale, $namkeenPack, 10, '100.00');
+
+        $this->actingAs($owner)
+            ->get('/reports/dashboard?business=' . $business->id
+                . '&year=' . now()->year . '&month=' . now()->month)
+            ->assertOk()
+            ->assertSee('Gross profit')
+            ->assertSee('₹830.00')          // 2000 − (10×40 + 10×77), not 300
+            ->assertSee('₹1,000.00');       // the still-estimated half, flagged
     });
 });
