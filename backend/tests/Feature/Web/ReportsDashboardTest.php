@@ -188,3 +188,15 @@ describe('finished goods', function () {
             ->assertSee('20');
     });
 });
+
+it('links to every owner tool, so none of them is reachable by URL only', function () {
+    // Four screens shipped with no link at all (orders, beats, gst, and
+    // invoices via gst). A feature nobody can navigate to is not shipped.
+    [$owner, $business] = reportsOwner();
+
+    $response = $this->actingAs($owner)->get('/reports/dashboard?business=' . $business->id)->assertOk();
+
+    foreach (['orders', 'expenses', 'purchases', 'suppliers', 'beats', 'gst'] as $tool) {
+        expect($response->getContent())->toContain(route($tool, ['business' => $business->id]));
+    }
+});

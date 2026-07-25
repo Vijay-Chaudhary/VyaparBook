@@ -100,4 +100,9 @@ return [
     'produced_kg' => 'Produced (Kg)',
     'sold_kg' => 'Sold (Kg)',
     'on_hand_kg' => 'In stock (Kg)',
+
+    // Owner-tool links in the dashboard header.
+    'manage_orders' => 'Orders',
+    'manage_beats' => 'Beats',
+    'manage_gst' => 'GST',
 ];
