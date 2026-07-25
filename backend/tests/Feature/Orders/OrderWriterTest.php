@@ -216,3 +216,70 @@ it('refuses to cancel an order that is already terminal', function () {
 
     expect($call)->toThrow(Illuminate\Validation\ValidationException::class);
 });
+
+it('creates the sale on delivery, dated the delivery day and credited to the deliverer', function () {
+    [$b, $u, $c, $pack] = orderSetup();
+    $order = orderAt($b, $u, $c, $pack, OrderStatus::PACKED);
+
+    Illuminate\Support\Carbon::setTestNow('2026-07-29');
+    [$delivered] = inOrderTenant($b, $u, fn () => app(OrderWriter::class)->deliver($order->uuid));
+    Illuminate\Support\Carbon::setTestNow();
+
+    $sale = DB::connection('pgsql_migrate')->table('sales')->where('business_id', $b->id)->sole();
+
+    expect($delivered->status)->toBe(OrderStatus::DELIVERED);
+    expect($delivered->sale_id)->toBe($sale->id);
+    // The money event is the goods arriving, not the order being taken.
+    expect(substr((string) $sale->sale_date, 0, 10))->toBe('2026-07-29');
+    expect($sale->created_by)->toBe($u->id);
+    expect((string) $sale->total)->toBe('170.00');
+    // The sale carries the order's uuid — that is the idempotency guarantee.
+    expect($sale->uuid)->toBe($order->uuid);
+});
+
+it('moves the khata only on delivery', function () {
+    [$b, $u, $c, $pack] = orderSetup();
+    $order = orderAt($b, $u, $c, $pack, OrderStatus::PACKED);
+
+    $before = inOrderTenant($b, $u, fn () => app(KhataService::class)
+        ->outstandingFor(Customer::findOrFail($c->id)));
+    inOrderTenant($b, $u, fn () => app(OrderWriter::class)->deliver($order->uuid));
+    $after = inOrderTenant($b, $u, fn () => app(KhataService::class)
+        ->outstandingFor(Customer::findOrFail($c->id)));
+
+    expect($before)->toBe('0.00');
+    expect($after)->toBe('170.00');
+});
+
+it('never creates a second sale when delivery is replayed', function () {
+    [$b, $u, $c, $pack] = orderSetup();
+    $order = orderAt($b, $u, $c, $pack, OrderStatus::PACKED);
+
+    inOrderTenant($b, $u, fn () => app(OrderWriter::class)->deliver($order->uuid));
+    [, $changed] = inOrderTenant($b, $u, fn () => app(OrderWriter::class)->deliver($order->uuid));
+
+    expect($changed)->toBeFalse();
+    expect(DB::connection('pgsql_migrate')->table('sales')->where('business_id', $b->id)->count())->toBe(1);
+});
+
+it('refuses to deliver an order the owner rejected while the phone was offline', function () {
+    [$b, $u, $c, $pack] = orderSetup();
+    $order = orderAt($b, $u, $c, $pack, OrderStatus::PENDING);
+    DB::connection('pgsql_migrate')->table('orders')->where('id', $order->id)
+        ->update(['status' => OrderStatus::REJECTED]);
+
+    $call = fn () => inOrderTenant($b, $u, fn () => app(OrderWriter::class)->deliver($order->uuid));
+
+    expect($call)->toThrow(Illuminate\Validation\ValidationException::class);
+    // No sale: the owner declined it, and the field does not get to overrule that.
+    expect(DB::connection('pgsql_migrate')->table('sales')->where('business_id', $b->id)->count())->toBe(0);
+});
+
+it('refuses to deliver an order that was never packed', function () {
+    [$b, $u, $c, $pack] = orderSetup();
+    $order = orderAt($b, $u, $c, $pack, OrderStatus::ACCEPTED);
+
+    $call = fn () => inOrderTenant($b, $u, fn () => app(OrderWriter::class)->deliver($order->uuid));
+
+    expect($call)->toThrow(Illuminate\Validation\ValidationException::class);
+});

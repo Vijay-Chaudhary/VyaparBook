@@ -24,6 +24,8 @@ use Illuminate\Validation\ValidationException;
  */
 class OrderWriter
 {
+    public function __construct(private readonly LedgerWriter $ledger) {}
+
     /** @return array<string, array<int, mixed>> */
     public static function rulesForOrder(): array
     {
@@ -174,5 +176,59 @@ class OrderWriter
     public function cancel(string $orderUuid, ?string $note = null): array
     {
         return $this->transition($orderUuid, OrderStatus::CANCELLED, $note);
+    }
+
+    /**
+     * Delivery is the money event: it creates the sale.
+     *
+     * The sale reuses the ORDER's uuid. createSale is already idempotent by
+     * (business_id, uuid), so a replayed delivery returns the existing sale
+     * instead of doubling a customer's khata — the guarantee comes free from
+     * machinery that is already correct.
+     *
+     * sale_date is today, not the order date: the sale records goods arriving.
+     * created_by is stamped by LedgerWriter from the tenant pin, so it is
+     * whoever delivered, not whoever took the order.
+     *
+     * @return array{0: Order, 1: bool}
+     */
+    public function deliver(string $orderUuid): array
+    {
+        return DB::transaction(function () use ($orderUuid) {
+            $order = Order::with('lines')->where('uuid', $orderUuid)->first();
+
+            if ($order === null) {
+                throw (new ModelNotFoundException)->setModel(Order::class, [$orderUuid]);
+            }
+
+            if ($order->status === OrderStatus::DELIVERED) {
+                return [$order, false];
+            }
+
+            if (! OrderStatus::canTransition($order->status, OrderStatus::DELIVERED)) {
+                throw ValidationException::withMessages([
+                    'status' => __('orders.illegal_transition', [
+                        'from' => $order->status, 'to' => OrderStatus::DELIVERED,
+                    ]),
+                ]);
+            }
+
+            [$sale] = $this->ledger->createSale([
+                'uuid' => $order->uuid,
+                'customer_id' => $order->customer_id,
+                'sale_date' => now()->toDateString(),
+                'lines' => $order->lines->map(fn (OrderLine $l) => [
+                    'product_pack_id' => $l->product_pack_id,
+                    'qty' => $l->qty,
+                    'rate' => (string) $l->rate,
+                ])->all(),
+            ]);
+
+            $order->status = OrderStatus::DELIVERED;
+            $order->sale_id = $sale->id;
+            $order->save();
+
+            return [$order, true];
+        });
     }
 }
