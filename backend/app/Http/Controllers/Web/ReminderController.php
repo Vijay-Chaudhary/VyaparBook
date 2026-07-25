@@ -11,6 +11,7 @@ use App\Models\ReminderBatch;
 use App\Models\ReminderLog;
 use App\Jobs\SendReminderJob;
 use App\Reminders\ReminderMessage;
+use App\Reminders\WhatsAppConfig;
 use App\Services\KhataService;
 use App\Services\ReminderService;
 use Illuminate\Http\RedirectResponse;
@@ -87,7 +88,7 @@ class ReminderController extends Controller
             return redirect()->route('app');
         }
 
-        $viaCloudApi = config('services.whatsapp.driver') === 'cloud_api';
+        $viaCloudApi = WhatsAppConfig::driver() === 'cloud_api';
 
         $result = $this->runInTenant($businessId, function () use ($businessId, $customer, $khata, $viaCloudApi) {
             // Resolved inside the pin, never via implicit binding — no tenant is

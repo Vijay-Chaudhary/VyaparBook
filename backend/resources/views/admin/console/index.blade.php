@@ -3,6 +3,13 @@
 @section('title', __('admin.console') . ' — ' . config('app.name'))
 
 @section('console')
+
+{{-- Platform WhatsApp credentials: the one place the reminder transport is
+     switched on, and where the smoke test is run. --}}
+<div class="mb-4 flex justify-end">
+    <a href="{{ route('admin.console.whatsapp') }}" class="text-sm text-brand">{{ __('admin.whatsapp') }}</a>
+</div>
+
 <h1 class="mb-4 text-2xl font-bold">{{ __('admin.tenants') }}</h1>
 
 <form method="GET" action="{{ route('admin.console') }}" class="mb-4 flex gap-2">

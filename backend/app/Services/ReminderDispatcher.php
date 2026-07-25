@@ -8,6 +8,7 @@ use App\Models\Business;
 use App\Models\Customer;
 use App\Models\ReminderBatch;
 use App\Models\ReminderLog;
+use App\Reminders\WhatsAppConfig;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
 
@@ -55,7 +56,7 @@ class ReminderDispatcher
 
         // The precondition from the spec: never automate through a transport
         // that has not been proven against the real API.
-        if (config('services.whatsapp.driver') !== 'cloud_api') {
+        if (WhatsAppConfig::driver() !== 'cloud_api') {
             $this->stop($batch, 'transport_disabled');
 
             return;

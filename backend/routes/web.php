@@ -2,6 +2,7 @@
 
 use App\Http\Controllers\Web\Admin\ConsoleController;
 use App\Http\Controllers\Web\Admin\TenantActionController;
+use App\Http\Controllers\Web\Admin\WhatsAppSettingsController;
 use App\Http\Controllers\Web\ApiTokenController;
 use App\Http\Controllers\Web\BillingController;
 use App\Http\Controllers\Web\LoginController;
@@ -166,6 +167,16 @@ Route::middleware('auth')->group(function () {
  */
 Route::middleware(['auth', 'platform_admin.web'])->prefix('admin')->name('admin.')->group(function () {
     Route::get('console', [ConsoleController::class, 'index'])->name('console');
+
+    /*
+     | Platform WhatsApp credentials — one configuration for the one platform
+     | number (Phase 4a Decision 3). Declared BEFORE console/{id} so the literal
+     | segment is not swallowed by the tenant-id wildcard.
+     */
+    Route::get('console/whatsapp', [WhatsAppSettingsController::class, 'edit'])->name('console.whatsapp');
+    Route::post('console/whatsapp', [WhatsAppSettingsController::class, 'update'])->name('console.whatsapp.save');
+    Route::post('console/whatsapp/test', [WhatsAppSettingsController::class, 'test'])->name('console.whatsapp.test');
+
     Route::get('console/{id}', [ConsoleController::class, 'show'])->name('console.show');
 
     Route::post('console/{id}/suspend', [TenantActionController::class, 'suspend'])->name('console.suspend');

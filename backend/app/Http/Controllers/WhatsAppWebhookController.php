@@ -5,6 +5,7 @@ namespace App\Http\Controllers;
 
 use App\Platform\PlatformAudit;
 use App\Reminders\StopWords;
+use App\Reminders\WhatsAppConfig;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -28,7 +29,7 @@ class WhatsAppWebhookController extends Controller
     /** Meta's subscription handshake. */
     public function verify(Request $request): Response
     {
-        $token = (string) config('services.whatsapp.verify_token');
+        $token = (string) WhatsAppConfig::get('verify_token');
         $supplied = (string) $request->query('hub_verify_token', $request->query('hub.verify_token', ''));
 
         if ($token === '' || ! hash_equals($token, $supplied)) {
@@ -72,7 +73,7 @@ class WhatsAppWebhookController extends Controller
     /** HMAC-SHA256 of the RAW body, compared in constant time. */
     private function signatureValid(Request $request): bool
     {
-        $secret = (string) config('services.whatsapp.app_secret');
+        $secret = (string) WhatsAppConfig::get('app_secret');
         $header = (string) $request->header('X-Hub-Signature-256', '');
 
         if ($secret === '' || $header === '') {
