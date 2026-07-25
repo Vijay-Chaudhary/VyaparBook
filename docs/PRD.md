@@ -330,7 +330,11 @@ A Django management command reading the existing `.xlsx` (openpyxl) does this pe
 
 **Phase 2:** Supplier ledger + purchases, Expenses, analytics dashboard (port the Excel KPIs, per tenant), **automated WhatsApp reminders** (Celery + WhatsApp Business API), full self-serve billing/dunning, staff roles (accountant), reports.
 
-**Phase 3:** GST invoicing, salesman route/beat planning, actual cost-per-kg from production, finished-goods packed inventory, Tally/accounting export, more verticals (sweets/spices templates), regional languages.
+**Phase 3:** GST invoicing, salesman route/beat planning, actual cost-per-kg from production, finished-goods packed inventory, ~~Tally/accounting export~~, more verticals (sweets/spices templates), regional languages.
+
+> **Phase 3 status (2026-07-25).** Done: actual cost-per-kg (shipped as reporting Phase 2b), sweets/spices templates, finished-goods inventory (F-09), GST invoicing (F-10).
+> **Dropped:** Tally/accounting export — owner decision, not a deferral; do not re-plan it.
+> Remaining: salesman route/beat planning, regional languages.
 
 **Phase 4:** Multi-outlet businesses, B2B reorder links between tenants, analytics benchmarking, marketplace ideas.
 
