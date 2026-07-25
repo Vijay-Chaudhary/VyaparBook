@@ -26,6 +26,12 @@ return Application::configure(basePath: dirname(__DIR__))
         // giving a shop's six staff six separate budgets and defeating the
         // noisy-neighbour containment entirely. It fails invisibly (limits still
         // "work", just on the wrong bucket), so it is pinned here.
+        // The WhatsApp webhook is called by Meta, which holds no session and no
+        // CSRF token. Its authenticity comes from the X-Hub-Signature-256 HMAC
+        // verified in the controller, not from the session — so CSRF is
+        // exempted here rather than weakened anywhere else.
+        $middleware->validateCsrfTokens(except: ['webhooks/whatsapp']);
+
         $middleware->prependToPriorityList(
             before: \Illuminate\Routing\Middleware\ThrottleRequests::class,
             prepend: \App\Http\Middleware\SetTenantContext::class,

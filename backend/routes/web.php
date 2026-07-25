@@ -12,6 +12,7 @@ use App\Http\Controllers\Web\RegisterController;
 use App\Http\Controllers\Web\ReminderController;
 use App\Http\Controllers\Web\ReportController;
 use App\Http\Controllers\Web\SupplierController;
+use App\Http\Controllers\WhatsAppWebhookController;
 use Illuminate\Support\Facades\Route;
 
 /*
@@ -28,6 +29,17 @@ use Illuminate\Support\Facades\Route;
 */
 
 Route::get('/', fn () => redirect()->route('app'))->name('home');
+
+/*
+| WhatsApp Cloud API callbacks (Phase 4b) — delivery status and inbound replies.
+|
+| Deliberately outside every auth and tenant group: Meta calls this with no
+| session and no tenant. Its security is the X-Hub-Signature-256 HMAC, verified
+| in the controller, and a bad signature writes nothing. CSRF is exempted in
+| bootstrap/app.php for the same reason — there is no session to forge against.
+*/
+Route::get('webhooks/whatsapp', [WhatsAppWebhookController::class, 'verify']);
+Route::post('webhooks/whatsapp', [WhatsAppWebhookController::class, 'handle']);
 
 Route::middleware('guest')->group(function () {
     Route::get('login', [LoginController::class, 'show'])->name('login');
@@ -103,12 +115,13 @@ Route::middleware('auth')->group(function () {
     Route::post('suppliers/{supplier}/payments', [SupplierController::class, 'storePayment'])->name('suppliers.payments.store');
 
     /*
-     | Payment reminders (Phase 4a) — Blade, online-only, owner-only, same
+     | Payment reminders (Phase 4a/4b) — Blade, online-only, owner-only, same
      | owner-tool pattern as expenses/suppliers and not plan-gated.
      |
-     | Nothing is sent server-side: `send` logs the owner's intent and redirects
-     | to a wa.me deep link, so the message leaves the owner's own WhatsApp.
-     | Phase 4b swaps that redirect for a Cloud API call on the same log row.
+     | `send` always logs the owner's intent first, then routes by transport:
+     | the default 'log' driver hands back a wa.me link (the message leaves the
+     | owner's own WhatsApp), while 'cloud_api' queues SendReminderJob to send
+     | from the platform number. Meta's callbacks land on /webhooks/whatsapp.
      |
      | {customer} is resolved owner-scoped inside the controller, never via
      | implicit binding (no tenant is pinned during route resolution).

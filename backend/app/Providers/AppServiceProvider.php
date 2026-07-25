@@ -2,11 +2,15 @@
 
 namespace App\Providers;
 
+use App\Reminders\CloudApiSender;
+use App\Reminders\Contracts\WhatsAppSender;
+use App\Reminders\LogSender;
 use Illuminate\Cache\RateLimiting\Limit;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\RateLimiter;
 use Illuminate\Support\ServiceProvider;
 use Illuminate\Support\Str;
+use InvalidArgumentException;
 
 class AppServiceProvider extends ServiceProvider
 {
@@ -29,6 +33,21 @@ class AppServiceProvider extends ServiceProvider
         $this->app->bind('tenant.id', fn () => null);
         $this->app->bind('tenant.role', fn () => null);
         $this->app->bind('tenant.user_id', fn () => null);
+
+        // Phase 4b: which WhatsApp transport reminders leave by. Defaults to
+        // 'log', which sends nothing — the integration ships dark and only goes
+        // live on a deliberate config change.
+        //
+        // An unknown driver throws rather than falling back to 'log': a typo in
+        // WHATSAPP_DRIVER must not look exactly like a working install that
+        // silently delivers nothing.
+        $this->app->bind(WhatsAppSender::class, fn () => match ((string) config('services.whatsapp.driver')) {
+            'cloud_api' => new CloudApiSender,
+            'log' => new LogSender,
+            default => throw new InvalidArgumentException(
+                'Unknown whatsapp driver ['.config('services.whatsapp.driver').']; expected "log" or "cloud_api".'
+            ),
+        });
     }
 
     /**

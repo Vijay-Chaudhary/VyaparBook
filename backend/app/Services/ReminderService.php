@@ -51,6 +51,10 @@ class ReminderService
             ->selectRaw('customers.*')
             ->selectRaw('(select max(payment_date) from payments p where p.customer_id = customers.id)::text as last_payment_on')
             ->selectRaw('(select min(sale_date) from sales s where s.customer_id = customers.id)::text as first_sale_on')
+            // Phase 4b: what happened to the most recent reminder, so the owner
+            // can see "Sent"/"Failed" rather than re-tapping blindly.
+            ->selectRaw('(select rl.status from reminder_logs rl where rl.customer_id = customers.id order by rl.created_at desc limit 1) as last_reminder_status')
+            ->selectRaw('(select rl.created_at from reminder_logs rl where rl.customer_id = customers.id order by rl.created_at desc limit 1)::text as last_reminded_at')
             ->get();
 
         $rows = [];
@@ -114,6 +118,8 @@ class ReminderService
             lastPaymentOn: $customer->last_payment_on,
             sendable: $blockedReason === null,
             blockedReason: $blockedReason,
+            lastReminderStatus: $customer->last_reminder_status,
+            lastRemindedAt: $customer->last_reminded_at,
         );
     }
 }

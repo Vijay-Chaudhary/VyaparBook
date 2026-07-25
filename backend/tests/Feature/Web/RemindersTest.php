@@ -163,3 +163,73 @@ describe('opt out', function () {
         expect(Customer::on('pgsql_migrate')->find($customer->id)->reminder_opt_out_at)->toBeNull();
     });
 });
+
+describe('cloud api transport (Phase 4b)', function () {
+    it('keeps the 4a wa.me handoff under the default log driver', function () {
+        [$owner, $business] = pwOwner();
+        $customer = remOverdueCustomer($business, $owner, 'Ramesh Kumar', '2500.00');
+
+        // The whole point of shipping dark: default config, 4a behaviour.
+        $response = $this->actingAs($owner)
+            ->post('/reminders/' . $customer->id, ['business' => $business->id]);
+
+        expect($response->headers->get('Location'))->toStartWith('https://wa.me/');
+    });
+
+    it('queues a cloud_api send and stays in the app when the driver is switched on', function () {
+        config()->set('services.whatsapp.driver', 'cloud_api');
+        Illuminate\Support\Facades\Queue::fake();
+
+        [$owner, $business] = pwOwner();
+        $customer = remOverdueCustomer($business, $owner, 'Ramesh Kumar', '2500.00');
+
+        $this->actingAs($owner)
+            ->post('/reminders/' . $customer->id, ['business' => $business->id])
+            ->assertRedirect(route('reminders', ['business' => $business->id]));
+
+        $log = ReminderLog::on('pgsql_migrate')->where('business_id', $business->id)->sole();
+        expect($log->channel)->toBe('cloud_api');
+        expect($log->status)->toBe('queued');          // written BEFORE dispatch
+        expect((string) $log->amount_at_send)->toBe('2500.00');
+
+        Illuminate\Support\Facades\Queue::assertPushed(App\Jobs\SendReminderJob::class, function ($job) use ($log, $business) {
+            return $job->reminderLogId === $log->id && $job->businessId === $business->id;
+        });
+    });
+
+    it('still refuses an opted-out customer on the cloud api path', function () {
+        config()->set('services.whatsapp.driver', 'cloud_api');
+        Illuminate\Support\Facades\Queue::fake();
+
+        [$owner, $business] = pwOwner();
+        $customer = remOverdueCustomer($business, $owner, 'Opted Out');
+        $customer->reminder_opt_out_at = Carbon::now();
+        $customer->save();
+
+        $this->actingAs($owner)
+            ->post('/reminders/' . $customer->id, ['business' => $business->id])
+            ->assertRedirect(route('reminders', ['business' => $business->id]));
+
+        expect(ReminderLog::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(0);
+        Illuminate\Support\Facades\Queue::assertNothingPushed();
+    });
+});
+
+it('shows the outcome of the last reminder on the row', function () {
+    [$owner, $business] = pwOwner();
+    $customer = remOverdueCustomer($business, $owner, 'Ramesh Kumar', '2500.00');
+
+    $log = new ReminderLog([
+        'business_id' => $business->id, 'customer_id' => $customer->id,
+        'channel' => 'cloud_api', 'amount_at_send' => '2500.00',
+        'locale' => 'en', 'phone_e164' => '919876543210',
+    ]);
+    $log->setConnection('pgsql_migrate');
+    $log->created_by = $owner->id;
+    $log->status = 'failed';
+    $log->save();
+
+    $this->actingAs($owner)->get('/reminders?business=' . $business->id)
+        ->assertOk()
+        ->assertSee(__('reminders.status.failed'));
+});
