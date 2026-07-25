@@ -6,6 +6,7 @@
 use App\Models\Business;
 use App\Models\User;
 use App\Services\CogsService;
+use Illuminate\Support\Facades\DB;
 
 it('costs a product from what its batches actually consumed', function () {
     $a = Business::factory()->create();
@@ -104,6 +105,36 @@ it('treats a null estimate as zero, as before Phase 2b', function () {
 
     expect($packs[$pack->id]->costRupees)->toBe('0.00');
     expect($packs[$pack->id]->fromProduction)->toBeFalse();
+});
+
+it('memoizes the costing chain so its queries run once per request', function () {
+    $a = Business::factory()->create();
+    $u = User::factory()->create();
+
+    $besan = pwMaterial($a, 'Besan');
+    cogsBuy($a, $u, $besan, '100', '40');
+    [$sev, $pack] = cogsProduct($a, 'Sev', '1.000', '93.00');
+    cogsBatch($a, $u, $sev, '10.000', [$besan->id => '10.000']);
+
+    [$cold, $warm] = pwInTenant($a->id, function () use ($a) {
+        $svc = new CogsService();
+        $db = DB::connection();
+
+        $db->enableQueryLog();
+        $svc->packCosts($a->id);            // cold: runs the whole chain
+        $cold = count($db->getQueryLog());
+
+        $db->flushQueryLog();
+        $svc->packCosts($a->id);            // warm: served from the memo,
+        $svc->productCostPerKg($a->id);     // ...as are the upstream links
+        $svc->materialCostPerKg($a->id);
+        $warm = count($db->getQueryLog());
+
+        return [$cold, $warm];
+    });
+
+    expect($cold)->toBeGreaterThan(0);      // it really queried the first time
+    expect($warm)->toBe(0);                 // and not once more
 });
 
 it('never costs one tenant\'s product from another tenant\'s production', function () {
