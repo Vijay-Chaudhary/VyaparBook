@@ -102,7 +102,7 @@ return [
     'on_hand_kg' => 'In stock (Kg)',
 
     // Owner-tool links in the dashboard header.
-    'manage_orders' => 'Orders',
+    'manage_orders' => 'Approvals',
     'manage_beats' => 'Beats',
     'manage_gst' => 'GST',
 ];

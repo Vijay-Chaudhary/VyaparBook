@@ -3,9 +3,9 @@
 return [
     'illegal_transition' => 'This order cannot go from :from to :to.',
 
-    'title' => 'Orders',
-    'heading' => 'Orders to accept',
-    'pending_none' => 'No orders waiting.',
+    'title' => 'Approvals',
+    'heading' => 'Order approvals',
+    'pending_none' => 'Nothing waiting for approval.',
     'customer' => 'Customer',
     'order_date' => 'Ordered',
     'product' => 'Product',
@@ -18,7 +18,7 @@ return [
     'accepted' => 'Order accepted.',
     'rejected' => 'Order rejected.',
     'not_pending' => 'That order is no longer waiting to be accepted.',
-    'recent' => 'Recent orders',
+    'recent' => 'Recently decided',
     'status' => 'Status',
     'statuses' => [
         'pending' => 'Waiting', 'accepted' => 'Accepted', 'packed' => 'Packed',
