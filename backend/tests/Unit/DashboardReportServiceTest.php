@@ -137,6 +137,21 @@ function dashExpense(App\Models\Business $b, App\Models\User $u, string $categor
     $e->save();
 }
 
+function dashSupplierPayment(App\Models\Business $b, App\Models\User $u, string $amount, string $date): void
+{
+    $s = App\Models\Supplier::on('pgsql_migrate')->firstOrCreate(
+        ['business_id' => $b->id, 'name' => 'Supplier'],
+        ['uuid' => (string) Illuminate\Support\Str::uuid(), 'opening_balance' => '0.00'],
+    );
+    $sp = new App\Models\SupplierPayment([
+        'business_id' => $b->id, 'uuid' => (string) Illuminate\Support\Str::uuid(),
+        'supplier_id' => $s->id, 'payment_date' => $date, 'amount' => $amount, 'mode' => 'cash',
+    ]);
+    $sp->setConnection('pgsql_migrate');
+    $sp->created_by = $u->id;
+    $sp->save();
+}
+
 it('sums production for the month and builds a 12-row kg trend', function () {
     $a = Business::factory()->create();
     $u = User::factory()->create();
@@ -226,6 +241,10 @@ it('assembles a full report, with highest-selling/profit and an empty-shop case'
     expect($report->expensesMonthRupees)->toBe('0.00');
     expect($report->netProfitMonthRupees)->toBe('0.00');
     expect($report->netProfitMarginPercent)->toBe('0.0');
+    expect($report->cashInMonthRupees)->toBe('0.00');
+    expect($report->netCashMonthRupees)->toBe('0.00');
+    expect($report->cashPositionRupees)->toBe('0.00');
+    expect($report->cashTrend)->toHaveCount(12);
 
     Illuminate\Support\Carbon::setTestNow();
 });
@@ -430,4 +449,48 @@ it('reports nothing as estimated once every product sold has been produced', fun
 
     expect($report->estimatedCostRevenueRupees)->toBe('0.00');
     expect($report->grossProfitMonthRupees)->toBe('300.00');   // 500 − 5 × 40
+});
+
+it('assembles the cash trend with a running position seeded from prior years', function () {
+    Illuminate\Support\Carbon::setTestNow('2026-07-22');
+
+    $a = Business::factory()->create();
+    $u = User::factory()->create();
+    $c = dashCustomer($a, 'Ramesh', '0.00');
+
+    // 2025 (prior): collected 4000, paid supplier 1000 → opening 2026 = +3000.
+    dashPayment($c, $u, '4000.00', '2025-12-01');
+    dashSupplierPayment($a, $u, '1000.00', '2025-12-02');
+
+    // June 2026: in 2000, supplier 500, expense 300 → net +1200.
+    dashPayment($c, $u, '2000.00', '2026-06-05');
+    dashSupplierPayment($a, $u, '500.00', '2026-06-06');
+    dashExpense($a, $u, 'rent', '300.00', '2026-06-07');
+
+    // July 2026: in 100, supplier 900, expense 400 → net −1200 (cash-negative).
+    dashPayment($c, $u, '100.00', '2026-07-10');
+    dashSupplierPayment($a, $u, '900.00', '2026-07-11');
+    dashExpense($a, $u, 'salaries', '400.00', '2026-07-12');
+
+    $report = inTenant($a->id, fn () => app(DashboardReportService::class)
+        ->forMonth($a->id, App\Reports\ReportPeriod::fromInput(2026, 7)));
+
+    // Selected month = July.
+    expect($report->cashInMonthRupees)->toBe('100.00');
+    expect($report->supplierPaidMonthRupees)->toBe('900.00');
+    expect($report->expensePaidMonthRupees)->toBe('400.00');
+    expect($report->netCashMonthRupees)->toBe('-1200.00');           // 100 − (900 + 400)
+
+    // Running position: opening 3000 + June 1200 + July −1200 = 3000.
+    expect($report->cashPositionRupees)->toBe('3000.00');
+
+    // Trend rows: June net +1200, July net −1200; positions accumulate.
+    expect($report->cashTrend)->toHaveCount(12);
+    expect($report->cashTrend[5]->netCashRupees)->toBe('1200.00');   // June
+    expect($report->cashTrend[5]->positionRupees)->toBe('4200.00');  // 3000 + 1200
+    expect($report->cashTrend[6]->netCashRupees)->toBe('-1200.00');  // July
+    // The selected-month headline equals that month's trend-row position — one walk.
+    expect($report->cashTrend[6]->positionRupees)->toBe($report->cashPositionRupees);
+
+    Illuminate\Support\Carbon::setTestNow();
 });

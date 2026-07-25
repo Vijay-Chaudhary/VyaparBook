@@ -43,6 +43,7 @@
     @include('reports.partials.insights')
     @include('reports.partials.customers')
     @include('reports.partials.suppliers')
+    @include('reports.partials.cash')
 
     <div class="mt-4 grid gap-4 md:grid-cols-2">
         @include('reports.partials.charts')

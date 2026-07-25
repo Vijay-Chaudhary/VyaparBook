@@ -10,6 +10,7 @@ final readonly class DashboardReport
      * @param list<ExpenseCategoryTotal>   $expenseBreakdown
      * @param list<TrendRow>               $trend  exactly 12 rows, Jan..Dec
      * @param list<StockValuationRow>      $stockValuation
+     * @param list<CashFlowRow>            $cashTrend  exactly 12 rows, Jan..Dec
      */
     public function __construct(
         public ReportPeriod $period,
@@ -36,5 +37,14 @@ final readonly class DashboardReport
         public string $stockValueRupees,
         public array $stockValuation,
         public SupplierOutstandingSummary $supplierOutstanding,
+        // Phase 3: cash flow — money actually collected vs. actually paid out.
+        // Position is running net-cash-since-inception, NOT a bank balance
+        // (there is no stored opening-cash figure). netCash/position may be < 0.
+        public string $cashInMonthRupees,
+        public string $supplierPaidMonthRupees,
+        public string $expensePaidMonthRupees,
+        public string $netCashMonthRupees,
+        public string $cashPositionRupees,
+        public array $cashTrend,   // list<CashFlowRow>, exactly 12 rows Jan..Dec
     ) {}
 }

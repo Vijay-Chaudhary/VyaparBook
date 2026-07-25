@@ -62,6 +62,17 @@ return [
     'manage_suppliers' => 'आपूर्तिकर्ता',
     'monthly_net_profit_chart' => 'मासिक शुद्ध लाभ',
 
+    // Cash flow (Phase 3)
+    'cash_flow' => 'नकदी प्रवाह (इस वर्ष)',
+    'cash_position' => 'नकद स्थिति',
+    'cash_position_hint' => 'VyaparBook में दर्ज — बैंक बैलेंस नहीं',
+    'cash_in' => 'नकद आया',
+    'cash_out' => 'नकद गया',
+    'net_cash' => 'शुद्ध नकदी',
+    'net_cash_month' => 'शुद्ध नकदी (इस महीने)',
+    'monthly_net_cash_chart' => 'मासिक शुद्ध नकदी',
+    'cash_flow_caption' => 'वास्तव में मिली नकदी (ग्राहक भुगतान) घटा वास्तव में चुकाई नकदी (आपूर्तिकर्ता + खर्च)। उधार बिक्री और बकाया खरीद तब तक नहीं गिनी जाती जब तक पैसा हाथ नहीं बदलता।',
+
     'monthly_trend' => 'मासिक रुझान (इस वर्ष)',
     'month' => 'महीना',
     'production' => 'उत्पादन (कि.ग्रा.)',

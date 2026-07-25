@@ -9,6 +9,7 @@ use App\Models\Expense;
 use App\Models\ProductionBatch;
 use App\Models\RawMaterial;
 use App\Models\Sale;
+use App\Reports\CashFlowRow;
 use App\Reports\CustomerDue;
 use App\Reports\DashboardReport;
 use App\Reports\ExpenseCategoryTotal;
@@ -41,6 +42,7 @@ class DashboardReportService
         private readonly PurchaseService $purchases,
         private readonly SupplierService $suppliers,
         private readonly CogsService $cogs,
+        private readonly CashFlowService $cash,
     ) {}
 
     public function forMonth(string $businessId, ReportPeriod $period): DashboardReport
@@ -90,6 +92,23 @@ class DashboardReportService
             ? '0.0'
             : bcadd(bcmul(bcdiv($netProfitMonth, $salesMonth, 4), '100', 2), '0', 1);
 
+        // Phase 3: cash flow. Walk Jan..Dec once, carrying a running position
+        // seeded from every event before this year, so the row position and the
+        // selected-month headline come from the SAME walk and cannot drift.
+        $cashIn = $this->cash->cashInTrend($businessId, $period->year);
+        $supplierOut = $this->cash->supplierOutTrend($businessId, $period->year);
+        $expenseOut = $this->cash->expenseOutTrend($businessId, $period->year);
+
+        $position = $this->cash->openingPosition($businessId, $period->year);
+        $cashTrend = [];
+        foreach (range(1, 12) as $m) {
+            $out = bcadd($supplierOut[$m - 1], $expenseOut[$m - 1], 2);
+            $net = bcsub($cashIn[$m - 1], $out, 2);
+            $position = bcadd($position, $net, 2);
+            $cashTrend[] = new CashFlowRow($m, $cashIn[$m - 1], $out, $net, $position);
+        }
+        $cashMonth = $cashTrend[$period->month - 1];
+
         return new DashboardReport(
             period: $period,
             salesTodayRupees: $this->salesToday($businessId),
@@ -111,6 +130,12 @@ class DashboardReportService
             stockValueRupees: $stockValue,
             stockValuation: $stockValuation,
             supplierOutstanding: $this->suppliers->outstandingSummary($businessId),
+            cashInMonthRupees: $cashMonth->cashInRupees,
+            supplierPaidMonthRupees: $supplierOut[$period->month - 1],
+            expensePaidMonthRupees: $expenseOut[$period->month - 1],
+            netCashMonthRupees: $cashMonth->netCashRupees,
+            cashPositionRupees: $cashMonth->positionRupees,
+            cashTrend: $cashTrend,
         );
     }
 

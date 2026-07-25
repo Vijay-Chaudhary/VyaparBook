@@ -1,6 +1,6 @@
 {{-- resources/views/reports/partials/tiles.blade.php --}}
 @php use App\Support\Inr; @endphp
-<div class="grid grid-cols-2 gap-3 md:grid-cols-5">
+<div class="grid grid-cols-2 gap-3 md:grid-cols-3 lg:grid-cols-6">
     <div class="card">
         <p class="text-sm text-ink-muted">{{ __('reports.sales_today') }}</p>
         <p class="tabular text-lg font-bold">{{ Inr::format($report->salesTodayRupees) }}</p>
@@ -23,5 +23,15 @@
         <p class="text-sm text-ink-muted">{{ __('reports.stock_value') }}</p>
         <p class="tabular text-lg font-bold">{{ Inr::format($report->stockValueRupees) }}</p>
         <p class="text-xs text-ink-muted">{{ __('reports.stock_value_hint') }}</p>
+    </div>
+    {{-- Cash position: running net cash recorded, not a bank balance
+         (reports.cash_position_hint). Net-cash-this-month sub-label goes red
+         when the month spent more than it collected, like the Net Profit cell. --}}
+    <div class="card">
+        <p class="text-sm text-ink-muted">{{ __('reports.cash_position') }}</p>
+        <p class="tabular text-lg font-bold {{ bccomp($report->cashPositionRupees, '0.00', 2) < 0 ? 'text-danger' : '' }}">{{ Inr::format($report->cashPositionRupees) }}</p>
+        <p class="text-xs {{ bccomp($report->netCashMonthRupees, '0.00', 2) < 0 ? 'text-danger' : 'text-ink-muted' }}">
+            {{ __('reports.net_cash_month') }}: {{ Inr::format($report->netCashMonthRupees) }}
+        </p>
     </div>
 </div>
