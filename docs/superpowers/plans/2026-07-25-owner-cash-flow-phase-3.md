@@ -69,7 +69,7 @@ cd backend && php artisan test
 **Files:**
 - Create: `app/Reports/CashFlowRow.php`, `app/Services/CashFlowService.php`, `tests/Unit/CashFlowServiceTest.php`
 
-- [ ] **Step 1: Create the value object**
+- [x] **Step 1: Create the value object**
 
 ```php
 <?php
@@ -94,7 +94,7 @@ final readonly class CashFlowRow
 }
 ```
 
-- [ ] **Step 2: Write the failing unit test**
+- [x] **Step 2: Write the failing unit test**
 
 ```php
 <?php
@@ -227,12 +227,12 @@ it('computes the opening position as cumulative net cash strictly before the yea
 });
 ```
 
-- [ ] **Step 3: Run it and watch it fail**
+- [x] **Step 3: Run it and watch it fail**
 
 Run: `./vendor/bin/pest tests/Unit/CashFlowServiceTest.php`
 Expected: FAIL — class `App\Services\CashFlowService` not found.
 
-- [ ] **Step 4: Create `CashFlowService`**
+- [x] **Step 4: Create `CashFlowService`**
 
 ```php
 <?php
@@ -353,12 +353,12 @@ class CashFlowService
 }
 ```
 
-- [ ] **Step 5: Run it and watch it pass**
+- [x] **Step 5: Run it and watch it pass**
 
 Run: `./vendor/bin/pest tests/Unit/CashFlowServiceTest.php`
 Expected: PASS (3 passing).
 
-- [ ] **Step 6: Commit**
+- [x] **Step 6: Commit**
 
 ```bash
 git add app/Reports/CashFlowRow.php app/Services/CashFlowService.php tests/Unit/CashFlowServiceTest.php
@@ -375,7 +375,7 @@ Inject `CashFlowService`, walk the 12 months into a `list<CashFlowRow>` carrying
 - Modify: `app/Reports/DashboardReport.php`, `app/Services/DashboardReportService.php`
 - Test: `tests/Unit/DashboardReportServiceTest.php`
 
-- [ ] **Step 1: Add the new fields to `DashboardReport`**
+- [x] **Step 1: Add the new fields to `DashboardReport`**
 
 Append these to the constructor (after `supplierOutstanding`). They are additive — **nothing is renamed**, so every Phase 0–2b field keeps its name and position:
 
@@ -397,7 +397,7 @@ Also add to the class docblock:
      * @param list<CashFlowRow>            $cashTrend  exactly 12 rows, Jan..Dec
 ```
 
-- [ ] **Step 2: Add the `dashSupplierPayment()` helper (append near `dashExpense` in `tests/Unit/DashboardReportServiceTest.php`)**
+- [x] **Step 2: Add the `dashSupplierPayment()` helper (append near `dashExpense` in `tests/Unit/DashboardReportServiceTest.php`)**
 
 ```php
 function dashSupplierPayment(App\Models\Business $b, App\Models\User $u, string $amount, string $date): void
@@ -418,7 +418,7 @@ function dashSupplierPayment(App\Models\Business $b, App\Models\User $u, string 
 
 > If `Supplier`'s fillable/columns differ (check `app/Models/Supplier.php`), adjust the `firstOrCreate` attributes to match — the point is one supplier to hang payments off.
 
-- [ ] **Step 3: Write the failing test (append)**
+- [x] **Step 3: Write the failing test (append)**
 
 ```php
 it('assembles the cash trend with a running position seeded from prior years', function () {
@@ -466,12 +466,12 @@ it('assembles the cash trend with a running position seeded from prior years', f
 });
 ```
 
-- [ ] **Step 4: Run it and watch it fail**
+- [x] **Step 4: Run it and watch it fail**
 
 Run: `./vendor/bin/pest tests/Unit/DashboardReportServiceTest.php --filter="cash trend"`
 Expected: FAIL — `DashboardReport` constructor argument count (new fields not supplied yet).
 
-- [ ] **Step 5: Wire `forMonth`**
+- [x] **Step 5: Wire `forMonth`**
 
 In `app/Services/DashboardReportService.php`:
 
@@ -525,7 +525,7 @@ use App\Reports\CashFlowRow;
             cashTrend: $cashTrend,
 ```
 
-- [ ] **Step 6: Cover the empty shop**
+- [x] **Step 6: Cover the empty shop**
 
 Find the existing `it('assembles a full report, ...')` (the empty-business test) and add, after its current expectations:
 
@@ -536,12 +536,12 @@ Find the existing `it('assembles a full report, ...')` (the empty-business test)
     expect($report->cashTrend)->toHaveCount(12);
 ```
 
-- [ ] **Step 7: Run the whole service test file**
+- [x] **Step 7: Run the whole service test file**
 
 Run: `./vendor/bin/pest tests/Unit/DashboardReportServiceTest.php`
 Expected: PASS (all, including the new cash test and the extended empty-shop test).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add app/Reports/DashboardReport.php app/Services/DashboardReportService.php tests/Unit/DashboardReportServiceTest.php
@@ -557,7 +557,7 @@ git commit -m "feat: assemble cash-flow trend and month figures in DashboardRepo
 - Modify: `resources/views/reports/partials/tiles.blade.php`, `resources/views/reports/dashboard.blade.php`, `lang/en/reports.php`, `lang/hi/reports.php`
 - Test: `tests/Feature/Web/ReportsDashboardTest.php`
 
-- [ ] **Step 1: Add the English translations**
+- [x] **Step 1: Add the English translations**
 
 In `lang/en/reports.php`, add a cash-flow block (e.g. after the P&L keys):
 
@@ -574,7 +574,7 @@ In `lang/en/reports.php`, add a cash-flow block (e.g. after the P&L keys):
     'cash_flow_caption' => 'Cash actually collected (customer payments) minus cash actually paid out (suppliers + expenses). Credit sales and unpaid purchases are not counted until money changes hands.',
 ```
 
-- [ ] **Step 2: Add the Hindi translations**
+- [x] **Step 2: Add the Hindi translations**
 
 In `lang/hi/reports.php`, add the matching keys:
 
@@ -591,7 +591,7 @@ In `lang/hi/reports.php`, add the matching keys:
     'cash_flow_caption' => 'वास्तव में मिली नकदी (ग्राहक भुगतान) घटा वास्तव में चुकाई नकदी (आपूर्तिकर्ता + खर्च)। उधार बिक्री और बकाया खरीद तब तक नहीं गिनी जाती जब तक पैसा हाथ नहीं बदलता।',
 ```
 
-- [ ] **Step 3: Add the Cash Position tile**
+- [x] **Step 3: Add the Cash Position tile**
 
 In `resources/views/reports/partials/tiles.blade.php`, change the grid to fit a sixth tile and append the tile. Change the opening `<div>`:
 
@@ -614,7 +614,7 @@ and add, as the last tile before the closing `</div>`:
     </div>
 ```
 
-- [ ] **Step 4: Create the cash partial (monthly table + net-cash chart)**
+- [x] **Step 4: Create the cash partial (monthly table + net-cash chart)**
 
 ```blade
 {{-- resources/views/reports/partials/cash.blade.php --}}
@@ -669,7 +669,7 @@ and add, as the last tile before the closing `</div>`:
 
 > `SvgGroupedBarChart` already draws negative values hanging below the zero line in red, so cash-negative months render correctly with no extra work.
 
-- [ ] **Step 5: Include the partial on the dashboard**
+- [x] **Step 5: Include the partial on the dashboard**
 
 In `resources/views/reports/dashboard.blade.php`, add the cash partial after the suppliers partial and before the charts/trend grid:
 
@@ -678,7 +678,7 @@ In `resources/views/reports/dashboard.blade.php`, add the cash partial after the
     @include('reports.partials.cash')
 ```
 
-- [ ] **Step 6: Extend the dashboard render test**
+- [x] **Step 6: Extend the dashboard render test**
 
 In `tests/Feature/Web/ReportsDashboardTest.php`, extend the main render test to seed a payment, a supplier payment, and an expense in the current month, then assert the cash section renders. Add to that test's setup (adjust helper names to whatever the file already uses for creating these — mirror the existing seeding style):
 
@@ -702,12 +702,12 @@ and assert:
 
 > Keep it to labels + the hint caption — do not assert exact rupee figures for cash unless you control every payment/expense in the fixture, to avoid a brittle string match. The unit tests already lock the arithmetic.
 
-- [ ] **Step 7: Run the render tests**
+- [x] **Step 7: Run the render tests**
 
 Run: `php artisan view:clear && ./vendor/bin/pest tests/Feature/Web/ReportsDashboardTest.php`
 Expected: PASS (all).
 
-- [ ] **Step 8: Commit**
+- [x] **Step 8: Commit**
 
 ```bash
 git add resources/views/reports/ lang/en/reports.php lang/hi/reports.php tests/Feature/Web/ReportsDashboardTest.php
@@ -718,12 +718,17 @@ git commit -m "feat: render cash-flow section, Cash Position tile and net-cash c
 
 ## Task 4: Full-suite green + wrap-up
 
-- [ ] **Step 1: Run the whole suite**
+- [x] **Step 1: Run the whole suite**
 
 Run: `php artisan test`
 Expected: all green — the baseline count from "Before you start" plus the new `CashFlowServiceTest` cases and the extended dashboard tests. No Phase 0–2b regressions (the `DashboardReport` change is purely additive).
 
-- [ ] **Step 2: Manually verify (recommended)**
+**Result (2026-07-25):** 529 passed, 1554 assertions, 0 failures.
+
+- [ ] **Step 2: Manually verify (recommended)** — NOT DONE. The markup, both
+  locales, the 12 month rows, the negative-month danger colour and the chart SVG
+  were verified by rendering `partials/cash` + `partials/tiles` directly (DB-free
+  harness), but nobody has eyeballed the real page in Tailwind styling.
 
 ```bash
 php artisan db:seed --class=DemoDataSeeder   # already-seeded is fine
@@ -731,20 +736,22 @@ php artisan serve
 ```
 Log in as `owner@demo-namkeen-bhandar.test` / `password123`. Open `/reports/dashboard`: confirm the Cash Position tile (with the "not a bank balance" hint), the Cash flow table (In / Out / Net / Position), and the monthly net-cash chart. Record a supplier payment or an expense larger than the month's collections to see a cash-negative month render in the danger colour, and confirm the running position still reconciles down the column.
 
-- [ ] **Step 3: Update the UI backlog**
+- [x] **Step 3: Update the UI backlog**
 
 In `docs/ui-backlog.md`, add an `F-03` row under Features noting the Phase 3 cash-flow section shipped (derived-only, no new tables; cash-in = collections, cash-out = supplier payments + expenses; running position labelled as recorded cash, not a bank balance), referencing this plan and the spec.
 
-- [ ] **Step 4: Final commit**
+- [x] **Step 4: Final commit**
 
 ```bash
 git add docs/ui-backlog.md
 git commit -m "docs: log Phase 3 cash flow in ui-backlog"
 ```
 
-- [ ] **Step 5: Finish the branch**
+- [x] **Step 5: Finish the branch**
 
 Use the `finishing-a-development-branch` skill (merge to master or open a PR, per preference). Verification is the local `php artisan test` run from Step 1 — there is no CI on this repo.
+
+**Result:** PR #8 squash-merged to `master` as `0acd8a9`; branch deleted local + origin.
 
 ---
 
