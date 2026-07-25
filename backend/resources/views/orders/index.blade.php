@@ -97,6 +97,22 @@
                         <td>{{ __('orders.statuses.' . $order->status) }}</td>
                         <td class="tabular text-right">{{ Inr::format($order->total) }}</td>
                     </tr>
+                    @if ($order->lines->isNotEmpty())
+                        {{-- What was agreed, at the rates that were accepted. A
+                             decided order showing only a total cannot settle a
+                             dispute about what was meant to go out. --}}
+                        <tr>
+                            <td colspan="3" class="pb-3 pl-3 text-xs text-ink-muted">
+                                @foreach ($order->lines as $line)
+                                    <span class="mr-3 inline-block">
+                                        {{ $line->productPack?->product?->name_en ?: $line->productPack?->product?->name_hi }}
+                                        {{ $line->productPack?->packSize?->label }}
+                                        <span class="tabular">{{ $line->qty }} × {{ Inr::format($line->rate) }}</span>
+                                    </span>
+                                @endforeach
+                            </td>
+                        </tr>
+                    @endif
                 @endforeach
             </tbody>
         </table>

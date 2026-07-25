@@ -22,6 +22,43 @@ const ACTIONS = {
 
 export const ORDER_STATUSES = ['pending', 'accepted', 'packed', 'delivered', 'rejected', 'cancelled'];
 
+/**
+ * The statuses that still need someone to do something. A delivered order has
+ * moved into the customer's khata; a cancelled or rejected one needs nothing
+ * further. Keeping them here would grow the list without bound and bury the
+ * work that is actually outstanding.
+ */
+export const OPEN_STATUSES = ['pending', 'accepted', 'packed'];
+
+/** Days an order may stay undelivered before it needs chasing. */
+export const OVERDUE_DAYS = 3;
+
+/**
+ * Is this order late?
+ *
+ * Counted from the day it was TAKEN, not from approval: that is the delay the
+ * shop actually experiences, and it includes any time the owner sat on the
+ * decision. Only open orders can be late — a delivered one arrived, and a
+ * cancelled one is not coming.
+ *
+ * Day 3 is still within three days; late starts on day 4.
+ */
+export function isOverdue(order, now = new Date()) {
+    if (! order || ! OPEN_STATUSES.includes(order.status)) return false;
+
+    // Explicitly, because new Date(null) is the epoch rather than an invalid
+    // date — a dateless order would otherwise read as decades late.
+    if (! order.order_date) return false;
+
+    const taken = new Date(order.order_date);
+
+    if (Number.isNaN(taken.getTime())) return false;
+
+    const days = Math.floor((now.getTime() - taken.getTime()) / 86400000);
+
+    return days > OVERDUE_DAYS;
+}
+
 /** @returns {string[]} the actions this status permits, newest-first ordering. */
 export function actionsFor(status) {
     return ACTIONS[status] ?? [];

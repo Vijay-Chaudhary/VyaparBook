@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { actionsFor, buildOrderList, groupByStatus } from './orders';
+import { actionsFor, buildOrderList, groupByStatus, isOverdue } from './orders';
 
 describe('actionsFor', () => {
     it('offers nothing while the owner has not decided', () => {
@@ -107,5 +107,43 @@ describe('buildOrderList', () => {
         });
 
         expect(order.items).toEqual([]);
+    });
+});
+
+describe('isOverdue', () => {
+    const now = new Date('2026-07-30T10:00:00Z');
+    const open = (over = {}) => ({ status: 'accepted', order_date: '2026-07-26', ...over });
+
+    it('is not late on the third day — three days is still within three days', () => {
+        expect(isOverdue(open({ order_date: '2026-07-27' }), now)).toBe(false);
+    });
+
+    it('is late on the fourth day', () => {
+        expect(isOverdue(open({ order_date: '2026-07-26' }), now)).toBe(true);
+    });
+
+    it('is not late when it was taken today', () => {
+        expect(isOverdue(open({ order_date: '2026-07-30' }), now)).toBe(false);
+    });
+
+    it('counts from when it was taken, so time spent awaiting approval still counts', () => {
+        // Sat unapproved for a week: the shop has been waiting regardless.
+        expect(isOverdue(open({ status: 'pending', order_date: '2026-07-20' }), now)).toBe(true);
+    });
+
+    it('is never late once it is finished, however it finished', () => {
+        for (const status of ['delivered', 'cancelled', 'rejected']) {
+            expect(isOverdue(open({ status, order_date: '2026-07-01' }), now)).toBe(false);
+        }
+    });
+
+    it('handles the full timestamp a synced row carries', () => {
+        expect(isOverdue(open({ order_date: '2026-07-26T00:00:00.000000Z' }), now)).toBe(true);
+    });
+
+    it('says no rather than throwing on a missing or unreadable date', () => {
+        expect(isOverdue(open({ order_date: null }), now)).toBe(false);
+        expect(isOverdue(open({ order_date: 'not a date' }), now)).toBe(false);
+        expect(isOverdue(undefined, now)).toBe(false);
     });
 });

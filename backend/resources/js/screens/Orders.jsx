@@ -1,5 +1,5 @@
 import { formatDate, t } from '../i18n';
-import { actionsFor, groupByStatus, ORDER_STATUSES } from '../offline/orders';
+import { actionsFor, groupByStatus, isOverdue, OPEN_STATUSES } from '../offline/orders';
 import { formatRupees, toPaise } from '../offline/money';
 import { navigate } from '../router';
 import { Screen } from '../components/Chrome';
@@ -34,19 +34,30 @@ export function Orders({ orders, customersById, onAction, canAccept = false }) {
                 + {t('take_order')}
             </button>
 
-            {ORDER_STATUSES.map((status) => (
+            {OPEN_STATUSES.map((status) => (
                 grouped[status].length > 0 && (
                     <section key={status} className="mb-4">
                         <h2 className="mb-2 text-sm font-semibold text-ink-muted">{t(status)}</h2>
                         <ul className="space-y-2">
-                            {grouped[status].map((order) => (
-                                <li key={order.uuid} className="card py-3">
+                            {grouped[status].map((order) => {
+                                const late = isOverdue(order);
+
+                                return (
+                                <li
+                                    key={order.uuid}
+                                    /* Colour alone would not reach a colour-blind
+                                       salesman, so the row also says "Late". */
+                                    className={`card py-3 ${late ? 'border border-danger' : ''}`}
+                                >
                                     <div className="flex items-center justify-between gap-3">
                                         <span className="min-w-0 flex-1">
                                             <span className="block font-medium">
                                                 {customersById.get(order.customer_id)?.name ?? '—'}
                                             </span>
-                                            <span className="block text-sm text-ink-muted">{formatDate(order.order_date)}</span>
+                                            <span className={`block text-sm ${late ? 'font-medium text-danger' : 'text-ink-muted'}`}>
+                                                {formatDate(order.order_date)}
+                                                {late && <span className="ml-2">{t('overdue')}</span>}
+                                            </span>
                                         </span>
                                         <span className="tabular shrink-0 font-medium">
                                             {formatRupees(toPaise(order.total ?? '0'))}
@@ -89,7 +100,8 @@ export function Orders({ orders, customersById, onAction, canAccept = false }) {
                                         ))}
                                     </div>
                                 </li>
-                            ))}
+                                );
+                            })}
                         </ul>
                     </section>
                 )
