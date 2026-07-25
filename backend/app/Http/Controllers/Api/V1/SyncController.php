@@ -8,6 +8,8 @@ use App\Models\Beat;
 use App\Models\BeatCustomer;
 use App\Models\Customer;
 use App\Models\MaterialConsumption;
+use App\Models\Order;
+use App\Models\OrderLine;
 use App\Models\Payment;
 use App\Models\ProductionBatch;
 use App\Models\RawMaterial;
@@ -17,6 +19,7 @@ use App\Models\StockMovement;
 use App\Policies\KhataPolicy;
 use App\Policies\StockPolicy;
 use App\Services\LedgerWriter;
+use App\Services\OrderWriter;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\DB;
@@ -83,9 +86,25 @@ class SyncController extends Controller
         $productionBatches = $stockDelta(ProductionBatch::class);
         $materialConsumptions = $stockDelta(MaterialConsumption::class);
 
+        // A salesman gets only the orders they took; owner/admin see all. Same
+        // shape as beats. This assumes the order-taker delivers it.
+        $orders = $isManager
+            ? $delta(Order::class)
+            : Order::where('sync_seq', '>', $since)
+                ->where('created_by', (int) app('tenant.user_id'))
+                ->orderBy('sync_seq')
+                ->get();
+
+        // Lines follow their order, so nothing on the device dangles.
+        $orderLines = OrderLine::where('sync_seq', '>', $since)
+            ->whereIn('order_id', $orders->pluck('id'))
+            ->orderBy('sync_seq')
+            ->get();
+
         $maxSeqs = collect([
             $customers, $sales, $saleLines, $payments, $beats, $beatCustomers,
             $rawMaterials, $stockMovements, $productionBatches, $materialConsumptions,
+            $orders, $orderLines,
         ])
             ->map(fn ($rows) => $rows->max('sync_seq'))
             ->filter(fn ($v) => $v !== null);
@@ -102,6 +121,8 @@ class SyncController extends Controller
             'material_consumptions' => $materialConsumptions,
             'beats' => $beats,
             'beat_customers' => $beatCustomers,
+            'orders' => $orders,
+            'order_lines' => $orderLines,
         ]);
     }
 
@@ -119,11 +140,14 @@ class SyncController extends Controller
      * its own savepoint so a failure rolls back only that item and the loop
      * continues (a raw failure would otherwise abort the request transaction).
      */
-    public function push(Request $request, LedgerWriter $writer)
+    public function push(Request $request, LedgerWriter $writer, OrderWriter $orders)
     {
         $request->validate([
             'mutations' => ['present', 'array'],
-            'mutations.*.type' => ['required', Rule::in(['customer', 'sale', 'payment'])],
+            'mutations.*.type' => ['required', Rule::in([
+                'customer', 'sale', 'payment',
+                'order', 'order_pack', 'order_deliver', 'order_cancel',
+            ])],
             'mutations.*.tenant_id' => ['required', 'uuid'],
             'mutations.*.uuid' => ['required', 'uuid'],
             'mutations.*.payload' => ['required', 'array'],
@@ -155,7 +179,7 @@ class SyncController extends Controller
             }
 
             try {
-                [$model, $created] = DB::transaction(fn () => $this->apply($writer, $mutation['type'], $validator->validated()));
+                [$model, $created] = DB::transaction(fn () => $this->apply($writer, $orders, $mutation['type'], $validator->validated()));
                 $results[] = [
                     'uuid' => $uuid,
                     'status' => $created ? 'applied' : 'duplicate',
@@ -176,12 +200,18 @@ class SyncController extends Controller
         return response()->json(['results' => $results]);
     }
 
-    private function apply(LedgerWriter $writer, string $type, array $data): array
+    private function apply(LedgerWriter $writer, OrderWriter $orders, string $type, array $data): array
     {
         return match ($type) {
             'customer' => $writer->createCustomer($data),
             'sale' => $writer->createSale($data),
             'payment' => $writer->recordPayment($data),
+            'order' => $orders->createOrder($data),
+            // The envelope uuid is the mutation's own id; the ORDER is named in
+            // the payload, so a retried pack and a fresh one both find it.
+            'order_pack' => $orders->pack($data['order_uuid']),
+            'order_deliver' => $orders->deliver($data['order_uuid']),
+            'order_cancel' => $orders->cancel($data['order_uuid'], $data['status_note'] ?? null),
         };
     }
 
@@ -191,6 +221,12 @@ class SyncController extends Controller
             'customer' => LedgerWriter::rulesForCustomer(),
             'sale' => LedgerWriter::rulesForSale(),
             'payment' => LedgerWriter::rulesForPayment(),
+            'order' => OrderWriter::rulesForOrder(),
+            'order_pack', 'order_deliver' => ['order_uuid' => ['required', 'uuid']],
+            'order_cancel' => [
+                'order_uuid' => ['required', 'uuid'],
+                'status_note' => ['nullable', 'string', 'max:255'],
+            ],
         };
     }
 
@@ -200,6 +236,7 @@ class SyncController extends Controller
 
         return match ($type) {
             'customer', 'sale' => $policy->recordSale(),
+            'order', 'order_pack', 'order_deliver', 'order_cancel' => $policy->recordSale(),
             'payment' => $policy->recordPayment(),
         };
     }
