@@ -268,7 +268,9 @@ function App({ userName, locale }) {
             setOrders(buildOrderList({
                 orders: await database.orders.toArray(),
                 orderLines: await database.order_lines.toArray(),
-                outbox: await pending(database).toArray(),
+                // pending() ends in sortBy(), which already resolves to an array —
+                // it is not a Dexie Collection, so there is nothing to toArray().
+                outbox: await pending(database),
                 packs: packRows,
                 products: productRows,
                 locale: getLocale(),
