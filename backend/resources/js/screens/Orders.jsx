@@ -1,4 +1,4 @@
-import { t } from '../i18n';
+import { formatDate, t } from '../i18n';
 import { actionsFor, groupByStatus, ORDER_STATUSES } from '../offline/orders';
 import { formatRupees, toPaise } from '../offline/money';
 import { navigate } from '../router';
@@ -36,7 +36,7 @@ export function Orders({ orders, customersById, onAction }) {
                                             <span className="block font-medium">
                                                 {customersById.get(order.customer_id)?.name ?? '—'}
                                             </span>
-                                            <span className="block text-sm text-ink-muted">{order.order_date}</span>
+                                            <span className="block text-sm text-ink-muted">{formatDate(order.order_date)}</span>
                                         </span>
                                         <span className="tabular shrink-0 font-medium">
                                             {formatRupees(toPaise(order.total ?? '0'))}
