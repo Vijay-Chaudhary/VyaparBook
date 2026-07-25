@@ -167,6 +167,11 @@ class ReminderController extends Controller
         }
 
         $data = $request->validate([
+            // What counts as overdue. Exposed since a shop's idea of "late"
+            // varies: a daily-settling retailer and a wholesaler on terms
+            // genuinely disagree, and the default cannot suit both.
+            'reminder_min_days' => ['required', 'integer', 'min:1', 'max:180'],
+            'reminder_min_outstanding' => ['required', 'numeric', 'min:0', 'max:9999999.99'],
             'reminder_auto_enabled' => ['nullable', 'boolean'],
             'reminder_send_at' => ['required', 'date_format:H:i', 'after_or_equal:09:00', 'before_or_equal:19:59'],
             'reminder_cooldown_days' => ['required', 'integer', 'min:0', 'max:90'],
@@ -175,6 +180,8 @@ class ReminderController extends Controller
 
         $this->runInTenant($businessId, function () use ($businessId, $data, $request) {
             $business = Business::findOrFail($businessId);
+            $business->reminder_min_days = (int) $data['reminder_min_days'];
+            $business->reminder_min_outstanding = number_format((float) $data['reminder_min_outstanding'], 2, '.', '');
             $business->reminder_auto_enabled = $request->boolean('reminder_auto_enabled');
             $business->reminder_send_at = $data['reminder_send_at'];
             $business->reminder_cooldown_days = (int) $data['reminder_cooldown_days'];

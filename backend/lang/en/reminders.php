@@ -66,4 +66,11 @@ return [
     'cancelled' => 'Scheduled reminder cancelled.',
     'settings_saved' => 'Reminder settings saved.',
     'save' => 'Save',
+
+    // --- What counts as overdue (editable since the 7-day change) ----------
+    'thresholds_heading' => 'When to chase',
+    'min_days' => 'Days without payment',
+    'min_days_hint' => 'A customer appears here once this many days have passed since their last payment.',
+    'min_outstanding' => 'Minimum amount owed (₹)',
+    'min_outstanding_hint' => 'Smaller balances are not worth a message.',
 ];

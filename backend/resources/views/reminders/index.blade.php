@@ -57,6 +57,19 @@
         <form method="POST" action="{{ route('reminders.settings') }}" class="flex flex-wrap items-end gap-3">
             @csrf
             <input type="hidden" name="business" value="{{ $businessId }}">
+            {{-- What counts as overdue. Editable because a daily-settling
+                 retailer and a wholesaler on terms genuinely disagree. --}}
+            <label class="text-sm">
+                <span class="block text-ink-muted">{{ __('reminders.min_days') }}</span>
+                <input type="number" name="reminder_min_days" min="1" max="180" class="field-input"
+                       value="{{ old('reminder_min_days', $business->reminder_min_days) }}">
+            </label>
+            <label class="text-sm">
+                <span class="block text-ink-muted">{{ __('reminders.min_outstanding') }}</span>
+                <input type="number" step="0.01" min="0" name="reminder_min_outstanding" class="field-input"
+                       value="{{ old('reminder_min_outstanding', $business->reminder_min_outstanding) }}">
+            </label>
+
             <label class="flex items-center gap-2 text-sm">
                 <input type="checkbox" name="reminder_auto_enabled" value="1" @checked($business->reminder_auto_enabled)>
                 {{ __('reminders.auto_enabled') }}
@@ -78,8 +91,11 @@
             </label>
             <button type="submit" class="btn-primary">{{ __('reminders.save') }}</button>
         </form>
+        <p class="mt-2 text-xs text-ink-muted">{{ __('reminders.min_days_hint') }} {{ __('reminders.min_outstanding_hint') }}</p>
         <p class="mt-2 text-xs text-ink-muted">{{ __('reminders.auto_warning') }}</p>
         <p class="text-xs text-ink-muted">{{ __('reminders.send_at_hint') }} {{ __('reminders.cooldown_hint') }}</p>
+        @error('reminder_min_days') <p class="text-xs text-danger">{{ $message }}</p> @enderror
+        @error('reminder_min_outstanding') <p class="text-xs text-danger">{{ $message }}</p> @enderror
         @error('reminder_send_at') <p class="text-xs text-danger">{{ $message }}</p> @enderror
         @error('reminder_daily_cap') <p class="text-xs text-danger">{{ $message }}</p> @enderror
     </div>
