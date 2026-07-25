@@ -202,7 +202,13 @@ it('refuses a rate below the pack cost floor', function () {
 
     postSale($token, $customer, [
         ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '69.99'],
-    ])->assertStatus(422);
+    ])
+        ->assertStatus(422)
+        // The test product only has name_hi set (saleSetup does not set name_en),
+        // so the fallback chain in LedgerWriter lands on the Hindi name — this
+        // also incidentally proves the `sales.rate_below_floor` key resolves and
+        // both placeholders are filled, not just that some 422 came back.
+        ->assertJsonPath('errors.lines.0', 'Rate for सेव cannot be below 70.00.');
 
     expect(DB::connection('pgsql_migrate')->table('sale_lines')
         ->where('business_id', $business->id)->count())->toBe(0);
@@ -270,4 +276,22 @@ it('applies the floor to a return line too, independent of the qty sign', functi
     postSale($token, $customer, [
         ['product_pack_id' => $pack->id, 'qty' => -1, 'rate' => '60.00'],
     ])->assertStatus(422);
+});
+
+it('rolls back the whole sale when only a later line breaks the floor', function () {
+    [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
+    DB::connection('pgsql_migrate')->table('product_packs')
+        ->where('id', $pack->id)->update(['default_cost_price' => '70.00']);
+
+    postSale($token, $customer, [
+        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '90.00'],   // valid on its own
+        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '60.00'],  // below the floor
+    ])->assertStatus(422);
+
+    // The transaction boundary in LedgerWriter::createSale must undo the first
+    // line too — a partial write would leave a sale with only its valid line.
+    expect(DB::connection('pgsql_migrate')->table('sales')
+        ->where('business_id', $business->id)->count())->toBe(0);
+    expect(DB::connection('pgsql_migrate')->table('sale_lines')
+        ->where('business_id', $business->id)->count())->toBe(0);
 });

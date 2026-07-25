@@ -9,6 +9,7 @@ use App\Models\ProductPack;
 use App\Models\Sale;
 use App\Models\SaleLine;
 use App\Pricing\PriceFloor;
+use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
@@ -105,14 +106,23 @@ class LedgerWriter
         $customer = Customer::findOrFail($data['customer_id']);
 
         $sale = DB::transaction(function () use ($data, $customer) {
+            // Batch-fetch every pack (with product/packSize eager-loaded, per
+            // PriceFloor::for()'s docblock) in ONE query before the loop, instead
+            // of one findOrFail per line — a 6-line sale would otherwise be ~18
+            // queries (findOrFail + product + packSize per line) instead of 1.
+            // RLS makes a cross-tenant pack invisible to whereIn() exactly as it
+            // was to findOrFail(), so the 404-on-foreign-pack behaviour is unchanged.
+            $packIds = array_column($data['lines'], 'product_pack_id');
+            $packs = ProductPack::with(['product', 'packSize'])->whereIn('id', $packIds)->get()->keyBy('id');
+
             // Freeze rates and total first so the sale saves once (version stays 1).
             $lines = [];
             $total = '0.00';
             foreach ($data['lines'] as $line) {
-                // Eager-load product/packSize in the same query as findOrFail —
-                // PriceFloor::for() requires both loaded (its docblock: this runs
-                // once per line, so lazy relations would be an N+1).
-                $pack = ProductPack::with(['product', 'packSize'])->findOrFail($line['product_pack_id']);
+                $pack = $packs[$line['product_pack_id']] ?? null;
+                if ($pack === null) {
+                    throw (new ModelNotFoundException)->setModel(ProductPack::class, [$line['product_pack_id']]);
+                }
 
                 // list_rate is ALWAYS the server's own answer. Accepting it from
                 // the client would let a phone claim it sold at list while
@@ -126,7 +136,7 @@ class LedgerWriter
                 // positive rate, bounded by the same rule as the sale it reverses.
                 if ($floor !== null && bccomp($rate, $floor, 2) < 0) {
                     throw ValidationException::withMessages([
-                        'lines' => __('Rate for :product cannot be below :floor.', [
+                        'lines' => __('sales.rate_below_floor', [
                             'product' => $pack->product?->name_en ?: $pack->product?->name_hi ?: 'this product',
                             'floor' => $floor,
                         ]),
