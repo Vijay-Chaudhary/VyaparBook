@@ -103,7 +103,7 @@ stores whole rows, so the new field reaches the phone with no client schema bump
 | `App\Pricing\PriceFloor` | Pure. `for(ProductPack): ?string` — the floor, or null when unbounded. |
 | `resources/js/offline/pricing.js` | Pure. The same rule for the phone, plus a `belowFloor` check for the form. |
 | `LedgerWriter::createSale` | Accepts an optional per-line rate, computes `list_rate` itself, enforces the floor, stores both. |
-| `LedgerWriter` void path | Copies rate and list_rate negated, so a reversal mirrors the original rather than re-deriving a moved price. |
+| `LedgerWriter` void path | Copies `rate` and `list_rate` **unchanged**, negating only qty and line_total — exactly as it already treats `rate`. A reversal must mirror the original price, not re-derive one that may have moved. |
 | `RecordSale` (Forms.jsx) | Rate field per line, prefilled and re-filled on product change; per-line subtotal; inline floor error; total from line rates. |
 | `offline/khata.js` `ledgerFor` | Attaches line items to each sale entry, from `sale_lines` or the outbox payload. |
 | `CustomerLedger.jsx` | Renders those items beneath each sale. |
@@ -149,8 +149,8 @@ them correctly with no report touched.
   exactly equal to the floor (allowed) and a derived floor that rounds up.
 - **PHP unit** — `LedgerWriter`: rate honoured; rate omitted falls back to
   default; below-floor rejected naming the product; a client-sent `list_rate` is
-  ignored in favour of the server's; `line_total = rate × qty`; void negates both
-  rates.
+  ignored in favour of the server's; `line_total = rate × qty`; void copies both
+  rates unchanged while negating qty and line_total.
 - **PHP feature** — sync push: a below-floor item parks with a reason while the
   rest of the batch applies.
 - **JS unit** — `pricing.test.js`: the same case table as PHP.
