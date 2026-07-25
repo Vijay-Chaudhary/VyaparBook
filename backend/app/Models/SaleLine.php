@@ -22,6 +22,7 @@ class SaleLine extends Model
     protected $casts = [
         'qty' => 'integer',
         'rate' => 'decimal:2',
+        'list_rate' => 'decimal:2',
         'line_total' => 'decimal:2',
         'version' => 'integer',
         'sync_seq' => 'integer',

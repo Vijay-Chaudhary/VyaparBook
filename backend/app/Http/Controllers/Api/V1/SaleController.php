@@ -67,6 +67,7 @@ class SaleController extends Controller
                     'qty' => -$line->qty,
                     'rate' => $line->rate, // same frozen rate, negated qty
                 ]);
+                $r->list_rate = $line->list_rate;
                 $r->line_total = bcmul((string) $line->line_total, '-1', 2);
                 $r->save();
             }

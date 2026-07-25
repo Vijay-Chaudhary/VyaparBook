@@ -8,9 +8,11 @@ use App\Models\Payment;
 use App\Models\ProductPack;
 use App\Models\Sale;
 use App\Models\SaleLine;
+use App\Pricing\PriceFloor;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
+use Illuminate\Validation\ValidationException;
 
 /**
  * The one home for the three idempotent ledger writes — customer, sale, payment.
@@ -51,6 +53,9 @@ class LedgerWriter
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.product_pack_id' => ['required', 'uuid'],
             'lines.*.qty' => ['required', 'integer', 'not_in:0'], // negative = return
+            // Optional: omitted means "use the shop's default", which keeps the
+            // REST endpoint and any older client working unchanged.
+            'lines.*.rate' => ['nullable', 'numeric', 'min:0', 'decimal:0,2'],
         ];
     }
 
@@ -104,14 +109,37 @@ class LedgerWriter
             $lines = [];
             $total = '0.00';
             foreach ($data['lines'] as $line) {
-                $pack = ProductPack::findOrFail($line['product_pack_id']);
-                $rate = $this->khata->snapshotRate($pack);
+                // Eager-load product/packSize in the same query as findOrFail —
+                // PriceFloor::for() requires both loaded (its docblock: this runs
+                // once per line, so lazy relations would be an N+1).
+                $pack = ProductPack::with(['product', 'packSize'])->findOrFail($line['product_pack_id']);
+
+                // list_rate is ALWAYS the server's own answer. Accepting it from
+                // the client would let a phone claim it sold at list while
+                // charging less, making the discount record fiction.
+                $listRate = $this->khata->snapshotRate($pack);
+                $rate = isset($line['rate']) ? bcadd((string) $line['rate'], '0', 2) : $listRate;
+
+                $floor = PriceFloor::for($pack);
+
+                // Checked on the rate alone: a return is a negative qty at a
+                // positive rate, bounded by the same rule as the sale it reverses.
+                if ($floor !== null && bccomp($rate, $floor, 2) < 0) {
+                    throw ValidationException::withMessages([
+                        'lines' => __('Rate for :product cannot be below :floor.', [
+                            'product' => $pack->product?->name_en ?: $pack->product?->name_hi ?: 'this product',
+                            'floor' => $floor,
+                        ]),
+                    ]);
+                }
+
                 $lineTotal = bcmul($rate, (string) $line['qty'], 2);
 
                 $lines[] = [
                     'product_pack_id' => $pack->id,
                     'qty' => $line['qty'],
                     'rate' => $rate,
+                    'list_rate' => $listRate,
                     'line_total' => $lineTotal,
                 ];
                 $total = bcadd($total, $lineTotal, 2);
@@ -135,6 +163,7 @@ class LedgerWriter
                     'qty' => $l['qty'],
                     'rate' => $l['rate'],
                 ]);
+                $saleLine->list_rate = $l['list_rate'];
                 $saleLine->line_total = $l['line_total'];
                 $saleLine->save();
             }
