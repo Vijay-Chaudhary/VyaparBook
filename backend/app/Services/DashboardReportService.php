@@ -215,14 +215,6 @@ class DashboardReportService
     }
 
     /**
-     * Estimated monthly GROSS profit for the year: Σ sale-line revenue minus
-     * Σ (qty × pack cost). This is NOT net profit — operating expenses have no
-     * source in the schema yet (deferred), so callers must label it "estimated,
-     * before operating expenses". Unpriced packs count as zero cost.
-     *
-     * @return list<string> 12 scale-2 decimal strings, index 0 = January.
-     */
-    /**
      * Gross profit per month: revenue − actual COGS, 12 entries Jan..Dec.
      *
      * Costs come from CogsService (production wherever batches exist, the
