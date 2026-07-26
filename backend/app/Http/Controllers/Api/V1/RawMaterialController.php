@@ -7,6 +7,7 @@ use App\Http\Controllers\Controller;
 use App\Models\RawMaterial;
 use App\Policies\StockPolicy;
 use App\Services\PlanGuard;
+use App\Stock\MaterialUnit;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
@@ -17,7 +18,6 @@ class RawMaterialController extends Controller
     // Stock & production is owner/admin only, reads included — the whole module
     // gates on StockPolicy::manage() (PRD §7), the deliberate difference from the
     // catalog and khata slices.
-    private const UNITS = ['kg', 'litre', 'piece', 'gram', 'ml', 'packet'];
 
     public function store(Request $request)
     {
@@ -32,7 +32,7 @@ class RawMaterialController extends Controller
         $data = $request->validate([
             'uuid' => ['nullable', 'uuid'],
             'name' => ['required', 'string', 'max:120'],
-            'unit' => ['required', Rule::in(self::UNITS)],
+            'unit' => ['required', Rule::in(MaterialUnit::keys())],
             'reorder_level' => ['nullable', 'numeric', 'min:0'],
         ]);
 
@@ -73,7 +73,7 @@ class RawMaterialController extends Controller
 
         $data = $request->validate([
             'name' => ['sometimes', 'required', 'string', 'max:120'],
-            'unit' => ['sometimes', 'required', Rule::in(self::UNITS)],
+            'unit' => ['sometimes', 'required', Rule::in(MaterialUnit::keys())],
             'reorder_level' => ['nullable', 'numeric', 'min:0'],
         ]);
 

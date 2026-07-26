@@ -6,6 +6,7 @@ namespace App\Import;
 use App\Models\Customer;
 use App\Models\RawMaterial;
 use App\Models\StockMovement;
+use App\Stock\MaterialUnit;
 use App\Support\TenantContext;
 use Illuminate\Support\Facades\DB;
 use Ramsey\Uuid\Uuid;
@@ -30,8 +31,6 @@ class TenantImporter
 {
     /** Fixed application namespace for derived natural keys. */
     private const NAMESPACE_UUID = '6f9619ff-8b86-d011-b42d-00c04fc964ff';
-
-    private const UNITS = ['kg', 'litre', 'piece', 'gram', 'ml', 'packet'];
 
     public function importCustomers(string $businessId, iterable $rows, bool $dryRun): ImportReport
     {
@@ -98,8 +97,8 @@ class TenantImporter
 
                 $unit = $this->norm($row['unit'] ?? '');
                 $unit = $unit !== '' ? mb_strtolower($unit) : 'kg';
-                if (! in_array($unit, self::UNITS, true)) {
-                    $report->addError($i, 'unit must be one of: ' . implode(', ', self::UNITS));
+                if (! MaterialUnit::isValid($unit)) {
+                    $report->addError($i, 'unit must be one of: ' . implode(', ', MaterialUnit::keys()));
                     continue;
                 }
 
