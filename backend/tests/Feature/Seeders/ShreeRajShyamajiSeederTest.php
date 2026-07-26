@@ -226,3 +226,31 @@ it('costs every product below what it sells for', function () {
         expect($margin)->toBeGreaterThan(0.20)->toBeLessThan(0.40);
     }
 });
+
+it('is idempotent, so a second db:seed does not double the books', function () {
+    $before = [
+        Customer::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
+        Sale::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
+        SaleLine::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
+        Payment::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
+        Purchase::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
+        ProductionBatch::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
+    ];
+
+    $this->seed(ShreeRajShyamajiSeeder::class);   // beforeEach already ran it once
+
+    expect([
+        Customer::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
+        Sale::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
+        SaleLine::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
+        Payment::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
+        Purchase::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
+        ProductionBatch::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
+    ])->toBe($before);
+});
+
+it('leaves no demo tenant behind', function () {
+    expect(Business::on('pgsql_migrate')->whereIn('name', [
+        'Demo Namkeen Bhandar', 'Demo Sweets House',
+    ])->count())->toBe(0);
+});
