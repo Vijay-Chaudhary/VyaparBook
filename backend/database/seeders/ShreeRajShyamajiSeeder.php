@@ -4,10 +4,12 @@ namespace Database\Seeders;
 
 use App\Models\Business;
 use App\Models\Customer;
+use App\Models\MaterialConsumption;
 use App\Models\Membership;
 use App\Models\PackSize;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Models\ProductionBatch;
 use App\Models\ProductPack;
 use App\Models\Purchase;
 use App\Models\RawMaterial;
@@ -80,6 +82,7 @@ class ShreeRajShyamajiSeeder extends Seeder
         $this->purchases();
         $this->sales();
         $this->payments();
+        $this->production();
 
         $this->command->info(self::BUSINESS.': seeded catalog and masters.');
     }
@@ -293,6 +296,57 @@ class ShreeRajShyamajiSeeder extends Seeder
             $payment->setConnection(self::CONNECTION);
             $payment->created_by = $this->ownerId;
             $payment->save();
+        }
+    }
+
+    /**
+     * Batches and what they consumed, each consumption paired with the negative
+     * `out` movement that actually lowers stock — mirrors ProductionWriter.
+     *
+     * RECONSTRUCTED, not transcribed. See the spec: the owner's log covers
+     * 770 kg against 1,654 kg sold, with no Senvda batch, so costing it
+     * verbatim reports a loss on every sale.
+     */
+    private function production(): void
+    {
+        if (ProductionBatch::on(self::CONNECTION)->where('business_id', $this->businessId)->exists()) {
+            return;
+        }
+
+        foreach ($this->data('production') as [$date, $product, $outputKg, $consumptions]) {
+            $batch = new ProductionBatch([
+                'business_id' => $this->businessId,
+                'uuid' => (string) Str::uuid(),
+                'product_id' => $this->products[$product],
+                'batch_date' => $date,
+                'output_kg' => $outputKg,
+            ]);
+            $batch->setConnection(self::CONNECTION);
+            $batch->created_by = $this->ownerId;
+            $batch->save();
+
+            foreach ($consumptions as [$material, $qty]) {
+                MaterialConsumption::on(self::CONNECTION)->create([
+                    'business_id' => $this->businessId,
+                    'production_batch_id' => $batch->id,
+                    'raw_material_id' => $this->materials[$material],
+                    'qty' => $qty,   // positive amount consumed
+                ]);
+
+                $movement = new StockMovement([
+                    'business_id' => $this->businessId,
+                    'uuid' => (string) Str::uuid(),
+                    'raw_material_id' => $this->materials[$material],
+                    'movement_date' => $date,
+                    'kind' => 'out',
+                    // Signed negative, or it would RAISE stock.
+                    'qty' => bcmul($qty, '-1', 3),
+                    'production_batch_id' => $batch->id,
+                ]);
+                $movement->setConnection(self::CONNECTION);
+                $movement->created_by = $this->ownerId;
+                $movement->save();
+            }
         }
     }
 }

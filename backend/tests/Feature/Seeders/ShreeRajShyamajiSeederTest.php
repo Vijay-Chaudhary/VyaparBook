@@ -3,9 +3,11 @@
 
 use App\Models\Business;
 use App\Models\Customer;
+use App\Models\MaterialConsumption;
 use App\Models\PackSize;
 use App\Models\Payment;
 use App\Models\Product;
+use App\Models\ProductionBatch;
 use App\Models\ProductPack;
 use App\Models\Purchase;
 use App\Models\RawMaterial;
@@ -13,6 +15,7 @@ use App\Models\Sale;
 use App\Models\SaleLine;
 use App\Models\StockMovement;
 use App\Models\Supplier;
+use App\Services\CogsService;
 use App\Services\KhataService;
 use App\Services\StockService;
 use Database\Seeders\ShreeRajShyamajiSeeder;
@@ -173,4 +176,53 @@ it('charges each customer the rate they were actually given', function () {
         ->distinct()->pluck('sale_lines.rate')->map(fn ($r) => (float) $r)->all();
 
     expect(min($rates))->toBe(72.0)->and(max($rates))->toBe(80.0);
+});
+
+it('seeds the reconstructed batches', function () {
+    $batches = ProductionBatch::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->get();
+
+    expect($batches)->toHaveCount(7);
+
+    $output = $batches->reduce(fn (string $c, $b) => bcadd($c, (string) $b->output_kg, 3), '0.000');
+    expect($output)->toBe('1945.000');
+});
+
+it('never lets a material close below zero', function () {
+    // The check that catches a bad recipe. Consuming stock that was never
+    // bought would make the whole valuation fiction.
+    $stock = app(StockService::class);
+
+    foreach (RawMaterial::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->get() as $material) {
+        $onHand = $stock->onHandFor($material);
+
+        expect(bccomp($onHand, '0.000', 3))->toBeGreaterThanOrEqual(0, "{$material->name} closed at {$onHand}");
+    }
+});
+
+it('costs every product below what it sells for', function () {
+    // The point of reconstructing production: the owner's own consumption
+    // figures give Rs 304/kg against Rs 102/kg of revenue.
+    //
+    // Pinned inside pwInTenant because CogsService reads through DB::table on
+    // the RLS-restricted app connection, unlike the services above that query
+    // through model relations. Unpinned it would see an empty tenant.
+    $revenuePerKg = ['Senvda' => 92.77, 'Sev' => 114.42, 'Mix Sev' => 127.30];
+    $businessId = srsBusiness()->id;
+    $costs = pwInTenant($businessId, fn () => app(CogsService::class)->packCosts($businessId));
+
+    expect($costs)->not->toBeEmpty();
+
+    foreach (ProductPack::on('pgsql_migrate')->where('business_id', $businessId)->get() as $pack) {
+        $cost = $costs[$pack->id] ?? null;
+        if ($cost === null) {
+            continue;
+        }
+
+        $product = Product::on('pgsql_migrate')->find($pack->product_id);
+        $size = PackSize::on('pgsql_migrate')->find($pack->pack_size_id);
+        $costPerKg = (float) $cost->costRupees / (float) $size->weight_kg;
+        $margin = ($revenuePerKg[$product->name_en] - $costPerKg) / $revenuePerKg[$product->name_en];
+
+        expect($margin)->toBeGreaterThan(0.20)->toBeLessThan(0.40);
+    }
 });
