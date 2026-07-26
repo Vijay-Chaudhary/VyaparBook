@@ -8,7 +8,9 @@ use App\Models\Membership;
 use App\Models\PackSize;
 use App\Models\Product;
 use App\Models\ProductPack;
+use App\Models\Purchase;
 use App\Models\RawMaterial;
+use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Services\CatalogService;
@@ -72,6 +74,7 @@ class ShreeRajShyamajiSeeder extends Seeder
 
         $this->catalog();
         $this->masters();
+        $this->purchases();
 
         $this->command->info(self::BUSINESS.': seeded catalog and masters.');
     }
@@ -161,6 +164,49 @@ class ShreeRajShyamajiSeeder extends Seeder
                 ['business_id' => $this->businessId, 'name' => $name],
                 ['uuid' => (string) Str::uuid(), 'unit' => $unit, 'reorder_level' => $reorder],
             )->id;
+        }
+    }
+
+    /**
+     * Purchases, each with the positive `in` movement that actually raises
+     * stock — on-hand is Σ stock_movements.qty, so a Purchase row on its own
+     * would leave every material reading zero. Mirrors PurchaseWriter.
+     */
+    private function purchases(): void
+    {
+        if (Purchase::on(self::CONNECTION)->where('business_id', $this->businessId)->exists()) {
+            return;
+        }
+
+        foreach ($this->data('purchases') as [$date, $material, $qty, $unitCost, $supplier]) {
+            // Built with `new` rather than create(): created_by is NOT NULL and
+            // guarded, so the row has to be stamped before its first insert.
+            $purchase = new Purchase([
+                'business_id' => $this->businessId,
+                'uuid' => (string) Str::uuid(),
+                'supplier_id' => $this->suppliers[$supplier],
+                'raw_material_id' => $this->materials[$material],
+                'purchase_date' => $date,
+                'qty' => $qty,
+                'unit_cost' => $unitCost,
+                'total' => bcmul($qty, $unitCost, 2),
+            ]);
+            $purchase->setConnection(self::CONNECTION);
+            $purchase->created_by = $this->ownerId;
+            $purchase->save();
+
+            $movement = new StockMovement([
+                'business_id' => $this->businessId,
+                'uuid' => (string) Str::uuid(),
+                'raw_material_id' => $this->materials[$material],
+                'movement_date' => $date,
+                'kind' => 'in',
+                'qty' => $qty,
+                'purchase_id' => $purchase->id,
+            ]);
+            $movement->setConnection(self::CONNECTION);
+            $movement->created_by = $this->ownerId;
+            $movement->save();
         }
     }
 }

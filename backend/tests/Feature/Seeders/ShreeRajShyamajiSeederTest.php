@@ -6,8 +6,11 @@ use App\Models\Customer;
 use App\Models\PackSize;
 use App\Models\Product;
 use App\Models\ProductPack;
+use App\Models\Purchase;
 use App\Models\RawMaterial;
+use App\Models\StockMovement;
 use App\Models\Supplier;
+use App\Services\StockService;
 use Database\Seeders\ShreeRajShyamajiSeeder;
 
 /** The seeder writes on pgsql_migrate, so assertions read from there too. */
@@ -52,4 +55,25 @@ it('records oil in the unit it is bought in', function () {
         ->firstOrFail();
 
     expect($oil->unit)->toBe('tina');
+});
+
+it('seeds every purchase with the total the invoices add up to', function () {
+    $rows = Purchase::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->get();
+
+    expect($rows)->toHaveCount(23);
+
+    $total = $rows->reduce(fn (string $c, $p) => bcadd($c, (string) $p->total, 2), '0.00');
+    expect($total)->toBe('342305.00');
+});
+
+it('raises stock for every purchase, so on-hand is not zero', function () {
+    // on-hand is a sum over stock_movements, not a column: a Purchase row alone
+    // moves nothing. PurchaseWriter pairs each with a positive `in` movement.
+    $ins = StockMovement::on('pgsql_migrate')
+        ->where('business_id', srsBusiness()->id)
+        ->whereNotNull('purchase_id')
+        ->get();
+
+    expect($ins)->toHaveCount(23);
+    expect($ins->every(fn ($m) => bccomp((string) $m->qty, '0', 3) > 0))->toBeTrue();
 });
