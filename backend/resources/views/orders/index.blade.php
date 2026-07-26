@@ -26,7 +26,18 @@
     @foreach ($pending as $order)
         <div class="card mt-4">
             <div class="mb-2 flex items-center justify-between">
-                <h2 class="font-semibold">{{ $order->customer?->name ?? '—' }}</h2>
+                {{-- Accepting an order is a credit decision, so the customer's
+                     khata is one tap away rather than a separate hunt. --}}
+                <h2 class="font-semibold">
+                    @if ($order->customer)
+                        <a class="text-brand"
+                           href="{{ route('customers.show', ['customer' => $order->customer->id, 'business' => $businessId]) }}">
+                            {{ $order->customer->name }}
+                        </a>
+                    @else
+                        —
+                    @endif
+                </h2>
                 <span class="text-xs text-ink-muted">
                     {{ __('orders.order_date') }}: {{ $order->order_date?->format('d M Y') }}
                 </span>
@@ -93,7 +104,16 @@
             <tbody>
                 @foreach ($recent as $order)
                     <tr>
-                        <td>{{ $order->customer?->name ?? '—' }}</td>
+                        <td>
+                            @if ($order->customer)
+                                <a class="text-brand"
+                                   href="{{ route('customers.show', ['customer' => $order->customer->id, 'business' => $businessId]) }}">
+                                    {{ $order->customer->name }}
+                                </a>
+                            @else
+                                —
+                            @endif
+                        </td>
                         <td>{{ __('orders.statuses.' . $order->status) }}</td>
                         <td class="tabular text-right">{{ Inr::format($order->total) }}</td>
                     </tr>

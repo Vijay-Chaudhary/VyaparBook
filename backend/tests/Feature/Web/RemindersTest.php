@@ -72,6 +72,19 @@ describe('render', function () {
             ->assertDontSee('Small Fry');
     });
 
+    it('links an overdue customer through to their khata', function () {
+        [$owner, $business] = pwOwner();
+        $customer = remOverdueCustomer($business, $owner, 'Ramesh Kumar', '2500.00');
+
+        // Seeing what someone owes raises the question of what it is made of,
+        // and this list was the only place that could not answer it.
+        $this->actingAs($owner)->get('/reminders?business=' . $business->id)
+            ->assertOk()
+            ->assertSee(route('customers.show', [
+                'customer' => $customer->id, 'business' => $business->id,
+            ]), false);
+    });
+
     it('shows why a customer without a phone cannot be reminded', function () {
         [$owner, $business] = pwOwner();
         remOverdueCustomer($business, $owner, 'No Phone', '2000.00', phone: null);

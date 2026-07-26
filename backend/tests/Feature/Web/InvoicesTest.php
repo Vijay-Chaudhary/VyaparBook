@@ -72,6 +72,17 @@ describe('access', function () {
 });
 
 describe('issuing', function () {
+    it('links the customer on an uninvoiced sale through to their khata', function () {
+        [$owner, $business] = invShop();
+        $customer = Customer::on('pgsql_migrate')->where('business_id', $business->id)->firstOrFail();
+
+        $this->actingAs($owner)->get('/invoices?business=' . $business->id)
+            ->assertOk()
+            ->assertSee(route('customers.show', [
+                'customer' => $customer->id, 'business' => $business->id,
+            ]), false);
+    });
+
     it('lists sales that still need an invoice', function () {
         [$owner, $business] = invShop();
 

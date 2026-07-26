@@ -6,6 +6,7 @@ use App\Http\Controllers\Web\Admin\WhatsAppSettingsController;
 use App\Http\Controllers\Web\ApiTokenController;
 use App\Http\Controllers\Web\BeatController;
 use App\Http\Controllers\Web\BillingController;
+use App\Http\Controllers\Web\CustomerController;
 use App\Http\Controllers\Web\LoginController;
 use App\Http\Controllers\Web\OnboardingController;
 use App\Http\Controllers\Web\OrderController;
@@ -113,6 +114,16 @@ Route::middleware('auth')->group(function () {
     Route::get('purchases', [PurchaseController::class, 'index'])->name('purchases');
     Route::post('purchases', [PurchaseController::class, 'store'])->name('purchases.store');
     Route::delete('purchases/{purchase}', [PurchaseController::class, 'destroy'])->name('purchases.destroy');
+
+    /*
+     | One customer's khata (read-only) — the destination for every console list
+     | that names a customer. Recording sales and payments stays in the offline
+     | app, so there is no store/update here.
+     |
+     | {customer} is resolved owner-scoped inside the controller, never via
+     | implicit binding (no tenant is pinned during route resolution).
+     */
+    Route::get('customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
 
     Route::get('suppliers', [SupplierController::class, 'index'])->name('suppliers');
     Route::post('suppliers', [SupplierController::class, 'store'])->name('suppliers.store');

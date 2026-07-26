@@ -1,7 +1,7 @@
 import { useMemo, useState } from 'react';
 import { t } from '../i18n';
 import { formatRupees } from '../offline/money';
-import { navigate } from '../router';
+import { customerPath, navigate } from '../router';
 import { Screen } from '../components/Chrome';
 
 /**
@@ -82,7 +82,10 @@ export function KhataList({ customers, readOnly = false }) {
                         <li key={customer.uuid}>
                             <button
                                 type="button"
-                                onClick={() => navigate(`/khata/${customer.uuid}`)}
+                                /* uuid is the cache's primary key, so this always
+                                   resolves; the shared helper keeps the path
+                                   spelled in one place. */
+                                onClick={() => navigate(customerPath(customer))}
                                 className="card flex min-h-tap w-full items-center gap-3 text-left
                                            active:bg-canvas"
                             >

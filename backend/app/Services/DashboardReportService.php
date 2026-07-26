@@ -152,7 +152,7 @@ class DashboardReportService
         $rows = Customer::query()
             ->where('business_id', $businessId)
             ->whereNull('archived_at')
-            ->selectRaw('name, village, (
+            ->selectRaw('id, name, village, (
                 opening_balance
                 + coalesce((select sum(s.total) from sales s where s.customer_id = customers.id), 0)
                 - coalesce((select sum(p.amount) from payments p where p.customer_id = customers.id), 0)
@@ -160,7 +160,7 @@ class DashboardReportService
             ->get();
 
         $customers = $rows
-            ->map(fn ($r) => new CustomerDue($r->name, $r->village, bcadd($r->outstanding, '0', 2)))
+            ->map(fn ($r) => new CustomerDue($r->id, $r->name, $r->village, bcadd($r->outstanding, '0', 2)))
             ->sortByDesc(fn (CustomerDue $c) => (float) $c->outstandingRupees)
             ->values()
             ->all();

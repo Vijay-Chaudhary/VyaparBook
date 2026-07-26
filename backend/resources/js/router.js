@@ -27,6 +27,23 @@ export function navigate(to) {
     window.dispatchEvent(new PopStateEvent('popstate'));
 }
 
+/**
+ * Where a customer's name should take you, or null if it cannot take you
+ * anywhere.
+ *
+ * Every screen that lists customers routes through here so the destination is
+ * spelled once. Null rather than a best-effort path: a row the cache cannot
+ * resolve must render as plain text, because /khata/undefined opens an empty
+ * ledger that reads as lost data.
+ *
+ * Encoded to match the decodeURIComponent in matchRoute().
+ */
+export function customerPath(customer) {
+    if (! customer?.uuid) return null;
+
+    return `/khata/${encodeURIComponent(customer.uuid)}`;
+}
+
 export function useRoute() {
     const [path, setPath] = useState(currentPath);
 
