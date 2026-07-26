@@ -136,3 +136,23 @@ it('returns 404 for a material in another business', function () {
         ->patchJson("/api/v1/raw-materials/{$foreign->id}", ['name' => 'Stolen'])
         ->assertStatus(404);
 });
+
+it('accepts the units suppliers actually bill in', function () {
+    $business = Business::factory()->create();
+    $token = materialToken($business);
+
+    // Oil is bought by the sealed tin. Without this unit the shop has to
+    // convert to litres by hand before it can record its largest spend.
+    $this->withHeader('Authorization', "Bearer {$token}")
+        ->postJson('/api/v1/raw-materials', ['name' => 'Refined Oil', 'unit' => 'tina'])
+        ->assertCreated()
+        ->assertJson(['name' => 'Refined Oil', 'unit' => 'tina']);
+
+    $this->withHeader('Authorization', "Bearer {$token}")
+        ->postJson('/api/v1/raw-materials', ['name' => 'Cement', 'unit' => 'bag'])
+        ->assertCreated();
+
+    $this->withHeader('Authorization', "Bearer {$token}")
+        ->postJson('/api/v1/raw-materials', ['name' => 'Eggs', 'unit' => 'dozen'])
+        ->assertCreated();
+});
