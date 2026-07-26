@@ -6,10 +6,13 @@ use App\Models\Business;
 use App\Models\Customer;
 use App\Models\Membership;
 use App\Models\PackSize;
+use App\Models\Payment;
 use App\Models\Product;
 use App\Models\ProductPack;
 use App\Models\Purchase;
 use App\Models\RawMaterial;
+use App\Models\Sale;
+use App\Models\SaleLine;
 use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\User;
@@ -75,6 +78,8 @@ class ShreeRajShyamajiSeeder extends Seeder
         $this->catalog();
         $this->masters();
         $this->purchases();
+        $this->sales();
+        $this->payments();
 
         $this->command->info(self::BUSINESS.': seeded catalog and masters.');
     }
@@ -207,6 +212,87 @@ class ShreeRajShyamajiSeeder extends Seeder
             $movement->setConnection(self::CONNECTION);
             $movement->created_by = $this->ownerId;
             $movement->save();
+        }
+    }
+
+    /**
+     * Sale lines grouped into sales by (customer, date), as the owner's book
+     * records them: one visit, several products.
+     *
+     * The rate is derived per line from what was charged, never taken from the
+     * pack default — the same pack sells at different prices to different
+     * customers, and flattening that would misstate every margin.
+     */
+    private function sales(): void
+    {
+        if (Sale::on(self::CONNECTION)->where('business_id', $this->businessId)->exists()) {
+            return;
+        }
+
+        $grouped = [];
+        foreach ($this->data('sales') as $row) {
+            [$date, $name, $village, $product, $pack, $qty, $amount] = $row;
+            $grouped[$date.'|'.$name.'|'.$village][] = [$product, $pack, $qty, $amount];
+        }
+
+        foreach ($grouped as $key => $lines) {
+            [$date, $name, $village] = explode('|', $key);
+
+            $sale = new Sale([
+                'business_id' => $this->businessId,
+                'uuid' => (string) Str::uuid(),
+                'customer_id' => $this->customers[$name.'|'.$village],
+                'sale_date' => $date,
+            ]);
+            $sale->setConnection(self::CONNECTION);
+            $sale->created_by = $this->ownerId;
+            $sale->total = '0.00';
+            $sale->save();
+
+            $total = '0.00';
+            foreach ($lines as [$product, $pack, $qty, $amount]) {
+                $lineTotal = bcadd($amount, '0', 2);
+                // Rate is per pack and always positive; the sign lives on qty,
+                // so a return reads as "9 packs back at the price paid".
+                $rate = bcdiv($lineTotal, (string) $qty, 2);
+                $total = bcadd($total, $lineTotal, 2);
+
+                $line = new SaleLine([
+                    'business_id' => $this->businessId,
+                    'sale_id' => $sale->id,
+                    'product_pack_id' => $this->packs[$product.'|'.$pack],
+                    'qty' => $qty,
+                    'rate' => $rate,
+                ]);
+                $line->setConnection(self::CONNECTION);
+                $line->line_total = $lineTotal;
+                $line->save();
+            }
+
+            $sale->total = $total;
+            $sale->save();
+        }
+    }
+
+    /** Mode is 'cash' throughout: the owner's ledger records amount and date, not tender. */
+    private function payments(): void
+    {
+        if (Payment::on(self::CONNECTION)->where('business_id', $this->businessId)->exists()) {
+            return;
+        }
+
+        foreach ($this->data('payments') as [$date, $name, $village, $amount]) {
+            $payment = new Payment([
+                'business_id' => $this->businessId,
+                'uuid' => (string) Str::uuid(),
+                'customer_id' => $this->customers[$name.'|'.$village],
+                'payment_date' => $date,
+                'amount' => bcadd($amount, '0', 2),
+                'mode' => 'cash',
+            ]);
+            $payment->setConnection(self::CONNECTION);
+            $payment->created_by = $this->ownerId;
+            $payment->save();
         }
     }
 }
