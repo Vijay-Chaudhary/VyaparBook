@@ -65,6 +65,7 @@ return [
     'expenses_by_category' => 'Expenses by category',
     'manage_expenses' => 'Manage expenses',
     'manage_purchases' => 'Purchases',
+    'manage_customers' => 'Customers',
     'manage_suppliers' => 'Suppliers',
     'monthly_net_profit_chart' => 'Monthly net profit',
 

@@ -10,6 +10,7 @@
             {{-- Orders first: accepting them is time-sensitive, and a salesman
                  cannot pack until the owner has decided. --}}
             <a href="{{ route('orders', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_orders') }}</a>
+            <a href="{{ route('customers', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_customers') }}</a>
             <a href="{{ route('expenses', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_expenses') }}</a>
             <a href="{{ route('purchases', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_purchases') }}</a>
             <a href="{{ route('suppliers', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_suppliers') }}</a>

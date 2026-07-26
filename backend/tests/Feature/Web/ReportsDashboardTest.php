@@ -211,7 +211,7 @@ it('links to every owner tool, so none of them is reachable by URL only', functi
 
     $response = $this->actingAs($owner)->get('/reports/dashboard?business=' . $business->id)->assertOk();
 
-    foreach (['orders', 'expenses', 'purchases', 'suppliers', 'beats', 'gst'] as $tool) {
+    foreach (['orders', 'expenses', 'purchases', 'suppliers', 'customers', 'beats', 'gst'] as $tool) {
         expect($response->getContent())->toContain(route($tool, ['business' => $business->id]));
     }
 });
