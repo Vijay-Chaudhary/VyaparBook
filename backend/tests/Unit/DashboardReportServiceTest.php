@@ -64,6 +64,10 @@ it('totals customer outstanding as Σ of KhataService, and isolates tenants', fu
     expect($summary->customers)->toHaveCount(2);
     expect($summary->customers[0]->name)->toBe('Ramesh');
     expect(collect($summary->customers)->pluck('name'))->not->toContain('Other Shop Customer');
+
+    // Each row carries its customer, so the dashboard can link a figure to the
+    // khata it came from rather than leaving the owner to search by name.
+    expect($summary->customers[0]->customerId)->toBe($c1->id);
 });
 
 it('sums sales for today and the selected month, and builds a 12-row sales trend', function () {

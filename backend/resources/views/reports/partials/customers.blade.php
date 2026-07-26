@@ -16,7 +16,14 @@
             <tbody>
                 @foreach ($report->outstanding->customers as $row)
                     <tr>
-                        <td>{{ $row->name }}</td>
+                        {{-- A figure without a way to open it is a dead end: the
+                             owner reads "₹6,200" and has to go find the khata. --}}
+                        <td>
+                            <a class="text-brand"
+                               href="{{ route('customers.show', ['customer' => $row->customerId, 'business' => $businessId]) }}">
+                                {{ $row->name }}
+                            </a>
+                        </td>
                         <td>{{ $row->village ?? '—' }}</td>
                         <td class="tabular text-right">{{ Inr::format($row->outstandingRupees) }}</td>
                     </tr>

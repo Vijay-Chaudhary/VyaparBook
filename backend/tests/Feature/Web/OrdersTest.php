@@ -59,6 +59,19 @@ describe('access', function () {
 });
 
 describe('accepting', function () {
+    it('links the customer on an order through to their khata', function () {
+        [$owner, $business] = pendingOrder();
+        $customer = Customer::on('pgsql_migrate')->where('business_id', $business->id)->firstOrFail();
+
+        // Deciding whether to accept an order means knowing what this customer
+        // already owes, which this screen could not show.
+        $this->actingAs($owner)->get('/orders?business=' . $business->id)
+            ->assertOk()
+            ->assertSee(route('customers.show', [
+                'customer' => $customer->id, 'business' => $business->id,
+            ]), false);
+    });
+
     it('lists a pending order with its customer and total', function () {
         [$owner, $business] = pendingOrder();
 

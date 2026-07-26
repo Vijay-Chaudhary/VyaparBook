@@ -40,6 +40,21 @@ describe('access', function () {
 });
 
 describe('render', function () {
+    it('links each customer in the outstanding list to their khata', function () {
+        [$owner, $business] = reportsOwner();
+        $customer = Customer::on('pgsql_migrate')->create([
+            'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
+            'name' => 'Ramesh', 'village' => 'Rampur', 'opening_balance' => '1500.00',
+        ]);
+
+        $this->actingAs($owner)
+            ->get('/reports/dashboard')
+            ->assertOk()
+            ->assertSee(route('customers.show', [
+                'customer' => $customer->id, 'business' => $business->id,
+            ]), false);
+    });
+
     it('shows the dashboard heading and the total-due figure for the owner', function () {
         [$owner, $business] = reportsOwner();
         Customer::on('pgsql_migrate')->create([

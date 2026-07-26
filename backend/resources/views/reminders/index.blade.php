@@ -34,7 +34,16 @@
                 <tbody>
                     @foreach ($planned as $item)
                         <tr>
-                            <td>{{ $item->customer?->name ?? '—' }}</td>
+                            <td>
+                                @if ($item->customer)
+                                    <a class="text-brand"
+                                       href="{{ route('customers.show', ['customer' => $item->customer->id, 'business' => $businessId]) }}">
+                                        {{ $item->customer->name }}
+                                    </a>
+                                @else
+                                    —
+                                @endif
+                            </td>
                             <td class="tabular text-right">{{ Inr::format($item->amount_at_send) }}</td>
                             <td class="text-right">
                                 <form method="POST" action="{{ route('reminders.cancel', ['reminder' => $item->id]) }}">
@@ -124,7 +133,14 @@
                 <tbody>
                     @foreach ($rows as $row)
                         <tr>
-                            <td>{{ $row->name }}</td>
+                            {{-- The name is the way into the khata: "why does he
+                                 owe ₹2,500" is the next question this list asks. --}}
+                            <td>
+                                <a class="text-brand"
+                                   href="{{ route('customers.show', ['customer' => $row->customerId, 'business' => $businessId]) }}">
+                                    {{ $row->name }}
+                                </a>
+                            </td>
                             <td>{{ $row->village ?? '—' }}</td>
                             <td class="tabular">{{ $row->phone ?? '—' }}</td>
                             <td class="tabular text-right font-bold">{{ Inr::format($row->outstandingRupees) }}</td>

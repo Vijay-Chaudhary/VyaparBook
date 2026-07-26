@@ -1,7 +1,7 @@
 import { formatDate, t } from '../i18n';
 import { actionsFor, groupByStatus, isOverdue, OPEN_STATUSES } from '../offline/orders';
 import { formatRupees, toPaise } from '../offline/money';
-import { navigate } from '../router';
+import { customerPath, navigate } from '../router';
 import { Screen } from '../components/Chrome';
 
 /**
@@ -41,6 +41,8 @@ export function Orders({ orders, customersById, onAction, canAccept = false }) {
                         <ul className="space-y-2">
                             {grouped[status].map((order) => {
                                 const late = isOverdue(order);
+                                const customer = customersById.get(order.customer_id);
+                                const toKhata = customerPath(customer);
 
                                 return (
                                 <li
@@ -51,9 +53,22 @@ export function Orders({ orders, customersById, onAction, canAccept = false }) {
                                 >
                                     <div className="flex items-center justify-between gap-3">
                                         <span className="min-w-0 flex-1">
-                                            <span className="block font-medium">
-                                                {customersById.get(order.customer_id)?.name ?? '—'}
-                                            </span>
+                                            {/* The name is the way into the khata: seeing a late
+                                                order, the next question is always what else this
+                                                customer owes. An order whose customer has not
+                                                synced yet stays plain text — see customerPath. */}
+                                            {toKhata ? (
+                                                <button
+                                                    type="button"
+                                                    onClick={() => navigate(toKhata)}
+                                                    className="block min-h-tap text-left font-medium text-brand underline"
+                                                    data-testid={`order-customer-${order.uuid}`}
+                                                >
+                                                    {customer.name}
+                                                </button>
+                                            ) : (
+                                                <span className="block font-medium">{customer?.name ?? '—'}</span>
+                                            )}
                                             <span className={`block text-sm ${late ? 'font-medium text-danger' : 'text-ink-muted'}`}>
                                                 {formatDate(order.order_date)}
                                                 {late && <span className="ml-2">{t('overdue')}</span>}

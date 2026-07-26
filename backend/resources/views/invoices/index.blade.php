@@ -33,7 +33,16 @@
                     @foreach ($uninvoiced as $sale)
                         <tr>
                             <td class="tabular">{{ $sale->sale_date?->format('d M Y') }}</td>
-                            <td>{{ $sale->customer?->name ?? '—' }}</td>
+                            <td>
+                                @if ($sale->customer)
+                                    <a class="text-brand"
+                                       href="{{ route('customers.show', ['customer' => $sale->customer->id, 'business' => $businessId]) }}">
+                                        {{ $sale->customer->name }}
+                                    </a>
+                                @else
+                                    —
+                                @endif
+                            </td>
                             <td class="tabular text-right">{{ Inr::format($sale->total) }}</td>
                             <td class="text-right">
                                 <form method="POST" action="{{ route('invoices.store') }}" class="flex items-center justify-end gap-2">
