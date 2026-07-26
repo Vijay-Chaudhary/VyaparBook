@@ -116,14 +116,22 @@ Route::middleware('auth')->group(function () {
     Route::delete('purchases/{purchase}', [PurchaseController::class, 'destroy'])->name('purchases.destroy');
 
     /*
-     | One customer's khata (read-only) — the destination for every console list
-     | that names a customer. Recording sales and payments stays in the offline
-     | app, so there is no store/update here.
+     | The customer master, plus one customer's khata. Who a customer IS is
+     | maintained here; what they OWE is not — recording sales and payments
+     | stays in the offline app, so the khata on the show page is read-only.
+     |
+     | DELETE archives rather than removes: the row carries sales and payments,
+     | and dropping it would orphan them and restate history. `restore` undoes it.
      |
      | {customer} is resolved owner-scoped inside the controller, never via
      | implicit binding (no tenant is pinned during route resolution).
      */
+    Route::get('customers', [CustomerController::class, 'index'])->name('customers');
+    Route::post('customers', [CustomerController::class, 'store'])->name('customers.store');
     Route::get('customers/{customer}', [CustomerController::class, 'show'])->name('customers.show');
+    Route::patch('customers/{customer}', [CustomerController::class, 'update'])->name('customers.update');
+    Route::delete('customers/{customer}', [CustomerController::class, 'destroy'])->name('customers.destroy');
+    Route::post('customers/{customer}/restore', [CustomerController::class, 'restore'])->name('customers.restore');
 
     Route::get('suppliers', [SupplierController::class, 'index'])->name('suppliers');
     Route::post('suppliers', [SupplierController::class, 'store'])->name('suppliers.store');

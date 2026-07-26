@@ -59,6 +59,7 @@ return [
     'expenses_by_category' => 'श्रेणी अनुसार खर्च',
     'manage_expenses' => 'खर्च प्रबंधित करें',
     'manage_purchases' => 'खरीद',
+    'manage_customers' => 'ग्राहक',
     'manage_suppliers' => 'आपूर्तिकर्ता',
     'monthly_net_profit_chart' => 'मासिक शुद्ध लाभ',
 
