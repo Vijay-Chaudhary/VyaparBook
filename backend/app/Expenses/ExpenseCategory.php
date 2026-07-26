@@ -17,7 +17,10 @@ final class ExpenseCategory
     /** @return list<string> canonical order, used everywhere the list renders. */
     public static function keys(): array
     {
-        return ['rent', 'salaries', 'electricity', 'transport', 'maintenance', 'other'];
+        return [
+            'rent', 'salaries', 'electricity', 'diesel', 'transport',
+            'packing_material', 'maintenance', 'other',
+        ];
     }
 
     public static function isValid(string $key): bool
