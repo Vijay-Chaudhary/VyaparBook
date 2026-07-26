@@ -207,44 +207,61 @@ ahead of the sales they supply.
 
 Consumption is derived from a per-kilo recipe rather than the sheet's totals:
 
+Seven batches, the owner's three among them:
+
+| Date | Product | Output |
+|---|---|---|
+| 2026-04-25 | Senvda | 400.0 kg |
+| 2026-05-15 | Sev | 345.0 kg *(owner's)* |
+| 2026-05-16 | Sev | 80.0 kg *(owner's)* |
+| 2026-05-17 | Mix Sev | 345.0 kg *(owner's)* |
+| 2026-05-20 | Senvda | 400.0 kg |
+| 2026-06-05 | Senvda | 355.0 kg |
+| 2026-06-05 | Sev | 20.0 kg |
+
+Total 1,945 kg against 1,653.8 kg sold. Senvda and Sev are sized to ~110% of
+what each sold; Mix Sev is left at the owner's recorded 345 kg, which already
+exceeds its 203.3 kg of sales.
+
 Every kilo of output consumes 0.85 kg of flour, 0.20 kg of absorbed oil, and
-₹4.00 of packing material. Oil is costed at ₹167.14/kg (₹2,507.14 per 15 kg
-Tina). The flour differs per product:
+₹4.00 of packing and salt. Oil is costed at ₹167.14/kg (₹2,507.14 per 15 kg
+Tina). The flour blend differs per product:
 
 | Product | Flour per kg output | Cost | Revenue | Margin |
 |---|---|---|---|---|
 | Senvda | 100% maida | ₹62.08 | ₹92.77 | 33.1% |
-| Sev | 60% besan / 40% rice flour (chawal anta) | ₹75.34 | ₹114.42 | 34.2% |
-| Mix Sev | 80% besan / 20% peanuts | ₹95.74 | ₹127.30 | 24.8% |
-
-Batch output totals **110% of the quantity sold** per product — the 10%
-finished-goods buffer.
+| Sev | 50% besan / 50% chawal anta | ₹73.13 | ₹114.42 | 36.1% |
+| Mix Sev | 60% besan / 15% peanuts / 25% chawal anta | ₹87.32 | ₹127.30 | 31.4% |
 
 Two hard constraints, both verified against these ratios:
 
 1. **No material may consume more than was purchased** — closing stock must not
    go negative for any of the 16 materials.
-2. **Output must cover the 1,653.8 kg sold**, plus the 10% buffer.
+2. **Output must cover the 1,653.8 kg sold.**
 
 Resulting consumption against purchases:
 
 | Material | Consumed | Purchased | Closing |
 |---|---|---|---|
-| Maida | 980.6 kg | 2,500 kg | 1,519.4 kg |
-| Besan | 377.4 kg | 400 kg | 22.6 kg |
-| Chawal Anta | 150.2 kg | 400 kg | 249.8 kg |
-| Peanuts | 38.0 kg | 100 kg | 62.0 kg |
-| Refined Oil | 24.3 Tina | 70 Tina | 45.7 Tina |
+| Maida | 981.75 kg | 2,500 kg | 1,518.25 kg |
+| Besan | 365.07 kg | 400 kg | 34.93 kg |
+| Chawal Anta | 262.44 kg | 400 kg | 137.56 kg |
+| Peanuts | 43.99 kg | 100 kg | 56.01 kg |
+| Refined Oil | 25.93 Tina | 70 Tina | 44.07 Tina |
 
-Sev is a besan/rice-flour blend rather than pure besan specifically to stay
-inside the 400 kg of besan purchased — pure besan needs ~445 kg, and even a
-70/30 blend overruns by 15 kg. Oil consumption lands at 24.3 Tina against the
-57 the sheet claimed. This supersession is deliberate — see "The production
-problem".
+Besan is the binding constraint, and it is what sets the blends. Pure-besan Sev
+needs ~445 kg against the 400 kg purchased; even a 70/30 blend overruns. Holding
+the owner's 345 kg Mix Sev batch (which alone wants 235 kg of besan at an 80/20
+blend) forces both products onto leaner blends — hence 50/50 for Sev and a
+three-way blend for Mix Sev. Chawal anta absorbs the difference at the same
+₹29/kg as maida, and peanuts stay well inside the 100 kg bought.
+
+Oil consumption lands at 25.93 Tina against the 57 the sheet claimed. This
+supersession is deliberate — see "The production problem".
 
 Packing materials (Panni, Bora) and salt are consumed proportionally to output
-within the ₹4.00/kg packing allowance, bounded by the same non-negative
-constraint.
+within the ₹4.00/kg allowance — ₹7,780 across 1,945 kg, against ₹13,365 of such
+materials purchased — bounded by the same non-negative constraint.
 
 ## Superseded source figures
 
@@ -252,10 +269,10 @@ Recorded so the override is traceable rather than lost:
 
 | Material | Sheet: consumed | Sheet: closing | Status |
 |---|---|---|---|
-| Refined Oil | 57 Tina | 13 Tina | Superseded — implies ~52% oil absorption; recomputed to 24.3 Tina |
-| Maida | 1,700 kg | 800 kg | Superseded — recomputed to 980.6 kg |
-| Besan | 250 kg | 150 kg | Superseded — recomputed to 377.4 kg |
-| Chawal Anta | 250 kg | 150 kg | Superseded — recomputed to 150.2 kg |
+| Refined Oil | 57 Tina | 13 Tina | Superseded — implies ~52% oil absorption; recomputed to 25.93 Tina |
+| Maida | 1,700 kg | 800 kg | Superseded — recomputed to 981.75 kg |
+| Besan | 250 kg | 150 kg | Superseded — recomputed to 365.07 kg |
+| Chawal Anta | 250 kg | 150 kg | Superseded — recomputed to 262.44 kg |
 | *(all other materials)* | — | — | Superseded; recomputed |
 
 Purchased quantities and every purchase row are **not** superseded.
@@ -269,9 +286,12 @@ Purchased quantities and every purchase row are **not** superseded.
 - Purchases: 23 rows totalling ₹3,42,305.
 - Sales: 103 lines totalling ₹1,69,123 over 1,653.8 kg, and every sale satisfies
   the writer invariant `total = Σ line_total`.
+- Payments: 46 rows totalling ₹1,26,229, leaving **₹42,894 outstanding** across
+  22 customers; 8 transacting customers settle to zero and 10 master customers
+  never transact.
 - Outstanding reconciles: Σ per-customer outstanding equals Σ sales − Σ payments.
-  Spot-checked by hand against the ledger — Manish ji settles to zero, Byash ji
-  carries ₹985 after the return.
+  Spot-checked by hand against the ledger — Ghore lal carries ₹9,365, Byash ji
+  ₹985 after the return, Manish ji ₹5 (his ₹9,125 bill was paid ₹9,120).
 - **No material closes negative.** This is the check that catches a bad recipe.
 - Each product's gross margin falls between 20% and 40%, so a later edit cannot
   silently reintroduce the ₹304/kg problem.
