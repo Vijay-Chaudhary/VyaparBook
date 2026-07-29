@@ -245,3 +245,122 @@ it('returns 404 showing a batch in another business', function () {
         ->getJson("/api/v1/production/{$foreign->id}")
         ->assertStatus(404);
 });
+
+describe('reversing a batch', function () {
+    /** A shop with a completed batch. Returns [business, user, token, batchId, besan, oil]. */
+    function reversibleBatch(): array
+    {
+        $business = Business::factory()->create();
+        $user = User::factory()->create();
+        $token = productionToken($business);
+        $product = productionProduct($business);
+        $besan = productionMaterial($business, 'Besan');
+        $oil = productionMaterial($business, 'Oil');
+
+        seedStock($besan, $user, '100.000');
+        seedStock($oil, $user, '40.000');
+
+        $id = test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson('/api/v1/production', [
+                'uuid' => (string) Str::uuid(),
+                'product_id' => $product->id,
+                'batch_date' => '2026-07-15',
+                'output_kg' => '30.000',
+                'consumptions' => [
+                    ['raw_material_id' => $besan->id, 'qty' => '25.000'],
+                    ['raw_material_id' => $oil->id, 'qty' => '8.000'],
+                ],
+            ])->assertStatus(201)->json('id');
+
+        return [$business, $user, $token, $id, $besan, $oil];
+    }
+
+    it('puts the raw materials back AND negates the output', function () {
+        // Both, because the batch did both. Negating only the output would
+        // leave materials consumed by a batch that no longer counts.
+        [$business, $user, $token, $batchId, $besan, $oil] = reversibleBatch();
+
+        test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/production/{$batchId}/reverse")
+            ->assertStatus(201);
+
+        $stock = new StockService();
+        expect($stock->onHandFor($besan))->toBe('100.000'); // 75 + 25 back
+        expect($stock->onHandFor($oil))->toBe('40.000');    // 32 + 8 back
+
+        // Finished goods nets to nothing: Σ output_kg across both batches.
+        $totalOutput = (string) ProductionBatch::on('pgsql_migrate')
+            ->where('business_id', $business->id)->sum('output_kg');
+        expect(bccomp($totalOutput, '0', 3))->toBe(0);
+    });
+
+    it('leaves the original batch byte-for-byte intact', function () {
+        [, , $token, $batchId] = reversibleBatch();
+
+        test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/production/{$batchId}/reverse")->assertStatus(201);
+
+        $original = ProductionBatch::on('pgsql_migrate')->find($batchId);
+        expect((string) $original->output_kg)->toBe('30.000');
+        expect($original->reverses_id)->toBeNull();
+    });
+
+    it('negates the consumptions too, so the COGS numerator falls in step', function () {
+        // COGS is Σ(qty × ₹/kg) ÷ Σ output_kg. Negating output without
+        // negating consumption would leave the rate wrong for every batch.
+        [$business, , $token, $batchId] = reversibleBatch();
+
+        test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/production/{$batchId}/reverse")->assertStatus(201);
+
+        $total = (string) App\Models\MaterialConsumption::on('pgsql_migrate')
+            ->where('business_id', $business->id)->sum('qty');
+        expect(bccomp($total, '0', 3))->toBe(0);
+    });
+
+    it('dates the correction today rather than backdating it', function () {
+        // Backdating would rewrite a past month's production chart, which is
+        // exactly what append-only correction exists to avoid.
+        [, , $token, $batchId] = reversibleBatch();
+
+        $reversalId = test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/production/{$batchId}/reverse")->json('id');
+
+        expect(ProductionBatch::on('pgsql_migrate')->find($reversalId)->batch_date->toDateString())
+            ->toBe(now()->toDateString());
+    });
+
+    it('409s on a double reverse', function () {
+        [, , $token, $batchId] = reversibleBatch();
+        $url = "/api/v1/production/{$batchId}/reverse";
+
+        test()->withHeader('Authorization', "Bearer {$token}")->postJson($url)->assertStatus(201);
+        test()->withHeader('Authorization', "Bearer {$token}")->postJson($url)->assertStatus(409);
+    });
+
+    it('422s reversing a reversal, which would be a re-entry not a correction', function () {
+        [, , $token, $batchId] = reversibleBatch();
+
+        $reversalId = test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/production/{$batchId}/reverse")->json('id');
+
+        test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/production/{$reversalId}/reverse")->assertStatus(422);
+    });
+
+    it('refuses a salesman, as every other stock action does', function () {
+        [$business, , , $batchId] = reversibleBatch();
+        $salesToken = productionToken($business, 'salesman');
+
+        test()->withHeader('Authorization', "Bearer {$salesToken}")
+            ->postJson("/api/v1/production/{$batchId}/reverse")->assertStatus(403);
+    });
+
+    it('404s on another tenant\'s batch', function () {
+        [, , $token] = reversibleBatch();
+        [, , , $theirBatchId] = reversibleBatch();
+
+        test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/production/{$theirBatchId}/reverse")->assertStatus(404);
+    });
+});

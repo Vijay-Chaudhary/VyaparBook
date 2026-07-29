@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { closeTenantDb, deleteTenantDb, openTenantDb } from './db';
-import { movementsFor, onHandFor, stockList } from './stock';
+import { annotateReversals, movementsFor, onHandFor, stockList } from './stock';
 import { toDecimal } from './qty';
 
 const TENANT = '44444444-4444-4444-8444-444444444444';
@@ -120,5 +120,31 @@ describe('movement history', () => {
 
         expect(history.map((e) => toDecimal(e.runningMilli))).toEqual(['10', '6']);
         expect(history.at(-1).runningMilli).toBe(await onHandFor(db, m));
+    });
+});
+
+describe('annotateReversals', () => {
+    it('marks a correction and the row it corrects', () => {
+        const rows = annotateReversals([
+            { id: 'a', reverses_id: null },
+            { id: 'b', reverses_id: 'a' },
+        ]);
+
+        expect(rows[0]).toMatchObject({ isReversal: false, isReversed: true });
+        expect(rows[1]).toMatchObject({ isReversal: true, isReversed: false });
+    });
+
+    it('leaves an ordinary row offerable', () => {
+        // Neither flag set is the common case, and the only one that gets a
+        // button — the server refuses the other two anyway.
+        const [row] = annotateReversals([{ id: 'a', reverses_id: null }]);
+
+        expect(row.isReversal).toBe(false);
+        expect(row.isReversed).toBe(false);
+    });
+
+    it('survives an empty or missing list', () => {
+        expect(annotateReversals([])).toEqual([]);
+        expect(annotateReversals()).toEqual([]);
     });
 });

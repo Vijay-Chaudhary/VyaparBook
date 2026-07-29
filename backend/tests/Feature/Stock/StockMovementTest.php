@@ -185,3 +185,138 @@ it('blocks a salesman from recording a movement', function () {
         ])
         ->assertStatus(403);
 });
+
+describe('reversing a movement', function () {
+    /** Records one movement of $kind and returns [business, token, material, id]. */
+    function recordedMovement(string $kind = 'in', string $qty = '50.000'): array
+    {
+        $business = Business::factory()->create();
+        $token = movementToken($business);
+        $material = movementMaterial($business);
+
+        $id = test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson('/api/v1/stock-movements', [
+                'uuid' => (string) Str::uuid(),
+                'raw_material_id' => $material->id,
+                'movement_date' => '2026-07-15',
+                'kind' => $kind,
+                'qty' => $qty,
+            ])->assertStatus(201)->json('id');
+
+        return [$business, $token, $material, $id];
+    }
+
+    it('cancels the movement, leaving on-hand where it started', function () {
+        [, $token, $material, $id] = recordedMovement('in', '50.000');
+        expect((new StockService())->onHandFor($material))->toBe('50.000');
+
+        test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/stock-movements/{$id}/reverse")->assertStatus(201);
+
+        expect((new StockService())->onHandFor($material))->toBe('0.000');
+    });
+
+    it('flips the kind, so no row contradicts its own sign', function () {
+        // The schema's invariant is that an `out` can never raise stock.
+        // Copying the kind onto a negated qty would store exactly that.
+        [, $token, , $id] = recordedMovement('in', '50.000');
+
+        $reversal = test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/stock-movements/{$id}/reverse")->json();
+
+        expect($reversal['kind'])->toBe('out');
+        expect((string) $reversal['qty'])->toBe('-50.000');
+    });
+
+    it('reverses an out movement back into an in', function () {
+        [, $token, $material, $id] = recordedMovement('out', '20.000');
+        expect((new StockService())->onHandFor($material))->toBe('-20.000');
+
+        $reversal = test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/stock-movements/{$id}/reverse")->json();
+
+        expect($reversal['kind'])->toBe('in');
+        expect((new StockService())->onHandFor($material))->toBe('0.000');
+    });
+
+    it('leaves the original untouched', function () {
+        [, $token, , $id] = recordedMovement('in', '50.000');
+
+        test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/stock-movements/{$id}/reverse")->assertStatus(201);
+
+        $original = StockMovement::on('pgsql_migrate')->find($id);
+        expect((string) $original->qty)->toBe('50.000');
+        expect($original->reverses_id)->toBeNull();
+    });
+
+    it('refuses a movement that came from a production batch', function () {
+        // Reversing it alone would leave the batch's consumption record
+        // disagreeing with stock. The batch is the thing to reverse.
+        $business = Business::factory()->create();
+        $user = User::factory()->create();
+        $token = movementToken($business);
+        $material = movementMaterial($business);
+
+        $seed = new StockMovement([
+            'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
+            'raw_material_id' => $material->id, 'movement_date' => '2026-07-01',
+            'kind' => 'in', 'qty' => '100.000',
+        ]);
+        $seed->setConnection('pgsql_migrate');
+        $seed->created_by = $user->id;
+        $seed->save();
+
+        $product = App\Models\Product::on('pgsql_migrate')->create([
+            'business_id' => $business->id, 'name_hi' => 'सेव',
+        ]);
+
+        test()->withHeader('Authorization', "Bearer {$token}")->postJson('/api/v1/production', [
+            'uuid' => (string) Str::uuid(), 'product_id' => $product->id,
+            'batch_date' => '2026-07-15', 'output_kg' => '30.000',
+            'consumptions' => [['raw_material_id' => $material->id, 'qty' => '25.000']],
+        ])->assertStatus(201);
+
+        $drawDown = StockMovement::on('pgsql_migrate')
+            ->whereNotNull('production_batch_id')->firstOrFail();
+
+        test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/stock-movements/{$drawDown->id}/reverse")
+            ->assertStatus(422)
+            ->assertJsonPath('message', __('stock.reverse_the_batch'));
+    });
+
+    it('409s on a double reverse', function () {
+        [, $token, , $id] = recordedMovement();
+        $url = "/api/v1/stock-movements/{$id}/reverse";
+
+        test()->withHeader('Authorization', "Bearer {$token}")->postJson($url)->assertStatus(201);
+        test()->withHeader('Authorization', "Bearer {$token}")->postJson($url)->assertStatus(409);
+    });
+
+    it('422s reversing a reversal', function () {
+        [, $token, , $id] = recordedMovement();
+
+        $reversalId = test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/stock-movements/{$id}/reverse")->json('id');
+
+        test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/stock-movements/{$reversalId}/reverse")->assertStatus(422);
+    });
+
+    it('refuses a salesman', function () {
+        [$business, , , $id] = recordedMovement();
+        $salesToken = movementToken($business, 'salesman');
+
+        test()->withHeader('Authorization', "Bearer {$salesToken}")
+            ->postJson("/api/v1/stock-movements/{$id}/reverse")->assertStatus(403);
+    });
+
+    it('404s on another tenant\'s movement', function () {
+        [, $token] = recordedMovement();
+        [, , , $theirId] = recordedMovement();
+
+        test()->withHeader('Authorization', "Bearer {$token}")
+            ->postJson("/api/v1/stock-movements/{$theirId}/reverse")->assertStatus(404);
+    });
+});

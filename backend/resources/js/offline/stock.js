@@ -81,3 +81,26 @@ export async function movementsFor(db, material) {
         return { ...movement, deltaMilli, runningMilli: running };
     });
 }
+
+/**
+ * Mark which rows are corrections and which have already been corrected.
+ *
+ * Both are derivable from the rows themselves: a correction carries
+ * `reverses_id`, and the id it points at is therefore already corrected. So the
+ * screen needs no extra fetch and cannot disagree with the server, which
+ * enforces the same two rules.
+ *
+ * Pure, because the repo has no component-test tooling — a rule that lives only
+ * inside a component cannot be covered at all.
+ */
+export function annotateReversals(rows = []) {
+    const reversed = new Set(
+        rows.map((row) => row.reverses_id).filter(Boolean)
+    );
+
+    return rows.map((row) => ({
+        ...row,
+        isReversal: Boolean(row.reverses_id),
+        isReversed: reversed.has(row.id),
+    }));
+}

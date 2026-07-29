@@ -45,6 +45,10 @@ const strings = {
         cancel_order: 'रद्द करें',
         awaiting_acceptance: 'मालिक की स्वीकृति की प्रतीक्षा',
         order_adjusted: 'मालिक ने इस ऑर्डर को बदला',
+        reverse: 'वापस करें',
+        is_correction: 'सुधार',
+        corrected: 'सुधारा गया',
+        correction_failed: 'सुधार नहीं हो सका।',
         pending: 'प्रतीक्षारत',
         accepted: 'स्वीकृत',
         packed: 'पैक हुआ',
@@ -181,6 +185,12 @@ const strings = {
         // Warns the salesman BEFORE they reach the shop that what was approved
         // is not what they promised. Absent when nothing changed.
         order_adjusted: 'The owner changed this order',
+        // Corrections are append-only: reversing writes a mirror-image row
+        // rather than deleting, so on-hand and finished goods self-net.
+        reverse: 'Reverse',
+        is_correction: 'correction',
+        corrected: 'corrected',
+        correction_failed: 'That correction could not be made.',
         pending: 'Waiting',
         accepted: 'Accepted',
         packed: 'Packed',

@@ -10,7 +10,22 @@ import { Screen } from '../components/Chrome';
  * so it goes straight to the REST API and reports the verdict.
  */
 
-export function ProductionList({ batches, online }) {
+export function ProductionList({ batches, online, onReverse }) {
+    const [error, setError] = useState(null);
+    const [busy, setBusy] = useState(null);
+
+    // Append-only on the server, so a refused correction has to say why —
+    // otherwise the button looks broken and the owner presses it again.
+    const reverse = async (id) => {
+        setError(null);
+        setBusy(id);
+
+        const result = await onReverse(id);
+
+        setBusy(null);
+        if (!result.ok) setError(result.message ?? t('correction_failed'));
+    };
+
     return (
         <Screen
             title={t('production')}
@@ -32,6 +47,12 @@ export function ProductionList({ batches, online }) {
                 </p>
             )}
 
+            {error && (
+                <p role="alert" className="card mb-3 text-sm text-danger" data-testid="batch-error">
+                    {error}
+                </p>
+            )}
+
             {batches.length === 0 ? (
                 <p className="card text-center text-ink-muted">{t('no_batches')}</p>
             ) : (
@@ -46,8 +67,29 @@ export function ProductionList({ batches, online }) {
                                     {formatDate(batch.batch_date)}
                                 </span>
                             </span>
-                            <span className="tabular shrink-0 font-semibold">
-                                {batch.output_kg} kg
+                            <span className="shrink-0 text-right">
+                                <span className="tabular block font-semibold">
+                                    {batch.output_kg} kg
+                                </span>
+                                {/* Reversing puts the raw materials back AND
+                                    negates the output, so it is offered once and
+                                    only on a batch that is neither a correction
+                                    nor already corrected. */}
+                                {batch.isReversal ? (
+                                    <span className="block text-xs text-ink-muted">{t('is_correction')}</span>
+                                ) : batch.isReversed ? (
+                                    <span className="block text-xs text-ink-muted">{t('corrected')}</span>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        className="text-xs text-danger disabled:opacity-40"
+                                        disabled={!online || busy === batch.id}
+                                        onClick={() => reverse(batch.id)}
+                                        data-testid={`reverse-batch-${batch.id}`}
+                                    >
+                                        {busy === batch.id ? t('loading') : t('reverse')}
+                                    </button>
+                                )}
                             </span>
                         </li>
                     ))}

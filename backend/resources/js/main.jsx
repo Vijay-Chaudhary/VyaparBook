@@ -7,7 +7,7 @@ import { buildOrderList } from './offline/orders';
 import { enqueue, pending, pendingCount, stalenessState } from './offline/outbox';
 import { productName } from './offline/catalog';
 import { khataList, ledgerFor, outstandingFor } from './offline/khata';
-import { movementsFor, stockList } from './offline/stock';
+import { annotateReversals, movementsFor, stockList } from './offline/stock';
 import { assertSafeToSwitch, sync } from './offline/sync';
 import { registerServiceWorker } from './offline/register-sw';
 import { getLocale, setLocale, t, today } from './i18n';
@@ -300,7 +300,7 @@ function App({ userName, locale }) {
                 const rows = await database.production_batches.toArray();
 
                 setBatches(
-                    rows
+                    annotateReversals(rows)
                         .map((b) => ({ ...b, product_name: nameById[b.product_id] ?? null }))
                         .sort((a, b) => String(b.batch_date).localeCompare(String(a.batch_date)))
                 );
@@ -473,6 +473,26 @@ function App({ userName, locale }) {
         return result;
     };
 
+    // Corrections. Append-only on the server: each writes a mirror-image row,
+    // so a re-sync is what makes the new figures appear.
+    const reverseMovement = async (id) => {
+        if (blockedByImpersonation()) return { ok: false, status: 0 };
+
+        const result = await apiWrite(`/stock-movements/${id}/reverse`, {});
+        if (result.ok && online) await runSync();
+        return result;
+    };
+
+    const reverseBatch = async (id) => {
+        if (blockedByImpersonation()) return { ok: false, status: 0 };
+
+        // Puts the raw materials back as well as negating the output, so the
+        // sync pulls new movements too.
+        const result = await apiWrite(`/production/${id}/reverse`, {});
+        if (result.ok && online) await runSync();
+        return result;
+    };
+
     const saveBatch = async (body) => {
         if (blockedByImpersonation()) return { ok: false, status: 0 };
 
@@ -576,7 +596,7 @@ function App({ userName, locale }) {
                     // Products come from the catalog cache; materials from stock.
                     return <RecordBatch products={products} materials={materials} onSave={saveBatch} />;
                 }
-                return <ProductionList batches={batches} online={online} />;
+                return <ProductionList batches={batches} online={online} onReverse={reverseBatch} />;
 
             case 'stock':
             case 'material':
@@ -591,8 +611,9 @@ function App({ userName, locale }) {
                     return (
                         <MaterialDetail
                             material={activeMaterial}
-                            movements={materialMovements}
+                            movements={annotateReversals(materialMovements)}
                             online={online}
+                            onReverse={reverseMovement}
                         />
                     );
                 }

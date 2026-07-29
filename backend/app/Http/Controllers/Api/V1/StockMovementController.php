@@ -4,15 +4,50 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Ledger\ReversalNotAllowed;
 use App\Models\RawMaterial;
 use App\Models\StockMovement;
 use App\Policies\StockPolicy;
 use App\Services\PlanGuard;
+use App\Stock\StockReverser;
 use Illuminate\Http\Request;
 use Illuminate\Validation\Rule;
 
 class StockMovementController extends Controller
 {
+    public function __construct(private readonly StockReverser $reverser) {}
+
+    /**
+     * Correct a movement by writing its mirror image.
+     *
+     * Append-only: on-hand is Σ qty, so deleting a row would silently restate
+     * it. The two stay visible and net to nothing.
+     */
+    public function reverse(string $id)
+    {
+        if (! (new StockPolicy())->manage()) {
+            return $this->denied();
+        }
+
+        if ($blocked = app(PlanGuard::class)->stockFeatureBlock()) {
+            return $blocked;
+        }
+
+        // findOrFail under RLS: a cross-tenant movement is invisible → 404.
+        $original = StockMovement::findOrFail($id);
+
+        try {
+            $reversal = $this->reverser->reverseMovement($original);
+        } catch (ReversalNotAllowed $e) {
+            return response()->json(
+                ['message' => $e->getMessage()],
+                $e->reason === ReversalNotAllowed::ALREADY_REVERSED ? 409 : 422
+            );
+        }
+
+        return response()->json($reversal, 201);
+    }
+
     public function store(Request $request)
     {
         if (! (new StockPolicy())->manage()) {
