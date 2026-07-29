@@ -13,6 +13,7 @@ use App\Http\Controllers\Web\OrderController;
 use App\Http\Controllers\Web\ExpenseController;
 use App\Http\Controllers\Web\GstSettingsController;
 use App\Http\Controllers\Web\InvoiceController;
+use App\Http\Controllers\Web\PricingController;
 use App\Http\Controllers\Web\PurchaseController;
 use App\Http\Controllers\Web\RegisterController;
 use App\Http\Controllers\Web\ReminderController;
@@ -191,6 +192,15 @@ Route::middleware('auth')->group(function () {
 
     Route::get('gst', [GstSettingsController::class, 'edit'])->name('gst');
     Route::post('gst', [GstSettingsController::class, 'update'])->name('gst.save');
+
+    /*
+     | Costs and default selling prices — Blade, owner-only. Catalog CRUD has
+     | always existed on the JSON API with no screen reaching it, so a cost
+     | change needed a developer.
+     */
+    Route::get('pricing', [PricingController::class, 'index'])->name('pricing');
+    Route::post('pricing', [PricingController::class, 'update'])->name('pricing.save');
+    Route::post('pricing/{product}/recost', [PricingController::class, 'recost'])->name('pricing.recost');
 
     /*
      | Order acceptance — Blade, online-only, owner/admin. This is deliberately

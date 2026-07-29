@@ -97,5 +97,6 @@ return [
     // डैशबोर्ड हेडर के मालिक-टूल लिंक।
     'manage_orders' => 'स्वीकृतियाँ',
     'manage_beats' => 'बीट',
+    'manage_pricing' => 'लागत और दाम',
     'manage_gst' => 'GST',
 ];
