@@ -74,12 +74,16 @@ Route::prefix('v1')->group(function () {
             Route::post('raw-materials/{id}/restore', [\App\Http\Controllers\Api\V1\RawMaterialController::class, 'restore']);
 
             Route::post('stock-movements', [\App\Http\Controllers\Api\V1\StockMovementController::class, 'store']);
+            // Corrections: append-only, a mirror-image row. On-hand is Σ qty,
+            // so a delete would silently restate it.
+            Route::post('stock-movements/{id}/reverse', [\App\Http\Controllers\Api\V1\StockMovementController::class, 'reverse']);
             Route::get('stock', [\App\Http\Controllers\Api\V1\StockController::class, 'index']);
             Route::get('stock/{id}', [\App\Http\Controllers\Api\V1\StockController::class, 'show']);
 
             Route::post('production', [\App\Http\Controllers\Api\V1\ProductionController::class, 'store']);
             Route::get('production', [\App\Http\Controllers\Api\V1\ProductionController::class, 'index']);
             Route::get('production/{id}', [\App\Http\Controllers\Api\V1\ProductionController::class, 'show']);
+            Route::post('production/{id}/reverse', [\App\Http\Controllers\Api\V1\ProductionController::class, 'reverse']);
 
             // Sync is batched — few requests each carrying many rows — so it gets
             // its own bucket instead of competing with interactive work.

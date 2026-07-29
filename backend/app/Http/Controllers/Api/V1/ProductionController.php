@@ -4,14 +4,49 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Ledger\ReversalNotAllowed;
 use App\Models\ProductionBatch;
 use App\Policies\StockPolicy;
 use App\Services\PlanGuard;
 use App\Services\ProductionWriter;
+use App\Stock\StockReverser;
 use Illuminate\Http\Request;
 
 class ProductionController extends Controller
 {
+    public function __construct(private readonly StockReverser $reverser) {}
+
+    /**
+     * Correct a batch: negate its output AND put back the materials it drew.
+     *
+     * Both, because the batch did both. A reversal that only negated the output
+     * would leave raw materials consumed by a batch that no longer counts as
+     * having happened.
+     */
+    public function reverse(string $id)
+    {
+        if (! (new StockPolicy())->manage()) {
+            return $this->denied();
+        }
+
+        if ($blocked = app(PlanGuard::class)->stockFeatureBlock()) {
+            return $blocked;
+        }
+
+        $original = ProductionBatch::with(['consumptions', 'movements'])->findOrFail($id);
+
+        try {
+            $reversal = $this->reverser->reverseBatch($original);
+        } catch (ReversalNotAllowed $e) {
+            return response()->json(
+                ['message' => $e->getMessage()],
+                $e->reason === ReversalNotAllowed::ALREADY_REVERSED ? 409 : 422
+            );
+        }
+
+        return response()->json($reversal, 201);
+    }
+
     public function store(Request $request, ProductionWriter $writer)
     {
         if (! (new StockPolicy())->manage()) {

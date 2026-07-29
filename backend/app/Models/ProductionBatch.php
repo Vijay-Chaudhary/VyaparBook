@@ -36,4 +36,14 @@ class ProductionBatch extends Model
     {
         return $this->hasMany(MaterialConsumption::class);
     }
+
+    /**
+     * The stock movements this batch caused — the draw-down of each material it
+     * consumed. Reversing a batch has to put those back, and they are the only
+     * record of how much actually left stock.
+     */
+    public function movements(): HasMany
+    {
+        return $this->hasMany(StockMovement::class);
+    }
 }

@@ -184,7 +184,23 @@ export function RecordMovement({ material, onSave }) {
 
 /* ------------------------------------------------------------------ */
 
-export function MaterialDetail({ material, movements, online }) {
+export function MaterialDetail({ material, movements, online, onReverse }) {
+    const [error, setError] = useState(null);
+    const [busy, setBusy] = useState(null);
+
+    // A refusal must reach the screen. The server declines a correction that is
+    // itself a correction, one already corrected, and any movement a batch or
+    // purchase created — each with a reason worth reading.
+    const reverse = async (id) => {
+        setError(null);
+        setBusy(id);
+
+        const result = await onReverse(id);
+
+        setBusy(null);
+        if (!result.ok) setError(result.message ?? t('correction_failed'));
+    };
+
     if (!material) {
         return (
             <Screen title={t('stock')} onBack={() => navigate('/stock')}>
@@ -215,6 +231,12 @@ export function MaterialDetail({ material, movements, online }) {
                 {t('record_movement')}
             </button>
 
+            {error && (
+                <p role="alert" className="card mb-3 text-sm text-danger" data-testid="movement-error">
+                    {error}
+                </p>
+            )}
+
             {movements.length === 0 ? (
                 <p className="card text-center text-ink-muted">{t('no_entries')}</p>
             ) : (
@@ -236,6 +258,21 @@ export function MaterialDetail({ material, movements, online }) {
                                     {movement.deltaMilli >= 0 ? '+' : '−'}
                                     {formatQty(Math.abs(movement.deltaMilli))}
                                 </span>
+                                {movement.isReversal ? (
+                                    <span className="block text-xs text-ink-muted">{t('is_correction')}</span>
+                                ) : movement.isReversed ? (
+                                    <span className="block text-xs text-ink-muted">{t('corrected')}</span>
+                                ) : (
+                                    <button
+                                        type="button"
+                                        className="text-xs text-danger disabled:opacity-40"
+                                        disabled={!online || busy === movement.id}
+                                        onClick={() => reverse(movement.id)}
+                                        data-testid={`reverse-movement-${movement.id}`}
+                                    >
+                                        {busy === movement.id ? t('loading') : t('reverse')}
+                                    </button>
+                                )}
                                 <span className="tabular block text-xs text-ink-muted">
                                     {formatQty(movement.runningMilli, material.unit)}
                                 </span>

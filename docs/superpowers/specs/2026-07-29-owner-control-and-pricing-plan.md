@@ -1,10 +1,8 @@
 # Owner Control & Pricing Configuration — Plan
 
 **Date:** 2026-07-29
-**Status:** Phases 1, 2 and **Phase 3 part 1** shipped 2026-07-29. The
-reversal-vs-delete question is settled: **correct by reversal**. Phase 3 part 2
-(stock and production reversal) remains, and needs its own migration plus new
-offline outbox mutation types.
+**Status:** Phases 1, 2 and **all of Phase 3** shipped 2026-07-29. The
+reversal-vs-delete question is settled: **correct by reversal**.
 **Scope:** (1) make the cost floor advisory, (2) give the owner a pricing
 configuration screen, (3) let the owner correct orders, payments, customers,
 stock and production.
@@ -204,10 +202,43 @@ missing — the same situation pricing was in.
       asserted `assertSessionHas` and passed throughout. Two tests now assert
       the message is **on the page**.
 
-**Still to do (part 2 — stock and production):** `reverses_id` on
-`stock_movements` and `production_batches` does not exist, and these are
-offline-synced, so reversal needs a migration **and** new outbox mutation types.
-Deliberately held back rather than buried in a UI change.
+**Shipped (part 2 — stock and production), 2026-07-29:**
+
+**A correction to part 1's sizing:** I said this needed new offline outbox
+mutation types. It did not. Stock and production writes are **online-only,
+straight to the REST API** — `SyncController::push` has never accepted a stock
+or production mutation. So there was no offline conflict story to design, and
+the work was a migration plus two endpoints.
+
+- [x] `reverses_id` on `stock_movements` and `production_batches`. Nullable,
+      self-referencing, **no cascade** — a correction must not vanish with its
+      original, or the sums it balances would go wrong.
+- [x] `App\Stock\StockReverser`, kept separate from `LedgerReverser`: that one
+      is about the khata, where a correction changes what a customer owes.
+      Nothing here touches money owed; the two share only a shape.
+- [x] **Movement reversal flips `kind`** (in↔out, adjust→adjust) rather than
+      copying it. The schema's invariant is that an `out` can never raise stock,
+      so a copied kind on a negated qty would store a row contradicting its own
+      sign.
+- [x] **Batch reversal undoes both halves** — negated `output_kg`, negated
+      `material_consumptions`, and reversing stock movements putting the raw
+      materials back. Negating only the output would leave materials consumed by
+      a batch that no longer counts as having happened, and would skew the COGS
+      ₹/kg (Σ cost ÷ Σ output) by moving only the denominator.
+- [x] **Refuses to reverse a movement a batch or purchase created.** Those are
+      not free-standing facts; reversing one alone would leave its cause
+      disagreeing with stock. Reverse the batch or the purchase instead.
+- [x] Reversal rows are dated **today**, like a voided sale — backdating would
+      rewrite a past month's production chart.
+- [x] React buttons on the production log and the material ledger, each
+      surfacing the server's refusal reason. Pure `annotateReversals` derives
+      "is a correction" / "already corrected" from the rows themselves, so the
+      screen cannot disagree with the server.
+
+**Checked, not assumed:** `CogsService` divides by Σ output_kg, so a
+fully-reversed product would divide by zero — its `divide()` already returns
+'0.00' there and the product drops out of the map as "not costable", falling
+back to `default_cost_price`. No change needed.
 
 ### Original proposal
 
