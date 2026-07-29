@@ -134,6 +134,16 @@ Route::middleware('auth')->group(function () {
     Route::delete('customers/{customer}', [CustomerController::class, 'destroy'])->name('customers.destroy');
     Route::post('customers/{customer}/restore', [CustomerController::class, 'restore'])->name('customers.restore');
 
+    /*
+     | Corrections. Append-only: both write a mirror-image row rather than
+     | removing anything, so outstanding, cash flow, COGS and any issued invoice
+     | stay consistent with the books.
+     */
+    Route::post('customers/{customer}/sales/{sale}/void', [CustomerController::class, 'voidSale'])
+        ->name('customers.sales.void');
+    Route::post('customers/{customer}/payments/{payment}/reverse', [CustomerController::class, 'reversePayment'])
+        ->name('customers.payments.reverse');
+
     Route::get('suppliers', [SupplierController::class, 'index'])->name('suppliers');
     Route::post('suppliers', [SupplierController::class, 'store'])->name('suppliers.store');
     Route::get('suppliers/{supplier}', [SupplierController::class, 'show'])->name('suppliers.show');
@@ -210,6 +220,9 @@ Route::middleware('auth')->group(function () {
     Route::get('orders', [OrderController::class, 'index'])->name('orders');
     Route::post('orders/{order}/accept', [OrderController::class, 'accept'])->name('orders.accept');
     Route::post('orders/{order}/reject', [OrderController::class, 'reject'])->name('orders.reject');
+    // An order before delivery is not money, so this is a real cancel, not a
+    // reversal — there is nothing on the books yet to mirror.
+    Route::post('orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
 
     // Session -> JWT exchange for the React layer. Throttled because it mints
     // credentials: a valid session should not make it freely spammable.

@@ -303,3 +303,81 @@ it('shows what was in a decided order, not just its total', function () {
         ->assertSee('500g')           // its pack size
         ->assertSee('₹85.00');        // the rate that was agreed
 });
+
+describe('cancelling', function () {
+    it('lets the owner cancel an order the shop will not fulfil', function () {
+        // A salesman could already cancel from the phone; the owner could not,
+        // and was left watching an order they had decided against.
+        [$owner, $business, $orderId] = pendingOrder();
+        DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)
+            ->update(['status' => OrderStatus::ACCEPTED]);
+
+        $this->actingAs($owner)->post('/orders/' . $orderId . '/cancel', [
+            'business' => $business->id, 'status_note' => 'Shop closed down',
+        ])->assertRedirect(route('orders', ['business' => $business->id]));
+
+        $order = DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)->first();
+        expect($order->status)->toBe(OrderStatus::CANCELLED);
+        expect($order->status_note)->toBe('Shop closed down');
+    });
+
+    it('writes no sale — an order before delivery was never money', function () {
+        [$owner, $business, $orderId] = pendingOrder();
+        DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)
+            ->update(['status' => OrderStatus::PACKED]);
+
+        $this->actingAs($owner)->post('/orders/' . $orderId . '/cancel', [
+            'business' => $business->id,
+        ])->assertRedirect();
+
+        // Nothing to reverse, so nothing is written: cancelling is a real
+        // cancel here, unlike a sale, which can only ever be mirrored.
+        expect(DB::connection('pgsql_migrate')->table('sales')
+            ->where('business_id', $business->id)->count())->toBe(0);
+    });
+
+    it('refuses to cancel a delivered order, which is already money', function () {
+        [$owner, $business, $orderId] = pendingOrder();
+        DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)
+            ->update(['status' => OrderStatus::DELIVERED]);
+
+        $this->actingAs($owner)->post('/orders/' . $orderId . '/cancel', [
+            'business' => $business->id,
+        ])->assertSessionHas('error', __('orders.cannot_cancel'));
+
+        expect(DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)->value('status'))
+            ->toBe(OrderStatus::DELIVERED);
+    });
+
+    it('offers cancel on the screen for an order still open', function () {
+        [$owner, $business, $orderId] = pendingOrder();
+        DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)
+            ->update(['status' => OrderStatus::ACCEPTED]);
+
+        $this->actingAs($owner)->get('/orders?business=' . $business->id)
+            ->assertOk()
+            ->assertSee(route('orders.cancel', ['order' => $orderId]), false);
+    });
+
+    it('does not offer cancel on a finished order', function () {
+        [$owner, $business, $orderId] = pendingOrder();
+        DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)
+            ->update(['status' => OrderStatus::DELIVERED]);
+
+        $this->actingAs($owner)->get('/orders?business=' . $business->id)
+            ->assertOk()
+            ->assertDontSee(route('orders.cancel', ['order' => $orderId]), false);
+    });
+
+    it('does not cancel another tenant\'s order', function () {
+        [$owner, $business] = pendingOrder();
+        [, , $theirOrderId] = pendingOrder();
+
+        $this->actingAs($owner)->post('/orders/' . $theirOrderId . '/cancel', [
+            'business' => $business->id,
+        ])->assertNotFound();
+
+        expect(DB::connection('pgsql_migrate')->table('orders')->where('id', $theirOrderId)->value('status'))
+            ->toBe(OrderStatus::PENDING);
+    });
+});

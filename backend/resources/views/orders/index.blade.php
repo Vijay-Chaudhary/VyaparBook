@@ -4,7 +4,7 @@
 @section('title', __('orders.title') . ' — ' . config('app.name'))
 
 @section('content')
-@php use App\Orders\OrderAdjustment; use App\Pricing\PriceFloor; use App\Support\Inr; @endphp
+@php use App\Orders\OrderAdjustment; use App\Orders\OrderStatus; use App\Pricing\PriceFloor; use App\Support\Inr; @endphp
 <div class="mx-auto max-w-5xl p-4">
     <header class="mb-4 flex items-center justify-between">
         <h1 class="text-xl font-bold">{{ __('orders.heading') }}</h1>
@@ -135,6 +135,20 @@
                             @if (OrderAdjustment::anyChanged($order->lines))
                                 <span class="block text-xs text-ink-muted">{{ __('orders.adjusted') }}</span>
                             @endif
+                            {{-- A salesman could already cancel from the phone;
+                                 the owner could not, and was left watching an
+                                 order they had decided against. Not a reversal:
+                                 an order before delivery is not money, so there
+                                 is nothing on the books to mirror. --}}
+                            @unless (OrderStatus::isTerminal($order->status))
+                                <form method="POST" class="mt-1"
+                                      action="{{ route('orders.cancel', ['order' => $order->id]) }}"
+                                      onsubmit="return confirm('{{ __('orders.confirm_cancel') }}')">
+                                    @csrf
+                                    <input type="hidden" name="business" value="{{ $businessId }}">
+                                    <button type="submit" class="text-xs text-danger">{{ __('orders.cancel') }}</button>
+                                </form>
+                            @endunless
                         </td>
                         <td class="tabular text-right">
                             {{ Inr::format($order->total) }}

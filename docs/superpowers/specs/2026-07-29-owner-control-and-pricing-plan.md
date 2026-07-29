@@ -1,9 +1,10 @@
 # Owner Control & Pricing Configuration — Plan
 
 **Date:** 2026-07-29
-**Status:** Phases 1 and 2 **shipped 2026-07-29** (see each below). Phase 3
-remains a proposal awaiting the reversal-vs-delete decision at the foot of this
-document.
+**Status:** Phases 1, 2 and **Phase 3 part 1** shipped 2026-07-29. The
+reversal-vs-delete question is settled: **correct by reversal**. Phase 3 part 2
+(stock and production reversal) remains, and needs its own migration plus new
+offline outbox mutation types.
 **Scope:** (1) make the cost floor advisory, (2) give the owner a pricing
 configuration screen, (3) let the owner correct orders, payments, customers,
 stock and production.
@@ -173,7 +174,43 @@ actual cost per batch, which is the more truthful COGS path (Phase 2b).
 
 ---
 
-## Phase 3 — owner corrections ("delete or add/edit anything")
+## Phase 3 — owner corrections — PART 1 SHIPPED 2026-07-29
+
+**Decision taken: correct by reversal, not deletion.**
+
+**Discovery that reshaped this phase:** sale void and payment reversal were
+**already fully built** on the JSON API (`POST /api/v1/sales/{id}/void`,
+`POST /api/v1/payments/{id}/reverse`), with `reverses_id` on both tables and
+guards against reversing a reversal or double-reversing. Only the UI was
+missing — the same situation pricing was in.
+
+**Shipped (part 1 — money and orders):**
+
+- [x] `App\Ledger\LedgerReverser` — the reversal logic **extracted** from the two
+      API controllers so the new Blade caller shares it. Duplicating the guards
+      across callers is exactly how they drift.
+- [x] `App\Ledger\ReversalNotAllowed` carries a machine-readable reason, so the
+      API keeps its 422-vs-409 distinction (its tests pin those) while Blade
+      shows a sentence.
+- [x] Void and Reverse on the owner's customer ledger, which was read-only.
+      Already-corrected rows are marked instead of offering the action again.
+- [x] The reversal mirrors `cost_at_sale` as well as `list_rate` — a void must
+      cancel the sale that happened, not the one today's cost would describe.
+- [x] Owner order cancel on `/orders`. A **real** cancel, not a reversal: an
+      order before delivery is not money, so there is nothing to mirror.
+- **Bug found by verifying in the browser, not by the tests:** the ledger view
+      rendered neither `session('status')` nor `session('error')`, so every
+      refusal was invisible and the button looked broken. The original tests
+      asserted `assertSessionHas` and passed throughout. Two tests now assert
+      the message is **on the page**.
+
+**Still to do (part 2 — stock and production):** `reverses_id` on
+`stock_movements` and `production_batches` does not exist, and these are
+offline-synced, so reversal needs a migration **and** new outbox mutation types.
+Deliberately held back rather than buried in a UI change.
+
+### Original proposal
+
 
 This is the part I'd push back on, once, and then build whichever way you say.
 
