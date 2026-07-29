@@ -114,10 +114,14 @@ it('rejects a mutation referencing a customer the caller cannot see', function (
     expect($response->json('results.0.reason'))->toBe('not_found');
 });
 
-it('rejects only the below-floor line and still applies the rest of the batch', function () {
+it('rejects only the bad mutation and still applies the rest of the batch', function () {
+    // The below-cost rate used to be this test's trigger. The floor no longer
+    // refuses anything, so an unknown pack drives it instead — the guarantee
+    // being protected was never about pricing: one bad mutation must be
+    // REPORTED and roll back alone, inside its own savepoint, while its
+    // neighbours in the same batch still apply.
     [$business, $token, $customer] = syncSetup();
 
-    // syncSetup has no catalog, so build one with a cost floor of 70.00.
     $product = App\Models\Product::on('pgsql_migrate')->create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
@@ -133,26 +137,61 @@ it('rejects only the below-floor line and still applies the rest of the batch', 
     $good = (string) Str::uuid();
     $bad = (string) Str::uuid();
 
-    $saleMutation = fn (string $uuid, string $rate) => [
+    $saleMutation = fn (string $uuid, string $packId) => [
         'type' => 'sale', 'tenant_id' => $business->id, 'uuid' => $uuid,
         'payload' => [
             'uuid' => $uuid, 'customer_id' => $customer->id, 'sale_date' => '2026-07-20',
-            'lines' => [['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => $rate]],
+            'lines' => [['product_pack_id' => $packId, 'qty' => 1, 'rate' => '80.00']],
         ],
     ];
 
-    $response = push($token, [$saleMutation($good, '80.00'), $saleMutation($bad, '10.00')])->assertOk();
+    $response = push($token, [
+        $saleMutation($good, $pack->id),
+        $saleMutation($bad, (string) Str::uuid()),
+    ])->assertOk();
 
     // The promise is that the bad mutation is REPORTED, not merely absent: a
     // results array that mislabelled it would still leave the DB looking right.
     $byUuid = collect($response->json('results'))->keyBy('uuid');
     expect($byUuid[$good]['status'])->toBe('applied');
     expect($byUuid[$bad]['status'])->toBe('rejected');
-    expect($byUuid[$bad]['reason'])->toBe('invalid');
+    expect($byUuid[$bad]['reason'])->toBe('not_found');
 
     // The legitimate sale survives its neighbour's rejection.
     expect(DB::connection('pgsql_migrate')->table('sales')
         ->where('business_id', $business->id)->where('uuid', $good)->count())->toBe(1);
     expect(DB::connection('pgsql_migrate')->table('sales')
         ->where('business_id', $business->id)->where('uuid', $bad)->count())->toBe(0);
+});
+
+it('applies a below-cost sale from the field instead of parking it', function () {
+    // A phone that confirmed a below-cost line must not have its sale parked on
+    // arrival — that would strand the salesman's work after the shop was told.
+    [$business, $token, $customer] = syncSetup();
+
+    $product = App\Models\Product::on('pgsql_migrate')->create([
+        'business_id' => $business->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
+    ]);
+    $size = App\Models\PackSize::on('pgsql_migrate')->create([
+        'business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500',
+    ]);
+    $pack = App\Models\ProductPack::on('pgsql_migrate')->create([
+        'business_id' => $business->id, 'product_id' => $product->id,
+        'pack_size_id' => $size->id, 'default_sell_price' => '90.00',
+        'default_cost_price' => '70.00',
+    ]);
+
+    $uuid = (string) Str::uuid();
+
+    $response = push($token, [[
+        'type' => 'sale', 'tenant_id' => $business->id, 'uuid' => $uuid,
+        'payload' => [
+            'uuid' => $uuid, 'customer_id' => $customer->id, 'sale_date' => '2026-07-20',
+            'lines' => [['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '10.00']],
+        ],
+    ]])->assertOk();
+
+    expect($response->json('results.0.status'))->toBe('applied');
+    expect((string) DB::connection('pgsql_migrate')->table('sale_lines')
+        ->where('business_id', $business->id)->value('cost_at_sale'))->toBe('70.00');
 });

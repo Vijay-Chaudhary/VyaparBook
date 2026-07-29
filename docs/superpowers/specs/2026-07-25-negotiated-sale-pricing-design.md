@@ -33,11 +33,21 @@ though `sale_lines` already sync to the phone.
    the client could send both, it could claim it sold at list while charging
    less, and the discount record would be fiction.
 
-2. **A cost floor, enforced on both sides.** The phone blocks a below-floor line
-   at entry, while the salesman can still renegotiate face to face; the server
-   re-validates independently, because a rule enforced only on a client is not
-   enforced. Rejected pushes park in the outbox's existing state with the
-   server's reason — no new failure mode is invented.
+2. ~~**A cost floor, enforced on both sides.** The phone blocks a below-floor
+   line at entry, while the salesman can still renegotiate face to face; the
+   server re-validates independently, because a rule enforced only on a client
+   is not enforced. Rejected pushes park in the outbox's existing state with the
+   server's reason — no new failure mode is invented.~~
+
+   **Superseded (2026-07-29)** by `2026-07-29-owner-control-and-pricing-plan.md`
+   Phase 1. This assumed below-cost never legitimately happens. It does — this
+   shop sells some packs at or under cost deliberately, and against its true
+   costs (₹93/₹130/₹117 per kg) **11 of 21 packs** were below their own default
+   selling price, so enforcing meant half the catalog could not be sold at all.
+   The floor is still computed and shown, and the phone now asks for one
+   explicit confirmation instead of refusing. The cost basis is snapshot to
+   `sale_lines.cost_at_sale` so below-cost selling stays reportable after costs
+   move.
 
 3. **The floor derives from data already cached, so no new configuration:**
 

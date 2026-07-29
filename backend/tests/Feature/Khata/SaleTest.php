@@ -195,26 +195,73 @@ it('ignores a client-sent list_rate, so a discount cannot be faked', function ()
     expect((string) $line->list_rate)->toBe('90.00');   // the server's, not the client's
 });
 
-it('refuses a rate below the pack cost floor', function () {
+it('records a sale below cost instead of refusing it', function () {
+    // This shop sells some packs at or under cost deliberately. The floor used
+    // to throw here, which meant roughly half its catalog could not be sold at
+    // all. It is now advice the phone shows and the salesman confirms.
     [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
     DB::connection('pgsql_migrate')->table('product_packs')
         ->where('id', $pack->id)->update(['default_cost_price' => '70.00']);
 
     postSale($token, $customer, [
         ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '69.99'],
-    ])
-        ->assertStatus(422)
-        // The test product only has name_hi set (saleSetup does not set name_en),
-        // so the fallback chain in LedgerWriter lands on the Hindi name — this
-        // also incidentally proves the `sales.rate_below_floor` key resolves and
-        // both placeholders are filled, not just that some 422 came back.
-        ->assertJsonPath('errors.lines.0', 'Rate for सेव cannot be below 70.00.');
+    ])->assertCreated();
 
-    expect(DB::connection('pgsql_migrate')->table('sale_lines')
-        ->where('business_id', $business->id)->count())->toBe(0);
+    $line = DB::connection('pgsql_migrate')->table('sale_lines')
+        ->where('business_id', $business->id)->sole();
+
+    expect((string) $line->rate)->toBe('69.99');
+    // Snapshot, so "what did we sell under cost?" survives a cost change.
+    expect((string) $line->cost_at_sale)->toBe('70.00');
 });
 
-it('allows a rate exactly at the floor', function () {
+it('snapshots the cost even when the rate is comfortably above it', function () {
+    // Recorded on every line, not only the below-cost ones: margin reporting
+    // needs the cost that was true that day whatever the rate turned out to be.
+    [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
+    DB::connection('pgsql_migrate')->table('product_packs')
+        ->where('id', $pack->id)->update(['default_cost_price' => '70.00']);
+
+    postSale($token, $customer, [
+        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '120.00'],
+    ])->assertCreated();
+
+    expect((string) DB::connection('pgsql_migrate')->table('sale_lines')
+        ->where('business_id', $business->id)->value('cost_at_sale'))->toBe('70.00');
+});
+
+it('leaves the cost unknown when the pack has no cost basis, rather than guessing zero', function () {
+    // A zero would read as "sold at infinite margin" in any later report.
+    [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
+    DB::connection('pgsql_migrate')->table('product_packs')
+        ->where('id', $pack->id)->update(['default_cost_price' => null]);
+    DB::connection('pgsql_migrate')->table('products')
+        ->update(['base_cost_per_kg' => null]);
+
+    postSale($token, $customer, [
+        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '90.00'],
+    ])->assertCreated();
+
+    expect(DB::connection('pgsql_migrate')->table('sale_lines')
+        ->where('business_id', $business->id)->value('cost_at_sale'))->toBeNull();
+});
+
+it('ignores a phone that tries to author its own cost', function () {
+    // Server-authored like list_rate: a device must not be able to claim it
+    // sold above a cost it invented.
+    [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
+    DB::connection('pgsql_migrate')->table('product_packs')
+        ->where('id', $pack->id)->update(['default_cost_price' => '70.00']);
+
+    postSale($token, $customer, [
+        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '60.00', 'cost_at_sale' => '10.00'],
+    ])->assertCreated();
+
+    expect((string) DB::connection('pgsql_migrate')->table('sale_lines')
+        ->where('business_id', $business->id)->value('cost_at_sale'))->toBe('70.00');
+});
+
+it('allows a rate exactly at cost', function () {
     [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
     DB::connection('pgsql_migrate')->table('product_packs')
         ->where('id', $pack->id)->update(['default_cost_price' => '70.00']);
@@ -268,28 +315,37 @@ it('rejects a negative rate — a return is a negative qty, not a negative price
     ])->assertStatus(422);
 });
 
-it('applies the floor to a return line too, independent of the qty sign', function () {
+it('records a below-cost return too, independent of the qty sign', function () {
+    // A return mirrors the sale it reverses, so if the sale could go out under
+    // cost the return has to be able to come back at the same rate — otherwise
+    // goods sold below cost could never be taken back.
     [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
     DB::connection('pgsql_migrate')->table('product_packs')
         ->where('id', $pack->id)->update(['default_cost_price' => '70.00']);
 
     postSale($token, $customer, [
         ['product_pack_id' => $pack->id, 'qty' => -1, 'rate' => '60.00'],
-    ])->assertStatus(422);
+    ])->assertCreated();
+
+    $line = DB::connection('pgsql_migrate')->table('sale_lines')
+        ->where('business_id', $business->id)->sole();
+
+    expect($line->qty)->toBe(-1);
+    expect((string) $line->line_total)->toBe('-60.00');
 });
 
-it('rolls back the whole sale when only a later line breaks the floor', function () {
+it('rolls back the whole sale when only a later line is bad', function () {
+    // The cost floor used to be this test's trigger. It no longer refuses
+    // anything, but the guarantee it was really protecting — createSale's
+    // transaction boundary — still matters, so an unknown pack drives it now.
+    // A partial write would leave a sale holding only its valid line.
     [$business, $token, $customer, $pack] = saleSetup('salesman', '90.00');
-    DB::connection('pgsql_migrate')->table('product_packs')
-        ->where('id', $pack->id)->update(['default_cost_price' => '70.00']);
 
     postSale($token, $customer, [
-        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '90.00'],   // valid on its own
-        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '60.00'],  // below the floor
-    ])->assertStatus(422);
+        ['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '90.00'],       // valid on its own
+        ['product_pack_id' => (string) Str::uuid(), 'qty' => 1, 'rate' => '60.00'],  // no such pack
+    ])->assertStatus(404);
 
-    // The transaction boundary in LedgerWriter::createSale must undo the first
-    // line too — a partial write would leave a sale with only its valid line.
     expect(DB::connection('pgsql_migrate')->table('sales')
         ->where('business_id', $business->id)->count())->toBe(0);
     expect(DB::connection('pgsql_migrate')->table('sale_lines')

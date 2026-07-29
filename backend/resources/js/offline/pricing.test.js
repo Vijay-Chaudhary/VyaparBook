@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { belowFloor, floorPaise, readRatePaise, sendableRate } from './pricing';
+import { belowFloor, floorPaise, needsCostConfirmation, readRatePaise, sendableRate } from './pricing';
 
 /**
  * THE SHARED CASE TABLE — the mirror of tests/Unit/PriceFloorTest.php.
@@ -112,5 +112,28 @@ describe('sendableRate', () => {
     it('refuses a negative rate — a return is a negative qty, not a negative price', () => {
         expect(sendableRate('-5.00')).toBe(false);
         expect(sendableRate('-')).toBe(false);
+    });
+});
+
+describe('needsCostConfirmation', () => {
+    it('asks when any line is under cost', () => {
+        // Below cost is allowed now, but never by accident — a mis-keyed ₹9 for
+        // ₹90 lands below almost any floor, which the old hard block caught.
+        expect(needsCostConfirmation([null, 9000, null])).toBe(true);
+    });
+
+    it('does not ask when every line clears cost', () => {
+        expect(needsCostConfirmation([null, null])).toBe(false);
+    });
+
+    it('does not ask for an empty or missing set', () => {
+        expect(needsCostConfirmation([])).toBe(false);
+        expect(needsCostConfirmation(undefined)).toBe(false);
+    });
+
+    it('treats a zero-paise floor as a real floor, not an absent one', () => {
+        // A free-issue pack costs nothing, so anything at all clears it; the
+        // violation list only ever holds a floor when the rate was under it.
+        expect(needsCostConfirmation([0])).toBe(true);
     });
 });

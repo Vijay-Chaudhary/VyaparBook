@@ -6,9 +6,7 @@ namespace App\Http\Controllers\Web;
 use App\Http\Controllers\Concerns\ResolvesOwnedTenant;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
-use App\Models\ProductPack;
 use App\Orders\OrderStatus;
-use App\Pricing\PriceFloor;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
@@ -85,20 +83,6 @@ class OrderController extends Controller
                 $edit = $data['lines'][$line->id] ?? null;
                 $qty = $edit ? (int) $edit['qty'] : $line->qty;
                 $rate = $edit ? bcadd((string) $edit['rate'], '0', 2) : (string) $line->rate;
-
-                // The same floor the phone and LedgerWriter enforce. An edit
-                // below cost must not sneak in through the accept screen.
-                $pack = ProductPack::with(['product', 'packSize'])->find($line->product_pack_id);
-                $floor = $pack ? PriceFloor::for($pack) : null;
-
-                if ($floor !== null && bccomp($rate, $floor, 2) < 0) {
-                    // Refuse the WHOLE acceptance: a half-applied edit would
-                    // leave the shop promised one thing and billed another.
-                    return __('sales.rate_below_floor', [
-                        'product' => $pack->product?->name_en ?: $pack->product?->name_hi ?: 'this product',
-                        'floor' => $floor,
-                    ]);
-                }
 
                 $lineTotal = bcmul($rate, (string) $qty, 2);
                 $total = bcadd($total, $lineTotal, 2);

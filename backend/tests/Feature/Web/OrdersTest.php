@@ -115,21 +115,40 @@ describe('accepting', function () {
             ->where('id', $orderId)->value('total'))->toBe('285.00');
     });
 
-    it('refuses an adjusted price below the cost floor', function () {
+    it('accepts an adjusted price below cost rather than refusing it', function () {
         [$owner, $business, $orderId] = pendingOrder();
         $lineId = DB::connection('pgsql_migrate')->table('order_lines')
             ->where('order_id', $orderId)->value('id');
 
+        // 69.99 is under the 70.00 cost pendingOrder() builds. This used to
+        // refuse the whole acceptance; the shop sells under cost on purpose.
         $this->actingAs($owner)->post('/orders/' . $orderId . '/accept', [
             'business' => $business->id,
             'lines' => [$lineId => ['qty' => '2', 'rate' => '69.99']],
         ])->assertRedirect();
 
-        // Still pending, still at the original rate: the edit was refused whole.
         $order = DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)->first();
-        expect($order->status)->toBe(OrderStatus::PENDING);
+        expect($order->status)->toBe(OrderStatus::ACCEPTED);
         expect((string) DB::connection('pgsql_migrate')->table('order_lines')
-            ->where('id', $lineId)->value('rate'))->toBe('85.00');
+            ->where('id', $lineId)->value('rate'))->toBe('69.99');
+    });
+
+    it('warns on the screen when a line sits under cost', function () {
+        // Advice replaced the refusal, so the owner must be able to SEE it —
+        // otherwise the rate is adjusted with no cost reference at all.
+        [$owner, $business, $orderId] = pendingOrder('69.99');
+
+        $this->actingAs($owner)->get('/orders?business=' . $business->id)
+            ->assertOk()
+            ->assertSee(__('orders.under_cost', ['cost' => '₹70.00']));
+    });
+
+    it('says nothing about cost on a line that is above it', function () {
+        [$owner, $business] = pendingOrder('85.00');
+
+        $this->actingAs($owner)->get('/orders?business=' . $business->id)
+            ->assertOk()
+            ->assertDontSee(__('orders.under_cost', ['cost' => '₹70.00']));
     });
 
     it('rejects an order with a reason', function () {

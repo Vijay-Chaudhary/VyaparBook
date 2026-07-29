@@ -91,7 +91,8 @@ const strings = {
         select_product: 'उत्पाद चुनें',
         qty: 'मात्रा',
         rate: 'दर',
-        below_floor: 'लागत से कम — न्यूनतम है',
+        below_floor: 'लागत से कम — लागत है',
+        confirm_below_cost: 'हाँ, लागत से कम पर बेचें',
         invalid_rate: 'दाम जाँचें — यह संख्या होनी चाहिए, ऋणात्मक नहीं।',
         subtotal: 'उप-योग',
         add_line: 'और जोड़ें',
@@ -226,7 +227,10 @@ const strings = {
         select_product: 'Select product',
         qty: 'Qty',
         rate: 'Rate',
-        below_floor: 'Below cost — lowest is',
+        // No longer a prohibition: below cost is allowed, so this states
+        // the cost rather than a limit the salesman cannot cross.
+        below_floor: 'Below cost — cost is',
+        confirm_below_cost: 'Yes, sell below cost',
         invalid_rate: 'Check the price — it must be a number, and not negative.',
         subtotal: 'Subtotal',
         add_line: 'Add another',
