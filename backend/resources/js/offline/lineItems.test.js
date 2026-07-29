@@ -69,3 +69,62 @@ describe('describeLines', () => {
         expect(describeLines(undefined, packs, products, 'en')).toEqual([]);
     });
 });
+
+describe('describeLines — what acceptance changed', () => {
+    it('reports what was ordered when the owner cut the quantity', () => {
+        const [item] = describeLines(
+            [{ product_pack_id: 'k1', qty: 8, rate: '90.00', ordered_qty: 10, ordered_rate: '90.00' }],
+            packs, products, 'en'
+        );
+
+        // Both halves, even though only the qty moved: "was 10 × ₹90" is the
+        // promise the salesman made, and half of it is not a promise.
+        expect(item.originalQty).toBe(10);
+        expect(item.originalRatePaise).toBe(9000);
+    });
+
+    it('reports what was ordered when the owner raised the rate', () => {
+        const [item] = describeLines(
+            [{ product_pack_id: 'k1', qty: 10, rate: '95.00', ordered_qty: 10, ordered_rate: '90.00' }],
+            packs, products, 'en'
+        );
+
+        expect(item.originalQty).toBe(10);
+        expect(item.originalRatePaise).toBe(9000);
+    });
+
+    it('says nothing about a line acceptance left alone', () => {
+        const [item] = describeLines(
+            [{ product_pack_id: 'k1', qty: 10, rate: '90.00', ordered_qty: 10, ordered_rate: '90.00' }],
+            packs, products, 'en'
+        );
+
+        // Absent, not null: the screen tests `!== undefined`, so a common
+        // unedited line must add no noise to the row at all.
+        expect(item.originalQty).toBeUndefined();
+        expect(item.originalRatePaise).toBeUndefined();
+    });
+
+    it('says nothing when the original is unknown, rather than guessing', () => {
+        // An order taken before the audit trail existed. Unknown must read the
+        // same as unchanged — the UI may never claim a comparison it could not
+        // make.
+        const [item] = describeLines(
+            [{ product_pack_id: 'k1', qty: 8, rate: '95.00' }], packs, products, 'en'
+        );
+
+        expect(item.originalQty).toBeUndefined();
+    });
+
+    it('leaves sale lines untouched, which never carry originals', () => {
+        // describeLines is shared with the khata ledger. A sale is what was
+        // sold; an order's negotiation history is not a khata entry.
+        const [item] = describeLines(
+            [{ product_pack_id: 'k1', qty: 2, rate: '105.00', list_rate: '110.00' }],
+            packs, products, 'en'
+        );
+
+        expect(item).not.toHaveProperty('originalQty');
+        expect(item).not.toHaveProperty('originalRatePaise');
+    });
+});

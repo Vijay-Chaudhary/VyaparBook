@@ -19,6 +19,11 @@ return [
     'rejected' => 'Order rejected.',
     'not_pending' => 'That order is no longer waiting to be accepted.',
     'recent' => 'Recently decided',
+    // Shown only where acceptance actually changed something. Silence means
+    // "nothing to show" — which also covers orders taken before this was
+    // recorded — never "we checked and it was identical".
+    'adjusted' => 'Changed at approval',
+    'was' => 'was :value',
     'status' => 'Status',
     'statuses' => [
         'pending' => 'Waiting', 'accepted' => 'Accepted', 'packed' => 'Packed',

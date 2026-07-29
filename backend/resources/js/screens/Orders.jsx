@@ -79,6 +79,15 @@ export function Orders({ orders, customersById, onAction, canAccept = false }) {
                                         </span>
                                     </div>
 
+                                    {/* The salesman promised numbers the owner may have
+                                        changed. Saying so on the list means they find
+                                        out on the way, not at the shopkeeper's counter. */}
+                                    {order.items?.some((item) => item.originalQty !== undefined) && (
+                                        <p className="mt-2 text-xs font-medium text-danger" data-testid={`order-adjusted-${order.uuid}`}>
+                                            {t('order_adjusted')}
+                                        </p>
+                                    )}
+
                                     {order.items?.length > 0 && (
                                         <ul className="mt-2 space-y-0.5 border-t border-hairline pt-2">
                                             {order.items.map((item, i) => (
@@ -86,6 +95,13 @@ export function Orders({ orders, customersById, onAction, canAccept = false }) {
                                                     <span className="min-w-0 truncate">{item.description || '—'}</span>
                                                     <span className="tabular shrink-0">
                                                         {item.qty} × {formatRupees(item.ratePaise)}
+                                                        {item.originalQty !== undefined && (
+                                                            /* Struck through, so the live numbers stay
+                                                               the ones read first. */
+                                                            <span className="ml-2 text-danger line-through">
+                                                                {item.originalQty} × {formatRupees(item.originalRatePaise)}
+                                                            </span>
+                                                        )}
                                                     </span>
                                                 </li>
                                             ))}

@@ -41,6 +41,9 @@ function pendingOrder(string $rate = '85.00'): array
     DB::connection('pgsql_migrate')->table('order_lines')->insert([
         'id' => (string) Str::uuid(), 'business_id' => $business->id, 'order_id' => $orderId,
         'product_pack_id' => $pack->id, 'qty' => 2, 'rate' => $rate,
+        // Stamped at creation by OrderWriter, so a realistic pending line has
+        // them and they equal the live values until acceptance edits those.
+        'ordered_qty' => 2, 'ordered_rate' => $rate,
         'line_total' => bcmul($rate, '2', 2), 'sync_seq' => 2,
         'created_at' => now(), 'updated_at' => now(),
     ]);
@@ -179,6 +182,91 @@ describe('accepting', function () {
 
         expect(DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)->value('status'))
             ->toBe(OrderStatus::CANCELLED);
+    });
+});
+
+describe('what acceptance changed', function () {
+    it('keeps what the salesman ordered when the owner edits the line', function () {
+        [$owner, $business, $orderId] = pendingOrder();
+        $lineId = DB::connection('pgsql_migrate')->table('order_lines')
+            ->where('order_id', $orderId)->value('id');
+
+        $this->actingAs($owner)->post('/orders/' . $orderId . '/accept', [
+            'business' => $business->id,
+            'lines' => [$lineId => ['qty' => '3', 'rate' => '95.00']],
+        ])->assertRedirect();
+
+        $line = DB::connection('pgsql_migrate')->table('order_lines')->where('id', $lineId)->first();
+        // Live values are the owner's; the originals are untouched, which is
+        // the whole point — a shop promised 2 at ₹85 and given 3 at ₹95 now
+        // leaves a trace.
+        expect($line->qty)->toBe(3);
+        expect($line->ordered_qty)->toBe(2);
+        expect((string) $line->ordered_rate)->toBe('85.00');
+    });
+
+    it('leaves the originals equal when acceptance changes nothing', function () {
+        [$owner, $business, $orderId] = pendingOrder();
+        $lineId = DB::connection('pgsql_migrate')->table('order_lines')
+            ->where('order_id', $orderId)->value('id');
+
+        $this->actingAs($owner)->post('/orders/' . $orderId . '/accept', [
+            'business' => $business->id,
+        ])->assertRedirect();
+
+        $line = DB::connection('pgsql_migrate')->table('order_lines')->where('id', $lineId)->first();
+        expect($line->ordered_qty)->toBe($line->qty);
+        expect((string) $line->ordered_rate)->toBe((string) $line->rate);
+    });
+
+    it('shows the owner what an edited order was ordered as', function () {
+        [$owner, $business, $orderId] = pendingOrder();
+        $lineId = DB::connection('pgsql_migrate')->table('order_lines')
+            ->where('order_id', $orderId)->value('id');
+
+        $this->actingAs($owner)->post('/orders/' . $orderId . '/accept', [
+            'business' => $business->id,
+            'lines' => [$lineId => ['qty' => '3', 'rate' => '95.00']],
+        ])->assertRedirect();
+
+        $this->actingAs($owner)->get('/orders?business=' . $business->id)
+            ->assertOk()
+            ->assertSee(__('orders.adjusted'))
+            ->assertSee('₹285.00')                              // approved total
+            ->assertSee(__('orders.was', ['value' => '₹170.00'])) // as it was taken
+            ->assertSee('2 × ₹85.00');                          // the line as taken
+    });
+
+    it('says nothing about an order accepted exactly as it was taken', function () {
+        [$owner, $business, $orderId] = pendingOrder();
+
+        $this->actingAs($owner)->post('/orders/' . $orderId . '/accept', [
+            'business' => $business->id,
+        ])->assertRedirect();
+
+        $this->actingAs($owner)->get('/orders?business=' . $business->id)
+            ->assertOk()
+            ->assertDontSee(__('orders.adjusted'));
+    });
+
+    it('says nothing about an order taken before the trail existed', function () {
+        // Null means unknown, not unchanged. Showing "changed at approval"
+        // here would invent a renegotiation; showing a "was" the data cannot
+        // support would be worse.
+        [$owner, $business, $orderId] = pendingOrder();
+        $lineId = DB::connection('pgsql_migrate')->table('order_lines')
+            ->where('order_id', $orderId)->value('id');
+        DB::connection('pgsql_migrate')->table('order_lines')->where('id', $lineId)
+            ->update(['ordered_qty' => null, 'ordered_rate' => null]);
+
+        $this->actingAs($owner)->post('/orders/' . $orderId . '/accept', [
+            'business' => $business->id,
+            'lines' => [$lineId => ['qty' => '3', 'rate' => '95.00']],
+        ])->assertRedirect();
+
+        $this->actingAs($owner)->get('/orders?business=' . $business->id)
+            ->assertOk()
+            ->assertDontSee(__('orders.adjusted'));
     });
 });
 

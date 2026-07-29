@@ -4,7 +4,7 @@
 @section('title', __('orders.title') . ' — ' . config('app.name'))
 
 @section('content')
-@php use App\Support\Inr; @endphp
+@php use App\Orders\OrderAdjustment; use App\Support\Inr; @endphp
 <div class="mx-auto max-w-5xl p-4">
     <header class="mb-4 flex items-center justify-between">
         <h1 class="text-xl font-bold">{{ __('orders.heading') }}</h1>
@@ -103,6 +103,7 @@
             </thead>
             <tbody>
                 @foreach ($recent as $order)
+                    @php $originalTotal = OrderAdjustment::originalTotal($order->lines); @endphp
                     <tr>
                         <td>
                             @if ($order->customer)
@@ -114,13 +115,29 @@
                                 —
                             @endif
                         </td>
-                        <td>{{ __('orders.statuses.' . $order->status) }}</td>
-                        <td class="tabular text-right">{{ Inr::format($order->total) }}</td>
+                        <td>
+                            {{ __('orders.statuses.' . $order->status) }}
+                            {{-- Says the order was renegotiated without making
+                                 the reader open it and compare line by line. --}}
+                            @if (OrderAdjustment::anyChanged($order->lines))
+                                <span class="block text-xs text-ink-muted">{{ __('orders.adjusted') }}</span>
+                            @endif
+                        </td>
+                        <td class="tabular text-right">
+                            {{ Inr::format($order->total) }}
+                            @if ($originalTotal !== null && bccomp($originalTotal, (string) $order->total, 2) !== 0)
+                                <span class="block text-xs font-normal text-ink-muted">
+                                    {{ __('orders.was', ['value' => Inr::format($originalTotal)]) }}
+                                </span>
+                            @endif
+                        </td>
                     </tr>
                     @if ($order->lines->isNotEmpty())
                         {{-- What was agreed, at the rates that were accepted. A
                              decided order showing only a total cannot settle a
-                             dispute about what was meant to go out. --}}
+                             dispute about what was meant to go out — and where
+                             acceptance changed a line, what was asked for too,
+                             which is the other half of that same dispute. --}}
                         <tr>
                             <td colspan="3" class="pb-3 pl-3 text-xs text-ink-muted">
                                 @foreach ($order->lines as $line)
@@ -128,6 +145,17 @@
                                         {{ $line->productPack?->product?->name_en ?: $line->productPack?->product?->name_hi }}
                                         {{ $line->productPack?->packSize?->label }}
                                         <span class="tabular">{{ $line->qty }} × {{ Inr::format($line->rate) }}</span>
+                                        @if (OrderAdjustment::changed($line))
+                                            {{-- Both halves, even when only one
+                                                 moved: "was 10 × ₹90" is what
+                                                 was promised, and half of it is
+                                                 not a promise anyone made. --}}
+                                            <span class="tabular text-danger">
+                                                {{ __('orders.was', [
+                                                    'value' => $line->ordered_qty . ' × ' . Inr::format($line->ordered_rate),
+                                                ]) }}
+                                            </span>
+                                        @endif
                                     </span>
                                 @endforeach
                             </td>

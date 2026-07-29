@@ -111,6 +111,13 @@ class OrderWriter
                     'rate' => $l['rate'],
                 ]);
                 $orderLine->line_total = $l['line_total'];
+                // What was asked for, captured before anyone can edit it.
+                // Stamped from the values just validated above rather than
+                // taken from the payload, so a phone cannot claim it ordered
+                // something it did not. Acceptance overwrites qty/rate; these
+                // two are written once and never again.
+                $orderLine->ordered_qty = $l['qty'];
+                $orderLine->ordered_rate = $l['rate'];
                 $orderLine->save();
             }
 
