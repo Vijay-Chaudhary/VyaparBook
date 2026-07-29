@@ -19,7 +19,8 @@ place that is not.
 
 | Postgres dependency | Count |
 |---|---|
-| Tables with `ENABLE ROW LEVEL SECURITY` | 23 |
+| `ENABLE ROW LEVEL SECURITY` statements | 23 |
+| Tables they cover | 27 (several statements loop over a pair) |
 | `CREATE POLICY` statements | 23 |
 | `current_setting('app.current_tenant')` references | 47 |
 | `set_config(...)` transaction-scoped GUC | the whole tenant mechanism |
@@ -58,7 +59,7 @@ sentence must be rewritten, not left standing.
 3. **A query tripwire covers what a global scope cannot see.** A scope binds
    Eloquent only; `DB::table('sales')` walks past it, and the report services
    use raw builders. A listener registered **in the test environment** fails any
-   statement touching one of the 23 tenant tables without a `business_id`
+   statement touching one of the 26 guarded tenant tables without a `business_id`
    predicate outside a `withoutTenant` block. A CI tripwire, not a runtime
    guard.
 
