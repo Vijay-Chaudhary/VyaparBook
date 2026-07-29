@@ -42,13 +42,26 @@ return [
             'synchronous' => null,
         ],
 
+        /*
+         | The single application connection.
+         |
+         | Postgres used TWO roles: a restricted app role plus a table-owning
+         | migrate role, so the app role could not bypass row-level security.
+         | MySQL has no RLS, so that split protects nothing and collapses here.
+         | Tenant isolation now rests entirely on App\Traits\BelongsToTenant,
+         | which fails CLOSED — see its docblock.
+         |
+         | `strict` stays on deliberately: it makes MySQL reject bad data rather
+         | than silently truncating it, which is the behaviour Postgres gave for
+         | free and which 2,700+ money assertions depend on.
+         */
         'mysql' => [
             'driver' => 'mysql',
             'url' => env('DB_URL'),
             'host' => env('DB_HOST', '127.0.0.1'),
             'port' => env('DB_PORT', '3306'),
-            'database' => env('DB_DATABASE', 'laravel'),
-            'username' => env('DB_USERNAME', 'root'),
+            'database' => env('DB_DATABASE', 'vyaparbook'),
+            'username' => env('DB_USERNAME', 'vyaparbook_app'),
             'password' => env('DB_PASSWORD', ''),
             'unix_socket' => env('DB_SOCKET', ''),
             'charset' => env('DB_CHARSET', 'utf8mb4'),
@@ -59,7 +72,15 @@ return [
             'engine' => null,
             'options' => extension_loaded('pdo_mysql') ? array_filter([
                 PDO::MYSQL_ATTR_SSL_CA => env('MYSQL_ATTR_SSL_CA'),
-            ]) : [],
+
+                // NOT cosmetic, and not safe to remove. Every rupee in this
+                // system is a decimal STRING run through bcmath so money never
+                // touches a float. With emulated prepares, PDO hands DECIMAL
+                // columns back as PHP floats instead of strings — nothing
+                // throws, and khatas drift by paise. 41 decimal columns and
+                // ~2,700 assertions rest on this being false.
+                PDO::ATTR_EMULATE_PREPARES => false,
+            ], fn ($v) => $v !== null) : [],
         ],
 
         'mariadb' => [
@@ -82,46 +103,35 @@ return [
             ]) : [],
         ],
 
-        'pgsql' => [
-            'driver' => 'pgsql',
+        // Cross-tenant reads for the platform (Superadmin) console.
+        //
+        // On Postgres this logged in as a BYPASSRLS role. MySQL has no RLS to
+        // bypass, so what this connection now buys is the OTHER half of that
+        // guarantee, which does survive: the user is granted SELECT and nothing
+        // else, so the console physically cannot mutate a tenant's data however
+        // wrong the application code gets.
+        //
+        //   CREATE USER 'vyapar_platform_ro'@'%' IDENTIFIED BY '...';
+        //   GRANT SELECT ON vyaparbook.* TO 'vyapar_platform_ro'@'%';
+        //
+        // Cross-tenant READ scoping is now the app's job — see
+        // Tenancy::withoutTenant(), which this connection's callers run inside.
+        'mysql_platform' => [
+            'driver' => 'mysql',
             'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '6432'),
-            'database' => env('DB_DATABASE', 'vyaparbook'),
-            'username' => env('DB_USERNAME', 'vyaparbook_app'),
-            'password' => env('DB_PASSWORD', ''),
-            'charset' => 'utf8',
-            'prefix' => '',
-            'schema' => 'public',
-            'sslmode' => 'prefer',
-        ],
-
-        // Cross-tenant reads for the platform (Superadmin) console. Clones pgsql
-        // but logs in as the SELECT-only BYPASSRLS role, so it can read across
-        // every tenant without a tenant GUC — and cannot mutate anything.
-        'pgsql_platform' => [
-            'driver' => 'pgsql',
-            'host' => env('DB_HOST', '127.0.0.1'),
-            'port' => env('DB_PORT', '6432'),
+            'port' => env('DB_PORT', '3306'),
             'database' => env('DB_DATABASE', 'vyaparbook'),
             'username' => env('DB_PLATFORM_USERNAME', 'vyapar_platform_ro'),
             'password' => env('DB_PLATFORM_PASSWORD', 'platform_ro_pw'),
-            'charset' => 'utf8',
+            'charset' => env('DB_CHARSET', 'utf8mb4'),
+            'collation' => env('DB_COLLATION', 'utf8mb4_unicode_ci'),
             'prefix' => '',
-            'schema' => 'public',
-            'sslmode' => 'prefer',
-        ],
-
-        'pgsql_migrate' => [
-            'driver' => 'pgsql',
-            'host' => env('DB_MIGRATE_HOST', '127.0.0.1'),
-            'port' => env('DB_MIGRATE_PORT', '5432'),
-            'database' => env('DB_MIGRATE_DATABASE', 'vyaparbook'),
-            'username' => env('DB_MIGRATE_USERNAME', 'postgres'),
-            'password' => env('DB_MIGRATE_PASSWORD', ''),
-            'charset' => 'utf8',
-            'prefix' => '',
-            'schema' => 'public',
-            'sslmode' => 'prefer',
+            'prefix_indexes' => true,
+            'strict' => true,
+            'engine' => null,
+            'options' => extension_loaded('pdo_mysql') ? array_filter([
+                PDO::ATTR_EMULATE_PREPARES => false,
+            ], fn ($v) => $v !== null) : [],
         ],
 
         'sqlsrv' => [
