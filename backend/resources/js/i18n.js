@@ -38,7 +38,8 @@ const strings = {
         take_order: 'ऑर्डर लें',
         accept_orders: 'स्वीकृतियाँ',
         overdue: 'देर',
-        orders: 'मेरे ऑर्डर',
+        orders: 'ऑर्डर',
+        taken_by_colleague: '· किसी और का ऑर्डर',
         pack: 'पैक हुआ',
         deliver: 'पहुँचा दिया',
         cancel_order: 'रद्द करें',
@@ -168,7 +169,10 @@ const strings = {
         take_order: 'Take order',
         accept_orders: 'Approvals',
         overdue: 'Late',
-        orders: 'My orders',
+        // Not "My orders" any more: the pull sends the whole shop's, because
+        // anyone may have to deliver one.
+        orders: 'Orders',
+        taken_by_colleague: '· Taken by someone else',
         pack: 'Mark packed',
         deliver: 'Mark delivered',
         cancel_order: 'Cancel',

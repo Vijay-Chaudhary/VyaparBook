@@ -72,6 +72,14 @@ export function Orders({ orders, customersById, onAction, canAccept = false }) {
                                             <span className={`block text-sm ${late ? 'font-medium text-danger' : 'text-ink-muted'}`}>
                                                 {formatDate(order.order_date)}
                                                 {late && <span className="ml-2">{t('overdue')}</span>}
+                                                {/* The list now holds the whole shop's orders, so
+                                                    delivering a colleague's has to be a deliberate
+                                                    act rather than a misread of your own round. */}
+                                                {order.mine === false && (
+                                                    <span className="ml-2" data-testid={`order-others-${order.uuid}`}>
+                                                        {t('taken_by_colleague')}
+                                                    </span>
+                                                )}
                                             </span>
                                         </span>
                                         <span className="tabular shrink-0 font-medium">

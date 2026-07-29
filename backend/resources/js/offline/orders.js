@@ -94,6 +94,7 @@ export function groupByStatus(orders) {
  */
 export function buildOrderList({
     orders = [], orderLines = [], outbox = [], packs = [], products = [], locale = 'en',
+    userId = null,
 } = {}) {
     const linesByOrder = new Map();
 
@@ -105,6 +106,14 @@ export function buildOrderList({
     const synced = orders.map((order) => ({
         ...order,
         pending: false,
+        // Everyone in the shop now sees every order, because anyone may have to
+        // deliver one. Picking up a colleague's delivery should be deliberate,
+        // so the list has to say which orders are not yours.
+        //
+        // Unknown userId means unmarked rather than "someone else's": before
+        // whoami resolves, claiming every order belongs to a stranger would be
+        // wrong about all of them.
+        mine: userId == null ? true : Number(order.created_by) === Number(userId),
         items: describeLines(linesByOrder.get(order.id) ?? [], packs, products, locale),
     }));
 
@@ -117,6 +126,8 @@ export function buildOrderList({
             total: entry.payload?.total ?? '0',
             status: 'pending',
             pending: true,
+            // It is in THIS device's outbox, so this device took it.
+            mine: true,
             items: describeLines(entry.payload?.lines, packs, products, locale),
         }));
 
