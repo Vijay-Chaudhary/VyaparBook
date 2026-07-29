@@ -4,14 +4,17 @@
 namespace App\Http\Controllers\Api\V1;
 
 use App\Http\Controllers\Controller;
+use App\Ledger\LedgerReverser;
+use App\Ledger\ReversalNotAllowed;
 use App\Models\Payment;
 use App\Policies\KhataPolicy;
 use App\Services\LedgerWriter;
 use Illuminate\Http\Request;
-use Illuminate\Support\Str;
 
 class PaymentController extends Controller
 {
+    public function __construct(private readonly LedgerReverser $reverser) {}
+
     public function store(Request $request, LedgerWriter $writer)
     {
         if (! (new KhataPolicy())->recordPayment()) {
@@ -35,26 +38,14 @@ class PaymentController extends Controller
 
         $original = Payment::findOrFail($id);
 
-        if ($original->reverses_id) {
-            return response()->json(['message' => 'Cannot reverse a reversal.'], 422);
+        try {
+            $reversal = $this->reverser->reversePayment($original);
+        } catch (ReversalNotAllowed $e) {
+            return response()->json(
+                ['message' => $e->getMessage()],
+                $e->reason === ReversalNotAllowed::ALREADY_REVERSED ? 409 : 422
+            );
         }
-        if (Payment::where('reverses_id', $original->id)->exists()) {
-            return response()->json(['message' => 'Payment is already reversed.'], 409);
-        }
-
-        // Append-only: a NEW payment with the negated amount, pointing back at the
-        // original. Outstanding rises back by the reversed amount; nothing mutated.
-        $reversal = new Payment([
-            'business_id' => app('tenant.id'),
-            'uuid' => (string) Str::uuid(), // a reversal has no client uuid
-            'customer_id' => $original->customer_id,
-            'payment_date' => now()->toDateString(),
-            'amount' => bcmul((string) $original->amount, '-1', 2),
-            'mode' => $original->mode,
-            'reverses_id' => $original->id,
-        ]);
-        $reversal->created_by = app('tenant.user_id');
-        $reversal->save();
 
         return response()->json($reversal, 201);
     }

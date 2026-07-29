@@ -17,6 +17,15 @@
            class="text-sm text-brand">{{ __('customers.back_to_customers') }}</a>
     </header>
 
+    {{-- A correction that is refused has to say why. Without this the button
+         appears to do nothing and the owner tries again. --}}
+    @if (session('status'))
+        <p class="card mb-3 text-sm">{{ session('status') }}</p>
+    @endif
+    @if (session('error'))
+        <p class="card mb-3 text-sm text-danger">{{ session('error') }}</p>
+    @endif
+
     <div class="card mb-4 flex items-center justify-between">
         <span class="text-ink-muted">{{ __('customers.outstanding') }}</span>
         <span class="tabular text-lg font-bold">{{ Inr::format($outstanding) }}</span>
@@ -91,6 +100,7 @@
                     <th>{{ __('customers.particulars') }}</th>
                     <th class="text-right">{{ __('customers.amount') }}</th>
                     <th class="text-right">{{ __('customers.balance') }}</th>
+                    <th></th>
                 </tr>
             </thead>
             <tbody>
@@ -101,13 +111,50 @@
                     <td>{{ __('customers.opening') }}</td>
                     <td class="tabular text-right">{{ Inr::format($customer->opening_balance) }}</td>
                     <td class="tabular text-right">{{ Inr::format($customer->opening_balance) }}</td>
+                    <td></td>
                 </tr>
+                @php
+                    // Which originals already have a reversal pointing at them.
+                    // Derived from the rows already loaded — a reversal IS in the
+                    // ledger and carries reverses_id — so no extra query.
+                    $reversed = $ledger->filter(fn ($e) => str_ends_with($e['kind'], '_reversal'))
+                        ->pluck('ref.reverses_id')->filter()->flip();
+                @endphp
                 @foreach ($ledger as $e)
-                    <tr>
+                    @php
+                        $isReversal = str_ends_with($e['kind'], '_reversal');
+                        $done = $reversed->has($e['ref']->id);
+                        $isSale = str_starts_with($e['kind'], 'sale');
+                    @endphp
+                    <tr class="{{ $isReversal || $done ? 'text-ink-muted' : '' }}">
                         <td class="tabular">{{ $e['date']->format('d M Y') }}</td>
                         <td>{{ __('customers.' . $e['kind']) }}</td>
                         <td class="tabular text-right">{{ Inr::format($e['delta']) }}</td>
                         <td class="tabular text-right">{{ Inr::format($e['running_balance']) }}</td>
+                        <td class="text-right">
+                            {{-- Nothing is ever removed: the button writes a
+                                 mirror-image row, so both stay visible and the
+                                 ledger reads "sale ₹500, voided ₹500" rather
+                                 than showing a gap. A reversal cannot itself be
+                                 reversed, and an original only once. --}}
+                            @if ($isReversal)
+                                <span class="text-xs">{{ __('customers.is_correction') }}</span>
+                            @elseif ($done)
+                                <span class="text-xs">{{ __('customers.corrected') }}</span>
+                            @else
+                                <form method="POST" class="inline"
+                                      action="{{ $isSale
+                                          ? route('customers.sales.void', ['customer' => $customer->id, 'sale' => $e['ref']->id])
+                                          : route('customers.payments.reverse', ['customer' => $customer->id, 'payment' => $e['ref']->id]) }}"
+                                      onsubmit="return confirm('{{ $isSale ? __('customers.confirm_void') : __('customers.confirm_reverse') }}')">
+                                    @csrf
+                                    <input type="hidden" name="business" value="{{ $businessId }}">
+                                    <button type="submit" class="text-xs text-danger">
+                                        {{ $isSale ? __('customers.void') : __('customers.reverse') }}
+                                    </button>
+                                </form>
+                            @endif
+                        </td>
                     </tr>
                 @endforeach
             </tbody>

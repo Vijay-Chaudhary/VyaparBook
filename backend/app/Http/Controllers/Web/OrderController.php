@@ -106,6 +106,48 @@ class OrderController extends Controller
             ->with($error === null ? 'status' : 'error', $error ?? __('orders.accepted'));
     }
 
+    /**
+     * Cancel an order the shop is not going to fulfil.
+     *
+     * A real cancel, not a reversal: an order before delivery is not money, so
+     * there is nothing on the books to mirror. Delivery is the only step that
+     * writes to the khata, and OrderStatus refuses to leave a terminal state,
+     * so a delivered order cannot be cancelled here.
+     *
+     * The salesman could already cancel from the phone; the owner could not,
+     * which left them watching an order they had decided against.
+     */
+    public function cancel(Request $request, string $order): RedirectResponse
+    {
+        $businessId = $this->ownedBusinessId($request->input('business'), self::ROLES);
+        if ($businessId === null) {
+            return redirect()->route('app');
+        }
+
+        $data = $request->validate(['status_note' => ['nullable', 'string', 'max:255']]);
+
+        $error = $this->runInTenant($businessId, function () use ($businessId, $order, $data) {
+            $model = Order::query()->where('business_id', $businessId)->find($order);
+
+            if ($model === null) {
+                throw new NotFoundHttpException;
+            }
+
+            if (! OrderStatus::canTransition($model->status, OrderStatus::CANCELLED)) {
+                return __('orders.cannot_cancel');
+            }
+
+            $model->status = OrderStatus::CANCELLED;
+            $model->status_note = $data['status_note'] ?? null;
+            $model->save();
+
+            return null;
+        });
+
+        return redirect()->route('orders', ['business' => $businessId])
+            ->with($error === null ? 'status' : 'error', $error ?? __('orders.cancelled'));
+    }
+
     public function reject(Request $request, string $order): RedirectResponse
     {
         $businessId = $this->ownedBusinessId($request->input('business'), self::ROLES);

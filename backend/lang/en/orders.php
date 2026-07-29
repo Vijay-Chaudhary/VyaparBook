@@ -22,6 +22,10 @@ return [
     'accepted' => 'Order accepted.',
     'rejected' => 'Order rejected.',
     'not_pending' => 'That order is no longer waiting to be accepted.',
+    'cancel' => 'Cancel order',
+    'cancelled' => 'Order cancelled.',
+    'cannot_cancel' => 'That order can no longer be cancelled.',
+    'confirm_cancel' => 'Cancel this order? The salesman will see it on their next sync.',
     'recent' => 'Recently decided',
     // Shown only where acceptance actually changed something. Silence means
     // "nothing to show" — which also covers orders taken before this was

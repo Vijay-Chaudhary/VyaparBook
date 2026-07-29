@@ -28,7 +28,23 @@ return [
     'restore' => 'Restore',
 
     'outstanding' => 'Outstanding',
-    'read_only' => 'Sales and payments are recorded in the app, so this page only shows them.',
+    'read_only' => 'Sales and payments are recorded in the app. Here you can correct one.',
+
+    // Corrections are append-only: voiding writes a mirror-image row rather
+    // than deleting, so outstanding, cash flow, COGS and any issued invoice
+    // stay consistent with what is on the books.
+    'void' => 'Void',
+    'reverse' => 'Reverse',
+    'confirm_void' => 'Void this sale? A cancelling entry is added — nothing is deleted.',
+    'confirm_reverse' => 'Reverse this payment? A cancelling entry is added — nothing is deleted.',
+    'is_correction' => 'correction',
+    'corrected' => 'corrected',
+    'voided' => 'Sale voided. A cancelling entry was added.',
+    'reversed' => 'Payment reversed. A cancelling entry was added.',
+    'cannot_void_reversal' => 'That row is already a correction, so it cannot be voided.',
+    'already_voided' => 'That sale has already been voided.',
+    'cannot_reverse_reversal' => 'That row is already a correction, so it cannot be reversed.',
+    'already_reversed' => 'That payment has already been reversed.',
 
     'ledger' => 'Khata',
     'date' => 'Date',

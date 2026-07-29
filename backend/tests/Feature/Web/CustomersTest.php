@@ -8,6 +8,7 @@ use App\Models\Customer;
 use App\Models\Payment;
 use App\Models\Sale;
 use App\Models\User;
+use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
 /** A customer seeded on the migration connection, like the other seed helpers. */
@@ -303,5 +304,152 @@ describe('archive', function () {
 
         expect(Customer::on('pgsql_migrate')->withoutGlobalScopes()->find($foreign->id)->archived_at)
             ->toBeNull();
+    });
+});
+
+describe('corrections', function () {
+    it('voids a sale by adding a cancelling entry, never removing the original', function () {
+        // This is what "delete a sale" means here. Removing the row would
+        // silently restate outstanding, cash flow, COGS and any issued invoice;
+        // a mirror-image entry cancels it while both stay on the books.
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business);
+        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
+
+        $this->actingAs($owner)
+            ->post("/customers/{$customer->id}/sales/{$sale->id}/void", ['business' => $business->id])
+            ->assertRedirect(route('customers.show', ['customer' => $customer->id, 'business' => $business->id]));
+
+        // Original untouched, byte for byte.
+        $original = DB::connection('pgsql_migrate')->table('sales')->where('id', $sale->id)->first();
+        expect((string) $original->total)->toBe('500.00');
+        expect($original->reverses_id)->toBeNull();
+
+        // And a reversal pointing at it, so the two net to nothing.
+        $reversal = DB::connection('pgsql_migrate')->table('sales')
+            ->where('reverses_id', $sale->id)->sole();
+        expect((string) $reversal->total)->toBe('-500.00');
+
+        $fresh = Customer::on('pgsql_migrate')->find($customer->id);
+        expect((new App\Services\KhataService())->outstandingFor($fresh))->toBe('0.00');
+    });
+
+    it('reverses a payment, putting the outstanding back', function () {
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business, 'Ramesh Kumar', '500.00');
+        $payment = cusPayment($business, $owner, $customer, '200.00', '2026-07-20');
+
+        $this->actingAs($owner)
+            ->post("/customers/{$customer->id}/payments/{$payment->id}/reverse", ['business' => $business->id])
+            ->assertRedirect();
+
+        expect((string) DB::connection('pgsql_migrate')->table('payments')
+            ->where('reverses_id', $payment->id)->value('amount'))->toBe('-200.00');
+
+        $fresh = Customer::on('pgsql_migrate')->find($customer->id);
+        expect((new App\Services\KhataService())->outstandingFor($fresh))->toBe('500.00');
+    });
+
+    it('refuses to void the same sale twice, and says so', function () {
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business);
+        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
+        $url = "/customers/{$customer->id}/sales/{$sale->id}/void";
+
+        $this->actingAs($owner)->post($url, ['business' => $business->id])->assertRedirect();
+        $this->actingAs($owner)->post($url, ['business' => $business->id])
+            ->assertSessionHas('error', __('customers.already_voided'));
+
+        // Still exactly one reversal — a second would double the correction.
+        expect(DB::connection('pgsql_migrate')->table('sales')->where('reverses_id', $sale->id)->count())->toBe(1);
+    });
+
+    it('refuses to void a row that is itself a correction', function () {
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business);
+        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
+
+        $this->actingAs($owner)
+            ->post("/customers/{$customer->id}/sales/{$sale->id}/void", ['business' => $business->id])
+            ->assertRedirect();
+
+        $reversalId = DB::connection('pgsql_migrate')->table('sales')->where('reverses_id', $sale->id)->value('id');
+
+        // Reversing a reversal is a re-entry, not a correction — if the sale
+        // really did happen, record it again rather than un-voiding.
+        $this->actingAs($owner)
+            ->post("/customers/{$customer->id}/sales/{$reversalId}/void", ['business' => $business->id])
+            ->assertSessionHas('error', __('customers.cannot_void_reversal'));
+    });
+
+    it('offers the action on the ledger, not by URL alone', function () {
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business);
+        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
+
+        $this->actingAs($owner)->get("/customers/{$customer->id}?business={$business->id}")
+            ->assertOk()
+            ->assertSee(route('customers.sales.void', ['customer' => $customer->id, 'sale' => $sale->id]), false)
+            ->assertSee(__('customers.void'));
+    });
+
+    it('marks an already-corrected row instead of offering the action again', function () {
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business);
+        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
+
+        $this->actingAs($owner)
+            ->post("/customers/{$customer->id}/sales/{$sale->id}/void", ['business' => $business->id]);
+
+        $this->actingAs($owner)->get("/customers/{$customer->id}?business={$business->id}")
+            ->assertOk()
+            ->assertSee(__('customers.corrected'))
+            ->assertSee(__('customers.is_correction'));
+    });
+
+    it('shows the refusal on the page, not only in the session', function () {
+        // A flash nobody renders is a button that appears to do nothing, and
+        // the owner presses it again. Asserting the session alone would pass
+        // while the screen stayed silent.
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business);
+        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
+        $url = "/customers/{$customer->id}/sales/{$sale->id}/void";
+
+        $this->actingAs($owner)->post($url, ['business' => $business->id]);
+
+        $this->actingAs($owner)->post($url, ['business' => $business->id])
+            ->assertRedirect();
+
+        $this->actingAs($owner)->get("/customers/{$customer->id}?business={$business->id}")
+            ->assertOk()
+            ->assertSee(__('customers.already_voided'));
+    });
+
+    it('confirms a successful correction on the page', function () {
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business);
+        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
+
+        $this->actingAs($owner)
+            ->post("/customers/{$customer->id}/sales/{$sale->id}/void", ['business' => $business->id])
+            ->assertRedirect();
+
+        $this->actingAs($owner)->get("/customers/{$customer->id}?business={$business->id}")
+            ->assertOk()
+            ->assertSee(__('customers.voided'));
+    });
+
+    it('does not void another tenant\'s sale', function () {
+        [$owner, $business] = pwOwner();
+        [$theirOwner, $theirBusiness] = pwOwner();
+        $theirCustomer = cusCustomer($theirBusiness);
+        $theirSale = cusSale($theirBusiness, $theirOwner, $theirCustomer, '500.00', '2026-07-20');
+
+        $this->actingAs($owner)
+            ->post("/customers/{$theirCustomer->id}/sales/{$theirSale->id}/void", ['business' => $business->id])
+            ->assertNotFound();
+
+        expect(DB::connection('pgsql_migrate')->table('sales')->where('reverses_id', $theirSale->id)->count())->toBe(0);
     });
 });

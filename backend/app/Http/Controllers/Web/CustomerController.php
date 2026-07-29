@@ -5,7 +5,11 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Concerns\ResolvesOwnedTenant;
 use App\Http\Controllers\Controller;
+use App\Ledger\LedgerReverser;
+use App\Ledger\ReversalNotAllowed;
 use App\Models\Customer;
+use App\Models\Payment;
+use App\Models\Sale;
 use App\Services\DashboardReportService;
 use App\Services\KhataService;
 use Carbon\Carbon;
@@ -13,6 +17,7 @@ use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
 use Illuminate\View\View;
+use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
 /**
  * The customer master, for the owner console: Blade, online-only, owner-only.
@@ -41,6 +46,7 @@ class CustomerController extends Controller
     public function __construct(
         private readonly KhataService $khata,
         private readonly DashboardReportService $dashboard,
+        private readonly LedgerReverser $reverser,
     ) {}
 
     /** Everyone on the book with what they owe, biggest first, plus the add form. */
@@ -223,5 +229,75 @@ class CustomerController extends Controller
             'phone' => ['nullable', 'string', 'max:20'],
             'opening_balance' => [$forUpdate ? 'sometimes' : 'nullable', 'numeric', 'min:0'],
         ];
+    }
+
+    /**
+     * Void a sale from the owner's ledger.
+     *
+     * Append-only: LedgerReverser writes a mirror-image sale rather than
+     * removing anything, so outstanding, cash flow, COGS and any issued invoice
+     * all stay consistent with what is on the books. The ledger then reads
+     * "sale ₹500, voided ₹500" instead of a gap where a sale used to be.
+     */
+    public function voidSale(Request $request, string $customer, string $sale): RedirectResponse
+    {
+        return $this->correct($request, $customer, function () use ($sale) {
+            $row = Sale::with('lines')->find($sale);
+
+            if ($row === null) {
+                throw new NotFoundHttpException;
+            }
+
+            $this->reverser->voidSale($row);
+
+            return __('customers.voided');
+        });
+    }
+
+    /** Reverse a payment. Outstanding rises back by the reversed amount. */
+    public function reversePayment(Request $request, string $customer, string $payment): RedirectResponse
+    {
+        return $this->correct($request, $customer, function () use ($payment) {
+            $row = Payment::find($payment);
+
+            if ($row === null) {
+                throw new NotFoundHttpException;
+            }
+
+            $this->reverser->reversePayment($row);
+
+            return __('customers.reversed');
+        });
+    }
+
+    /**
+     * Shared shape for both corrections: resolve the owned tenant, run pinned,
+     * turn a refusal into a readable message rather than a 500.
+     */
+    private function correct(Request $request, string $customer, callable $work): RedirectResponse
+    {
+        $businessId = $this->ownedBusinessId($request->input('business'));
+        if ($businessId === null) {
+            return redirect()->route('app');
+        }
+
+        $result = $this->runInTenant($businessId, function () use ($businessId, $customer, $work) {
+            // Explicit owner scope on top of RLS, as everywhere else here.
+            if (Customer::where('business_id', $businessId)->find($customer) === null) {
+                throw new NotFoundHttpException;
+            }
+
+            try {
+                return [true, $work()];
+            } catch (ReversalNotAllowed $e) {
+                return [false, $e->getMessage()];
+            }
+        });
+
+        [$ok, $message] = $result;
+
+        return redirect()
+            ->route('customers.show', ['customer' => $customer, 'business' => $businessId])
+            ->with($ok ? 'status' : 'error', $message);
     }
 }
