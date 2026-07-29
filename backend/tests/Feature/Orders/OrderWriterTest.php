@@ -105,15 +105,22 @@ it('is idempotent by uuid, so a replayed push creates one order', function () {
     expect($order->id)->not->toBeNull();
 });
 
-it('refuses a line below the pack cost floor, exactly as a sale would', function () {
+it('takes an order below cost, exactly as a sale now does', function () {
+    // Refusing here would have been worse than refusing at the sale: the shop
+    // was already told a price. Below cost is a decision this business makes
+    // on purpose, so the phone warns and confirms and the server records it.
     [$b, $u, $c, $pack] = orderSetup();
 
-    $call = fn () => inOrderTenant($b, $u, fn () => app(OrderWriter::class)->createOrder(
-        orderPayload($c, $pack, ['lines' => [['product_pack_id' => $pack->id, 'qty' => 1, 'rate' => '69.99']]])
-    ));
+    $order = inOrderTenant($b, $u, fn () => app(OrderWriter::class)->createOrder(
+        orderPayload($c, $pack, ['lines' => [[
+            'product_pack_id' => $pack->id, 'qty' => 2, 'rate' => '60.00',
+        ]]])
+    )[0]);
 
-    expect($call)->toThrow(Illuminate\Validation\ValidationException::class);
-    expect(DB::connection('pgsql_migrate')->table('orders')->where('business_id', $b->id)->count())->toBe(0);
+    // 60.00 is under the 70.00 cost floor orderSetup builds.
+    expect((string) DB::connection('pgsql_migrate')->table('order_lines')
+        ->where('order_id', $order->id)->value('rate'))->toBe('60.00');
+    expect((string) $order->total)->toBe('120.00');
 });
 
 it('refuses another tenant\'s customer', function () {

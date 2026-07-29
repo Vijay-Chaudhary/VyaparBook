@@ -11,6 +11,7 @@ return [
     'product' => 'उत्पाद',
     'qty' => 'मात्रा',
     'rate' => 'दर',
+    'under_cost' => 'लागत से कम — :cost',
     'total' => 'कुल',
     'accept' => 'स्वीकारें',
     'reject' => 'अस्वीकारें',

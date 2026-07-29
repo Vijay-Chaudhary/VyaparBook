@@ -2,7 +2,7 @@ import { Fragment, useMemo, useState } from 'react';
 import { getLocale, t, today } from '../i18n';
 import { productName } from '../offline/catalog';
 import { formatRupees, toPaise } from '../offline/money';
-import { belowFloor, floorPaise, readRatePaise, sendableRate } from '../offline/pricing';
+import { belowFloor, floorPaise, needsCostConfirmation, readRatePaise, sendableRate } from '../offline/pricing';
 import { navigate } from '../router';
 import { Screen } from '../components/Chrome';
 
@@ -236,6 +236,9 @@ export function RecordOrder({ customer, packs, products = [], onSave }) {
     const [date, setDate] = useState(today());
     const [error, setError] = useState(null);
     const [saving, setSaving] = useState(false);
+    // Selling under cost is allowed, but only on purpose. Reset by any edit
+    // below, so what gets confirmed is always the final numbers.
+    const [costConfirmed, setCostConfirmed] = useState(false);
 
     // A rate being typed may not parse yet ('12..3', 'abc'), and toPaise throws
     // on those — which would crash the form mid-keystroke. Display therefore
@@ -243,8 +246,13 @@ export function RecordOrder({ customer, packs, products = [], onSave }) {
     const ratePaise = (value) => readRatePaise(value) ?? 0;
 
     const setLine = (index, key) => (e) =>
-        setLines((current) =>
-            current.map((line, i) => {
+        setLines((current) => {
+            // Any change to a line invalidates an earlier confirmation —
+            // otherwise a salesman could tick the box and then edit the rate
+            // downwards, which is exactly the case the tick exists to catch.
+            setCostConfirmed(false);
+
+            return current.map((line, i) => {
                 if (i !== index) return line;
 
                 const next = { ...line, [key]: e.target.value };
@@ -255,8 +263,8 @@ export function RecordOrder({ customer, packs, products = [], onSave }) {
                 }
 
                 return next;
-            })
-        );
+            });
+        });
 
     const linePaise = (line) => {
         const qty = Number(line.qty);
@@ -306,8 +314,11 @@ export function RecordOrder({ customer, packs, products = [], onSave }) {
             return;
         }
 
-        if (violations.some((v) => v !== null)) {
-            setError(t('below_floor'));
+        // Below cost is permitted, but never by accident: the salesman has to
+        // tick the box first. This replaced a hard refusal — see
+        // needsCostConfirmation for why the tap was kept.
+        if (needsCostConfirmation(violations) && !costConfirmed) {
+            setError(t('confirm_below_cost'));
             return;
         }
 
@@ -448,6 +459,23 @@ export function RecordOrder({ customer, packs, products = [], onSave }) {
                         {formatRupees(totalPaise)}
                     </span>
                 </div>
+
+                {/* Only when a line is actually under cost. The shop sells below
+                    cost on purpose, so this permits rather than refuses — but it
+                    stays a deliberate tap, because a mis-keyed ₹9 for ₹90 lands
+                    below almost any floor and used to be caught by the old block. */}
+                {needsCostConfirmation(violations) && (
+                    <label className="flex min-h-tap items-center gap-3 rounded border border-danger p-3">
+                        <input
+                            type="checkbox"
+                            className="size-5 shrink-0"
+                            checked={costConfirmed}
+                            onChange={(e) => setCostConfirmed(e.target.checked)}
+                            data-testid="confirm-below-cost"
+                        />
+                        <span className="text-sm font-medium text-danger">{t('confirm_below_cost')}</span>
+                    </label>
+                )}
 
                 <button type="submit" className="btn-primary w-full" disabled={saving} data-testid="save-sale">
                     {saving ? t('loading') : t('save')}

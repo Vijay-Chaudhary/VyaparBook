@@ -83,3 +83,17 @@ export function belowFloor(ratePaise, floor) {
 
     return ratePaise < floor;
 }
+
+/**
+ * Does this order need the salesman to confirm a below-cost line before it can
+ * be saved?
+ *
+ * The floor used to BLOCK submit. It no longer does — the shop sells some packs
+ * under cost deliberately, and refusing meant half its catalog could not be
+ * sold. But going silent would give up the other thing the block did: catching
+ * a mis-key, since ₹9 typed for ₹90 is below almost any floor. One deliberate
+ * tap keeps the typo caught and lets the real case through.
+ */
+export function needsCostConfirmation(violations) {
+    return (violations ?? []).some((floor) => floor !== null && floor !== undefined);
+}

@@ -4,7 +4,7 @@
 @section('title', __('orders.title') . ' — ' . config('app.name'))
 
 @section('content')
-@php use App\Orders\OrderAdjustment; use App\Support\Inr; @endphp
+@php use App\Orders\OrderAdjustment; use App\Pricing\PriceFloor; use App\Support\Inr; @endphp
 <div class="mx-auto max-w-5xl p-4">
     <header class="mb-4 flex items-center justify-between">
         <h1 class="text-xl font-bold">{{ __('orders.heading') }}</h1>
@@ -56,6 +56,10 @@
                     </thead>
                     <tbody>
                         @foreach ($order->lines as $line)
+                            @php
+                                $floor = $line->productPack ? PriceFloor::for($line->productPack) : null;
+                                $under = $floor !== null && bccomp((string) $line->rate, $floor, 2) < 0;
+                            @endphp
                             <tr>
                                 <td>
                                     {{ $line->productPack?->product?->name_en ?: $line->productPack?->product?->name_hi }}
@@ -68,6 +72,15 @@
                                 <td class="text-right">
                                     <input type="number" step="0.01" min="0" class="field-input w-24 text-right"
                                            name="lines[{{ $line->id }}][rate]" value="{{ $line->rate }}">
+                                    {{-- Cost is advice, not a limit: this shop sells
+                                         some packs under cost deliberately. Shown only
+                                         when the rate is actually below it, so the
+                                         common line stays uncluttered. --}}
+                                    @if ($under)
+                                        <span class="block text-xs font-medium text-danger">
+                                            {{ __('orders.under_cost', ['cost' => Inr::format($floor)]) }}
+                                        </span>
+                                    @endif
                                 </td>
                             </tr>
                         @endforeach

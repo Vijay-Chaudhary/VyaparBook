@@ -11,6 +11,10 @@ return [
     'product' => 'Product',
     'qty' => 'Qty',
     'rate' => 'Rate',
+    // Cost is advice, not a limit — the shop sells some packs under cost on
+    // purpose. Shown only when a rate is actually below it, so the choice is
+    // informed, never refused.
+    'under_cost' => 'Under cost — :cost',
     'total' => 'Total',
     'accept' => 'Accept',
     'reject' => 'Reject',

@@ -86,20 +86,24 @@ class SyncController extends Controller
         $productionBatches = $stockDelta(ProductionBatch::class);
         $materialConsumptions = $stockDelta(MaterialConsumption::class);
 
-        // A salesman gets only the orders they took; owner/admin see all. Same
-        // shape as beats. This assumes the order-taker delivers it.
-        $orders = $isManager
-            ? $delta(Order::class)
-            : Order::where('sync_seq', '>', $since)
-                ->where('created_by', (int) app('tenant.user_id'))
-                ->orderBy('sync_seq')
-                ->get();
+        // Everyone in the shop sees every order, exactly as they already see
+        // every sale — because anyone may have to deliver one. Withholding a
+        // colleague's order was the ONLY thing stopping a second salesman from
+        // delivering it: roleAllows() gates writes by role, and deliver/pack/
+        // cancel carry no creator check, so this widens visibility and no
+        // authority. Note this is less than the device already holds: a
+        // delivered order becomes a sale, and sales stream wholesale above.
+        //
+        // Unlike beats, which are a plan for a particular person, an order is
+        // work the shop owes a customer — so it filters differently on purpose.
+        $orders = $delta(Order::class);
 
-        // Lines follow their order, so nothing on the device dangles.
-        $orderLines = OrderLine::where('sync_seq', '>', $since)
-            ->whereIn('order_id', $orders->pluck('id'))
-            ->orderBy('sync_seq')
-            ->get();
+        // Lines delta independently, like sale_lines. They used to be filtered
+        // to the orders in THIS delta, which held only because a device that
+        // could see an order had seen it since creation. pack and deliver bump
+        // the order's sync_seq and not its lines', so that filter would now
+        // hand a colleague an order with nothing in it.
+        $orderLines = $delta(OrderLine::class);
 
         $maxSeqs = collect([
             $customers, $sales, $saleLines, $payments, $beats, $beatCustomers,

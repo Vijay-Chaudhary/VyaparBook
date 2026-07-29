@@ -147,3 +147,55 @@ describe('isOverdue', () => {
         expect(isOverdue(undefined, now)).toBe(false);
     });
 });
+
+describe('buildOrderList — whose order is it', () => {
+    const packs = [{ id: 'k1', product_id: 'p1', label: '1kg' }];
+    const products = [{ id: 'p1', name_en: 'Sev Mix', name_hi: 'सेव मिक्स' }];
+
+    it('marks an order this device took as mine', () => {
+        const [order] = buildOrderList({
+            orders: [{ id: 'o1', uuid: 'u1', status: 'accepted', created_by: 7 }],
+            packs, products, userId: 7,
+        });
+
+        expect(order.mine).toBe(true);
+    });
+
+    it('marks a colleague\'s order as not mine, so delivering it is deliberate', () => {
+        const [order] = buildOrderList({
+            orders: [{ id: 'o1', uuid: 'u1', status: 'packed', created_by: 9 }],
+            packs, products, userId: 7,
+        });
+
+        expect(order.mine).toBe(false);
+    });
+
+    it('compares ids across types, since JSON and Dexie disagree about numbers', () => {
+        const [order] = buildOrderList({
+            orders: [{ id: 'o1', uuid: 'u1', status: 'packed', created_by: '7' }],
+            packs, products, userId: 7,
+        });
+
+        expect(order.mine).toBe(true);
+    });
+
+    it('claims nothing before whoami has resolved', () => {
+        // Marking every order as a stranger's while userId is still null would
+        // be wrong about all of them, including the ones this device took.
+        const [order] = buildOrderList({
+            orders: [{ id: 'o1', uuid: 'u1', status: 'packed', created_by: 9 }],
+            packs, products,
+        });
+
+        expect(order.mine).toBe(true);
+    });
+
+    it('treats a queued order as mine — it is in this device\'s outbox', () => {
+        const [order] = buildOrderList({
+            outbox: [{ type: 'order', uuid: 'q1', payload: { customer_id: 'c1', lines: [] } }],
+            packs, products, userId: 7,
+        });
+
+        expect(order.mine).toBe(true);
+    });
+});

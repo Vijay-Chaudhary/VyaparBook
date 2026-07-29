@@ -8,7 +8,6 @@ use App\Models\Order;
 use App\Models\OrderLine;
 use App\Models\ProductPack;
 use App\Orders\OrderStatus;
-use App\Pricing\PriceFloor;
 use Illuminate\Database\Eloquent\ModelNotFoundException;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Validation\ValidationException;
@@ -69,18 +68,11 @@ class OrderWriter
                     ? bcadd((string) $line['rate'], '0', 2)
                     : bcadd((string) $pack->default_sell_price, '0', 2);
 
-                // The same floor a sale is held to. An order below cost would
-                // only be refused later at delivery, after the shop was told.
-                $floor = PriceFloor::for($pack);
-                if ($floor !== null && bccomp($rate, $floor, 2) < 0) {
-                    throw ValidationException::withMessages([
-                        'lines' => __('sales.rate_below_floor', [
-                            'product' => $pack->product?->name_en ?: $pack->product?->name_hi ?: 'this product',
-                            'floor' => $floor,
-                        ]),
-                    ]);
-                }
-
+                // No floor check. Below cost is a decision the shop is allowed
+                // to make — it sells some packs at or under cost deliberately —
+                // so the phone warns and confirms rather than the server
+                // refusing. Delivery re-runs the same (absent) rule, so an
+                // order accepted below cost still becomes a sale.
                 $lineTotal = bcmul($rate, (string) $line['qty'], 2);
                 $lines[] = [
                     'product_pack_id' => $pack->id,

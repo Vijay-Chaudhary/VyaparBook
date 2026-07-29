@@ -130,18 +130,18 @@ class LedgerWriter
                 $listRate = $this->khata->snapshotRate($pack);
                 $rate = isset($line['rate']) ? bcadd((string) $line['rate'], '0', 2) : $listRate;
 
+                // The cost basis, snapshot rather than enforced.
+                //
+                // This used to throw below cost. It no longer does: this shop
+                // genuinely sells some packs at or under cost, and refusing
+                // meant half its catalog could not be sold at all. The floor is
+                // now advice the client shows and the salesman confirms — see
+                // the phone's below-cost confirmation in Forms.jsx.
+                //
+                // Recorded on the line because "what did we sell under cost?"
+                // cannot be answered later from today's cost, for the same
+                // reason list_rate is snapshot: costs move.
                 $floor = PriceFloor::for($pack);
-
-                // Checked on the rate alone: a return is a negative qty at a
-                // positive rate, bounded by the same rule as the sale it reverses.
-                if ($floor !== null && bccomp($rate, $floor, 2) < 0) {
-                    throw ValidationException::withMessages([
-                        'lines' => __('sales.rate_below_floor', [
-                            'product' => $pack->product?->name_en ?: $pack->product?->name_hi ?: 'this product',
-                            'floor' => $floor,
-                        ]),
-                    ]);
-                }
 
                 $lineTotal = bcmul($rate, (string) $line['qty'], 2);
 
@@ -150,6 +150,7 @@ class LedgerWriter
                     'qty' => $line['qty'],
                     'rate' => $rate,
                     'list_rate' => $listRate,
+                    'cost_at_sale' => $floor,
                     'line_total' => $lineTotal,
                 ];
                 $total = bcadd($total, $lineTotal, 2);
@@ -174,6 +175,10 @@ class LedgerWriter
                     'rate' => $l['rate'],
                 ]);
                 $saleLine->list_rate = $l['list_rate'];
+                // Server-authored like list_rate, and for the same reason: a
+                // phone must not be able to claim it sold above a cost it made
+                // up. Stamped, never fillable.
+                $saleLine->cost_at_sale = $l['cost_at_sale'];
                 $saleLine->line_total = $l['line_total'];
                 $saleLine->save();
             }

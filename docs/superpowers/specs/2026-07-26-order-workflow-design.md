@@ -90,10 +90,15 @@ transition may leave a terminal state.
 order is allowed for whoever may record a sale today (owner, admin, salesman —
 not accountant); accepting and rejecting are owner/admin, like voiding a sale.
 Cancellation is available to owner/admin for any non-terminal order, and to a
-salesman **for orders they created** in any non-terminal state — including one
-still `pending`, since a shop that changes its mind an hour later should not
+salesman ~~**for orders they created**~~ in any non-terminal state — including
+one still `pending`, since a shop that changes its mind an hour later should not
 need the owner to intervene. A shop refusing goods at the door is the case that
 justifies cancelling a `packed` order.
+
+**Superseded (2026-07-29):** the creator restriction was enforced solely by pull
+visibility and never by a check. Now that anyone may deliver, anyone may cancel
+— the person at the door refusing the goods is the one who has to record it. See
+`2026-07-29-order-delivery-by-anyone-design.md` Decision 4.
 
 `status_note` carries the reason for **both** rejection and cancellation, and is
 optional in each case: an unexplained rejection is unhelpful but not invalid.
@@ -144,10 +149,14 @@ the books say:
 
 ## Sync visibility
 
-A salesman pulls the orders they created; owner and admin pull all — the same
+~~A salesman pulls the orders they created; owner and admin pull all — the same
 shape as beats, where a salesman gets only their own route. **This assumes the
 person who took the order delivers it**, which holds for a one-van operation but
-not for a shop that separates selling from delivery.
+not for a shop that separates selling from delivery.~~
+
+**Superseded (2026-07-29)** by `2026-07-29-order-delivery-by-anyone-design.md`:
+every user in the tenant now pulls every order, as they already pull every sale.
+The server never checked who took an order, so this was visibility only.
 
 ## Error handling / edge cases
 

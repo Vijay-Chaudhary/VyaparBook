@@ -83,6 +83,9 @@ function App({ userName, locale }) {
     const [db, setDb] = useState(null);
     const [tenantId, setTenantId] = useState(null);
     const [role, setRole] = useState(null);
+    // Who this device is. whoami has always returned it; nothing kept it until
+    // orders became visible shop-wide and the list had to say which are yours.
+    const [userId, setUserId] = useState(null);
     // Non-null when a platform admin launched a read-only "view as tenant" from
     // the console. Drives the banner and blocks every write path.
     const [impersonation, setImpersonation] = useState(null);
@@ -126,6 +129,7 @@ function App({ userName, locale }) {
                 setNeedsPick(false);
                 setTenantId(identity.tenant_id);
                 setRole(identity.role);
+                setUserId(identity.user_id);
                 setDb(openTenantDb(identity.tenant_id));
                 return;
             }
@@ -274,6 +278,10 @@ function App({ userName, locale }) {
                 packs: packRows,
                 products: productRows,
                 locale: getLocale(),
+                // Marks which orders this device took, now that the pull sends
+                // the whole shop's. In the deps below, so the list is remarked
+                // if whoami resolves after the first refresh.
+                userId,
             }));
             setQueued(await pendingCount(database));
             setStaleness(await stalenessState(database));
@@ -298,7 +306,7 @@ function App({ userName, locale }) {
                 );
             }
         },
-        [canManageStock]
+        [canManageStock, userId]
     );
 
     useEffect(() => {

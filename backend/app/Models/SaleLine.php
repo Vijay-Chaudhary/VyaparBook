@@ -23,6 +23,11 @@ class SaleLine extends Model
         'qty' => 'integer',
         'rate' => 'decimal:2',
         'list_rate' => 'decimal:2',
+        // What the pack cost the day it sold. Snapshot, not re-derived: costs
+        // move, and "did we sell this under cost?" must keep the answer it had
+        // at the time. Null on rows written before it was recorded — unknown,
+        // never "it was fine".
+        'cost_at_sale' => 'decimal:2',
         'line_total' => 'decimal:2',
         'version' => 'integer',
         'sync_seq' => 'integer',
