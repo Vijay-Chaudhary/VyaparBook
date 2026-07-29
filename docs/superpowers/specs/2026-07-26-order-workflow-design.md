@@ -53,10 +53,14 @@ invariant, so the first decision is about money, not statuses.
    field win would create a sale the owner explicitly declined.
 
 7. **The owner may adjust quantities and prices at acceptance.**
-   **Known limitation, accepted deliberately:** the original order is not
+   ~~**Known limitation, accepted deliberately:** the original order is not
    preserved, so if a shop was promised 10 packs at ₹90 and receives 8 at ₹95,
    nothing records that it changed. Recording both was considered and rejected
-   as more machinery than the workflow currently earns.
+   as more machinery than the workflow currently earns.~~
+   **Superseded (2026-07-29)** by
+   `2026-07-29-order-acceptance-audit-trail-design.md`: `order_lines` now
+   carries `ordered_qty`/`ordered_rate`, stamped at creation, and the change is
+   derived rather than stored.
 
 8. **Packing does not touch stock.** Finished goods are derived (production
    minus sales), so inventory moves exactly when the sale is created at
@@ -185,8 +189,9 @@ delivery) landing as early as the writer exists.
 
 ## Out of scope
 
-Partial delivery; stock reservation at packing; recording what changed at
-acceptance (Decision 7); delivery by someone other than the order-taker;
+Partial delivery; stock reservation at packing; ~~recording what changed at
+acceptance (Decision 7)~~ (shipped 2026-07-29, see Decision 7); delivery by
+someone other than the order-taker;
 customer-facing order notifications; and any change to how sales, khata, COGS,
 invoicing or reminders work.
 

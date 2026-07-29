@@ -43,6 +43,7 @@ const strings = {
         deliver: 'पहुँचा दिया',
         cancel_order: 'रद्द करें',
         awaiting_acceptance: 'मालिक की स्वीकृति की प्रतीक्षा',
+        order_adjusted: 'मालिक ने इस ऑर्डर को बदला',
         pending: 'प्रतीक्षारत',
         accepted: 'स्वीकृत',
         packed: 'पैक हुआ',
@@ -172,6 +173,9 @@ const strings = {
         deliver: 'Mark delivered',
         cancel_order: 'Cancel',
         awaiting_acceptance: 'Waiting for the owner to accept',
+        // Warns the salesman BEFORE they reach the shop that what was approved
+        // is not what they promised. Absent when nothing changed.
+        order_adjusted: 'The owner changed this order',
         pending: 'Waiting',
         accepted: 'Accepted',
         packed: 'Packed',

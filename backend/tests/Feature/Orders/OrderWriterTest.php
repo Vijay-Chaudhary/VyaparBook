@@ -295,3 +295,50 @@ it('refuses to deliver an order that was never packed', function () {
 
     expect($call)->toThrow(Illuminate\Validation\ValidationException::class);
 });
+
+describe('what the salesman ordered', function () {
+    it('stamps the originals at creation, so acceptance has something to differ from', function () {
+        [$b, $u, $c, $pack] = orderSetup();
+
+        $order = inOrderTenant($b, $u, fn () => app(OrderWriter::class)
+            ->createOrder(orderPayload($c, $pack))[0]);
+
+        $line = DB::connection('pgsql_migrate')->table('order_lines')
+            ->where('order_id', $order->id)->first();
+
+        expect($line->ordered_qty)->toBe(2);
+        expect((string) $line->ordered_rate)->toBe('85.00');
+    });
+
+    it('stamps the pack default when the phone sent no rate', function () {
+        // The original must be what was actually promised, which for a line
+        // with no negotiated rate is the default the phone showed the shop.
+        [$b, $u, $c, $pack] = orderSetup();
+
+        $order = inOrderTenant($b, $u, fn () => app(OrderWriter::class)->createOrder(
+            orderPayload($c, $pack, ['lines' => [['product_pack_id' => $pack->id, 'qty' => 2]]])
+        )[0]);
+
+        expect((string) DB::connection('pgsql_migrate')->table('order_lines')
+            ->where('order_id', $order->id)->value('ordered_rate'))->toBe('90.00');
+    });
+
+    it('ignores a phone claiming it ordered something else', function () {
+        // Server-authored like sale_lines.list_rate: the value exists to hold
+        // the field to what it promised, so the field must not write it.
+        [$b, $u, $c, $pack] = orderSetup();
+
+        $order = inOrderTenant($b, $u, fn () => app(OrderWriter::class)->createOrder(
+            orderPayload($c, $pack, ['lines' => [[
+                'product_pack_id' => $pack->id, 'qty' => 2, 'rate' => '85.00',
+                'ordered_qty' => 99, 'ordered_rate' => '999.00',
+            ]]])
+        )[0]);
+
+        $line = DB::connection('pgsql_migrate')->table('order_lines')
+            ->where('order_id', $order->id)->first();
+
+        expect($line->ordered_qty)->toBe(2);
+        expect((string) $line->ordered_rate)->toBe('85.00');
+    });
+});
