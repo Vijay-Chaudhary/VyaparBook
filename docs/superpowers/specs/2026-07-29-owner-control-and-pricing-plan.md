@@ -1,8 +1,9 @@
 # Owner Control & Pricing Configuration — Plan
 
 **Date:** 2026-07-29
-**Status:** Phase 1 **shipped 2026-07-29** (see below). Phases 2 and 3 remain
-proposals awaiting the decisions at the foot of this document.
+**Status:** Phases 1 and 2 **shipped 2026-07-29** (see each below). Phase 3
+remains a proposal awaiting the reversal-vs-delete decision at the foot of this
+document.
 **Scope:** (1) make the cost floor advisory, (2) give the owner a pricing
 configuration screen, (3) let the owner correct orders, payments, customers,
 stock and production.
@@ -100,7 +101,40 @@ decision — each flip should be deliberate, not bulk-edited.
 
 ---
 
-## Phase 2 — pricing configuration screen (owner Blade)
+## Phase 2 — pricing configuration screen — ✅ SHIPPED 2026-07-29
+
+**What actually shipped:**
+
+- [x] `/pricing`, owner-only Blade, grouped by product: per-kg cost per product,
+      then pack cost and suggested price per pack.
+- [x] Margin in money **and** percent, red on a loss.
+- [x] The precedence trap made visible: each pack row says whether its cost
+      *overrides* the per-kg figure or is *derived from* it.
+- [x] **"Recost every pack from ₹x per kg"** per product — the action that
+      defeats the trap. Rounds **UP** to the paisa, matching what `PriceFloor`
+      does when it derives a floor; `CatalogService::suggestedCostPrice`
+      truncates, so it is deliberately not reused here (it would set every
+      stored floor a paisa *below* true cost).
+- [x] Blank cost box stores **NULL, not zero** — zero is a real, different
+      answer (a free issue) that `PriceFloor` honours.
+- [x] Selling price labelled a **starting suggestion**, since every sale here is
+      negotiated.
+- [x] Linked from the dashboard, not URL-only.
+- [x] New pure `App\Pricing\Margin` (DB-free, like `PriceFloor`), 10 unit tests.
+- **Bug found and fixed on the way:** the controller eager-loaded only
+      `packSize`, but `PriceFloor`'s docblock requires `product` too. Packs with
+      a stored cost return early and never touch it, so this only broke on
+      derived-cost packs — invisible on the real catalog, where all 21 have
+      stored costs. Caught by a test, not by looking.
+- [ ] **Not built:** dated cost history. Costs overwrite, per the recommendation
+      below — last month's COGS shifts if you edit a cost today.
+
+**Decision taken:** owner-only, matching GST/reminders/beats/purchases. Order
+acceptance remains the one screen admitting admins, because that is a daily
+operational job; setting cost is not.
+
+### Original proposal
+
 
 **The problem.** `default_sell_price`, `default_cost_price` (per pack) and
 `base_cost_per_kg` (per product) are reachable only through

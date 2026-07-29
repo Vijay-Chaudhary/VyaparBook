@@ -15,6 +15,7 @@
             <a href="{{ route('purchases', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_purchases') }}</a>
             <a href="{{ route('suppliers', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_suppliers') }}</a>
             <a href="{{ route('beats', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_beats') }}</a>
+            <a href="{{ route('pricing', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_pricing') }}</a>
             <a href="{{ route('gst', ['business' => $businessId]) }}" class="text-brand">{{ __('reports.manage_gst') }}</a>
             <a href="{{ route('app') }}" class="text-brand">{{ __('reports.back_to_app') }}</a>
         </nav>

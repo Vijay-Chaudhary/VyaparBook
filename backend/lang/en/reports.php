@@ -105,5 +105,6 @@ return [
     // Owner-tool links in the dashboard header.
     'manage_orders' => 'Approvals',
     'manage_beats' => 'Beats',
+    'manage_pricing' => 'Costs & prices',
     'manage_gst' => 'GST',
 ];
