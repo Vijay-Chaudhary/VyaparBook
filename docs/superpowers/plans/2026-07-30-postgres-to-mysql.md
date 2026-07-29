@@ -96,12 +96,19 @@ sudo mysql <<'SQL'
 CREATE DATABASE IF NOT EXISTS vyaparbook
   CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
+-- BOTH host patterns. MySQL resolves 127.0.0.1 back to `localhost`, so a
+-- grant to '%' alone is NOT matched and you get a confusing
+-- "Access denied for user ...@'localhost'" even though DB_HOST is 127.0.0.1.
+CREATE USER IF NOT EXISTS 'vyaparbook_app'@'localhost' IDENTIFIED BY 'vyaparbook_app_secret';
 CREATE USER IF NOT EXISTS 'vyaparbook_app'@'%' IDENTIFIED BY 'vyaparbook_app_secret';
+GRANT ALL PRIVILEGES ON vyaparbook.* TO 'vyaparbook_app'@'localhost';
 GRANT ALL PRIVILEGES ON vyaparbook.* TO 'vyaparbook_app'@'%';
 
 -- SELECT and nothing else: this is the half of the old BYPASSRLS role that
 -- survives, so the superadmin console physically cannot mutate tenant data.
+CREATE USER IF NOT EXISTS 'vyapar_platform_ro'@'localhost' IDENTIFIED BY 'platform_ro_pw';
 CREATE USER IF NOT EXISTS 'vyapar_platform_ro'@'%' IDENTIFIED BY 'platform_ro_pw';
+GRANT SELECT ON vyaparbook.* TO 'vyapar_platform_ro'@'localhost';
 GRANT SELECT ON vyaparbook.* TO 'vyapar_platform_ro'@'%';
 
 FLUSH PRIVILEGES;
