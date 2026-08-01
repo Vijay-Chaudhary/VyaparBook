@@ -34,7 +34,7 @@ function seedFullTenant(): array
     $business = Business::factory()->create();
     $user = User::factory()->create();
 
-    Membership::on('pgsql_migrate')->create([
+    Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => 'owner',
@@ -46,7 +46,6 @@ function seedFullTenant(): array
     // suite uses.
     $mk = function (string $class, array $attributes) use ($business) {
         $model = $class::factory()->make($attributes + ['business_id' => $business->id]);
-        $model->setConnection('pgsql_migrate');
         $model->save();
 
         return $model;
@@ -66,7 +65,7 @@ function seedFullTenant(): array
     $mk(Subscription::class, []);
     $mk(SubscriptionPayment::class, []);
 
-    DB::connection('pgsql_migrate')->table('invites')->insert([
+    DB::table('invites')->insert([
         'id' => (string) Str::uuid(),
         'business_id' => $business->id,
         'role' => 'salesman',
@@ -76,7 +75,7 @@ function seedFullTenant(): array
         'updated_at' => now(),
     ]);
 
-    DB::connection('pgsql_migrate')->table('expenses')->insert([
+    DB::table('expenses')->insert([
         'id' => (string) Str::uuid(),
         'business_id' => $business->id,
         'uuid' => (string) Str::uuid(),
@@ -89,7 +88,7 @@ function seedFullTenant(): array
     ]);
 
     $supplierId = (string) Str::uuid();
-    DB::connection('pgsql_migrate')->table('suppliers')->insert([
+    DB::table('suppliers')->insert([
         'id' => $supplierId,
         'business_id' => $business->id,
         'uuid' => (string) Str::uuid(),
@@ -98,7 +97,7 @@ function seedFullTenant(): array
         'created_at' => now(),
         'updated_at' => now(),
     ]);
-    DB::connection('pgsql_migrate')->table('purchases')->insert([
+    DB::table('purchases')->insert([
         'id' => (string) Str::uuid(),
         'business_id' => $business->id,
         'uuid' => (string) Str::uuid(),
@@ -112,7 +111,7 @@ function seedFullTenant(): array
         'created_at' => now(),
         'updated_at' => now(),
     ]);
-    DB::connection('pgsql_migrate')->table('supplier_payments')->insert([
+    DB::table('supplier_payments')->insert([
         'id' => (string) Str::uuid(),
         'business_id' => $business->id,
         'uuid' => (string) Str::uuid(),
@@ -128,17 +127,17 @@ function seedFullTenant(): array
     return [$business, $user];
 }
 
-/** Count this tenant's rows across every table, bypassing RLS. */
+/** Count this tenant's rows across every table, past the application scope. */
 function tenantRowCount(string $businessId): int
 {
-    $tables = collect(DB::connection('pgsql_migrate')->select(
+    $tables = collect(DB::select(
         'select table_name from information_schema.columns
-         where column_name = ? and table_schema = ?',
-        ['business_id', 'public']
+         where column_name = ? and table_schema = database()',
+        ['business_id']
     ))->pluck('table_name');
 
-    return $tables->sum(fn (string $t) => DB::connection('pgsql_migrate')
-        ->table($t)->where('business_id', $businessId)->count());
+    return $tables->sum(fn (string $t) => DB::table($t)
+        ->where('business_id', $businessId)->count());
 }
 
 it('destroys every tenant-owned row across all tables', function () {
@@ -159,7 +158,7 @@ it('leaves a tombstone: the row survives with its identity cleared', function ()
 
     (new TenantEraser())->erase($business->id);
 
-    $row = DB::connection('pgsql_migrate')->table('businesses')->where('id', $business->id)->first();
+    $row = DB::table('businesses')->where('id', $business->id)->first();
 
     expect($row)->not->toBeNull();
     // name is NOT NULL, so it carries a constant marker rather than the shop's
@@ -183,7 +182,7 @@ it('never touches another tenant', function () {
     (new TenantEraser())->erase($mine->id);
 
     expect(tenantRowCount($other->id))->toBe($before);
-    expect(DB::connection('pgsql_migrate')->table('businesses')->where('id', $other->id)->first()->name)
+    expect(DB::table('businesses')->where('id', $other->id)->first()->name)
         ->not->toBeNull();
 });
 
@@ -196,7 +195,7 @@ it('keeps a shared user\'s membership in their other business', function () {
     [$erased, $user] = seedFullTenant();
     $keep = Business::factory()->create();
 
-    Membership::on('pgsql_migrate')->create([
+    Membership::create([
         'user_id' => $user->id,
         'business_id' => $keep->id,
         'role' => 'owner',
@@ -204,7 +203,7 @@ it('keeps a shared user\'s membership in their other business', function () {
 
     (new TenantEraser())->erase($erased->id);
 
-    $remaining = DB::connection('pgsql_migrate')->table('memberships')
+    $remaining = DB::table('memberships')
         ->where('user_id', $user->id)->get();
 
     expect($remaining)->toHaveCount(1);
@@ -232,7 +231,7 @@ it('preserves the audit trail and records which shop was erased', function () {
     $this->artisan('tenant:erase', ['business_id' => $business->id, '--force' => true])
         ->assertExitCode(0);
 
-    $log = PlatformAuditLog::on('pgsql_migrate')->where('action', 'erase_tenant')->first();
+    $log = PlatformAuditLog::where('action', 'erase_tenant')->first();
 
     expect($log)->not->toBeNull();
     // The trail still points at the tombstone, and carries the name the

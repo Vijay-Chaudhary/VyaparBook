@@ -8,7 +8,7 @@ use Illuminate\Support\Str;
 it('generates a uuid primary key and stamps a positive sync_seq', function () {
     $business = Business::factory()->create();
 
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id,
         'uuid' => (string) Str::uuid(),
         'name' => 'Ram Traders',
@@ -24,7 +24,7 @@ it('generates a uuid primary key and stamps a positive sync_seq', function () {
 it('casts opening_balance to a 2-decimal string, not a float', function () {
     $business = Business::factory()->create();
 
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id,
         'uuid' => (string) Str::uuid(),
         'name' => 'Shyam Stores',
@@ -37,7 +37,7 @@ it('casts opening_balance to a 2-decimal string, not a float', function () {
 it('defaults opening_balance to 0.00', function () {
     $business = Business::factory()->create();
 
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id,
         'uuid' => (string) Str::uuid(),
         'name' => 'Mohan Kirana',
@@ -50,11 +50,11 @@ it('rejects a duplicate uuid within the same business', function () {
     $business = Business::factory()->create();
     $uuid = (string) Str::uuid();
 
-    Customer::on('pgsql_migrate')->create([
+    Customer::create([
         'business_id' => $business->id, 'uuid' => $uuid, 'name' => 'Ram',
     ]);
 
-    expect(fn () => Customer::on('pgsql_migrate')->create([
+    expect(fn () => Customer::create([
         'business_id' => $business->id, 'uuid' => $uuid, 'name' => 'Ram Again',
     ]))->toThrow(\Illuminate\Database\QueryException::class);
 });

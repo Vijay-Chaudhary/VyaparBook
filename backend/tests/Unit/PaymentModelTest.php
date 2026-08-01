@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 
 function paymentCustomerFor(Business $business): Customer
 {
-    return Customer::on('pgsql_migrate')->create([
+    return Customer::create([
         'business_id' => $business->id,
         'uuid' => (string) Str::uuid(),
         'name' => 'Ram Traders',
@@ -27,7 +27,6 @@ function paymentFor(Business $business, Customer $customer, User $user, string $
         'mode' => 'cash',
         'reverses_id' => $reversesId,
     ]);
-    $payment->setConnection('pgsql_migrate');
     $payment->created_by = $user->id;
     $payment->save();
 
@@ -56,7 +55,7 @@ it('resolves a reversal back to the original payment it corrects', function () {
     $original = paymentFor($business, $customer, $user, '500.00');
     $reversal = paymentFor($business, $customer, $user, '-500.00', $original->id);
 
-    $fresh = Payment::on('pgsql_migrate')->with('reverses')->find($reversal->id);
+    $fresh = Payment::with('reverses')->find($reversal->id);
     expect($fresh->reverses->id)->toBe($original->id);
     expect($fresh->amount)->toBe('-500.00');
 });

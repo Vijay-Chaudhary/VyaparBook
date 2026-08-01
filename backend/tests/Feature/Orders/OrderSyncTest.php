@@ -17,22 +17,22 @@ function orderSyncSetup(string $role = 'salesman'): array
 {
     $business = Business::factory()->create();
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id, 'business_id' => $business->id, 'role' => $role,
     ]);
     $token = (new TokenService())->issue($user, $membership);
 
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Ram Traders', 'opening_balance' => '0.00',
     ]);
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
-    $size = PackSize::on('pgsql_migrate')->create([
+    $size = PackSize::create([
         'business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
-    $pack = ProductPack::on('pgsql_migrate')->create([
+    $pack = ProductPack::create([
         'business_id' => $business->id, 'product_id' => $product->id,
         'pack_size_id' => $size->id, 'default_sell_price' => '90.00',
     ]);
@@ -58,7 +58,7 @@ it('accepts an order mutation and creates a pending order', function () {
         ],
     ]])->assertOk()->assertJsonPath('results.0.status', 'applied');
 
-    $order = DB::connection('pgsql_migrate')->table('orders')->where('business_id', $business->id)->sole();
+    $order = DB::table('orders')->where('business_id', $business->id)->sole();
     expect($order->status)->toBe('pending');
     expect((string) $order->total)->toBe('170.00');
 });
@@ -76,7 +76,7 @@ it('walks an order through pack and deliver from the field', function () {
     ]])->assertOk();
 
     // Acceptance is the online step; do it directly, as the Blade screen would.
-    DB::connection('pgsql_migrate')->table('orders')->where('uuid', $uuid)
+    DB::table('orders')->where('uuid', $uuid)
         ->update(['status' => 'accepted', 'accepted_by' => $user->id, 'accepted_at' => now()]);
 
     pushOrder($token, [[
@@ -89,9 +89,9 @@ it('walks an order through pack and deliver from the field', function () {
         'payload' => ['order_uuid' => $uuid],
     ]])->assertOk()->assertJsonPath('results.0.status', 'applied');
 
-    expect(DB::connection('pgsql_migrate')->table('orders')->where('uuid', $uuid)->value('status'))
+    expect(DB::table('orders')->where('uuid', $uuid)->value('status'))
         ->toBe('delivered');
-    expect(DB::connection('pgsql_migrate')->table('sales')->where('business_id', $business->id)->count())
+    expect(DB::table('sales')->where('business_id', $business->id)->count())
         ->toBe(1);
 });
 
@@ -111,8 +111,8 @@ it('parks a deliver for a rejected order without killing the batch', function ()
     }
 
     // The owner rejected one while the phone was offline; the other is fine.
-    DB::connection('pgsql_migrate')->table('orders')->where('uuid', $bad)->update(['status' => 'rejected']);
-    DB::connection('pgsql_migrate')->table('orders')->where('uuid', $good)->update(['status' => 'packed']);
+    DB::table('orders')->where('uuid', $bad)->update(['status' => 'rejected']);
+    DB::table('orders')->where('uuid', $good)->update(['status' => 'packed']);
 
     $response = pushOrder($token, [
         ['type' => 'order_deliver', 'tenant_id' => $business->id, 'uuid' => (string) Str::uuid(),
@@ -126,7 +126,7 @@ it('parks a deliver for a rejected order without killing the batch', function ()
     expect($response->json('results.1.status'))->toBe('applied');
 
     // Exactly one sale: the rejected order made none.
-    expect(DB::connection('pgsql_migrate')->table('sales')->where('business_id', $business->id)->count())
+    expect(DB::table('sales')->where('business_id', $business->id)->count())
         ->toBe(1);
 });
 
@@ -141,7 +141,7 @@ it('forbids an accountant from taking an order, as it forbids them a sale', func
         ],
     ]])->assertOk()->assertJsonPath('results.0.reason', 'forbidden');
 
-    expect(DB::connection('pgsql_migrate')->table('orders')->where('business_id', $business->id)->count())
+    expect(DB::table('orders')->where('business_id', $business->id)->count())
         ->toBe(0);
 });
 
@@ -161,11 +161,11 @@ it('streams a salesman an order a DIFFERENT salesman took, so anyone can deliver
     // thing stopping a colleague delivering it — the server never checked who
     // took an order, only the caller's role.
     $other = User::factory()->create();
-    Membership::on('pgsql_migrate')->create([
+    Membership::create([
         'user_id' => $other->id, 'business_id' => $business->id, 'role' => 'salesman',
     ]);
     $theirs = (string) Str::uuid();
-    DB::connection('pgsql_migrate')->table('orders')->insert([
+    DB::table('orders')->insert([
         'id' => (string) Str::uuid(), 'business_id' => $business->id, 'uuid' => $theirs,
         'customer_id' => $customer->id, 'order_date' => '2026-07-26', 'status' => 'pending',
         'total' => '90.00', 'created_by' => $other->id, 'sync_seq' => 999999,
@@ -220,7 +220,7 @@ it('sends an order with its lines even when only the order was touched', functio
     $cursor = test()->withHeader('Authorization', "Bearer {$token}")
         ->getJson('/api/v1/sync/pull?since=0')->json('cursor');
 
-    DB::connection('pgsql_migrate')->table('orders')
+    DB::table('orders')
         ->where('uuid', $uuid)->update(['status' => 'accepted']);
     pushOrder($token, [[
         'type' => 'order_pack', 'tenant_id' => $business->id, 'uuid' => (string) Str::uuid(),
@@ -242,12 +242,12 @@ it('sends a fresh device every order line in the shop, not only its own orders\'
     [$business, , $token, $customer, $pack] = orderSyncSetup();
 
     $other = User::factory()->create();
-    Membership::on('pgsql_migrate')->create([
+    Membership::create([
         'user_id' => $other->id, 'business_id' => $business->id, 'role' => 'salesman',
     ]);
     $otherToken = (new TokenService())->issue(
         $other,
-        Membership::on('pgsql_migrate')->where('user_id', $other->id)->firstOrFail()
+        Membership::where('user_id', $other->id)->firstOrFail()
     );
 
     pushOrder($otherToken, [[
@@ -279,12 +279,12 @@ it('lets a second salesman deliver an order they did not take, creating one sale
         ],
     ]])->assertOk();
 
-    DB::connection('pgsql_migrate')->table('orders')
+    DB::table('orders')
         ->where('uuid', $uuid)->update(['status' => 'packed']);
 
     // A colleague, who never saw this order until the pull widened.
     $other = User::factory()->create();
-    $otherMembership = Membership::on('pgsql_migrate')->create([
+    $otherMembership = Membership::create([
         'user_id' => $other->id, 'business_id' => $business->id, 'role' => 'salesman',
     ]);
     $otherToken = (new TokenService())->issue($other, $otherMembership);
@@ -294,7 +294,7 @@ it('lets a second salesman deliver an order they did not take, creating one sale
         'payload' => ['order_uuid' => $uuid],
     ]])->assertOk()->assertJsonPath('results.0.status', 'applied');
 
-    $sales = DB::connection('pgsql_migrate')->table('sales')->where('business_id', $business->id)->get();
+    $sales = DB::table('sales')->where('business_id', $business->id)->get();
     expect($sales)->toHaveCount(1);
     // created_by is whoever delivered — the sale records the money event, and
     // handing the goods over is the act being recorded.

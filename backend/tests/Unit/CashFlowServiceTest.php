@@ -21,7 +21,7 @@ function inCashTenant(string $businessId, callable $fn): mixed
 
 function cashCustomer(Business $b): App\Models\Customer
 {
-    return App\Models\Customer::on('pgsql_migrate')->create([
+    return App\Models\Customer::create([
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Cust', 'village' => 'V', 'opening_balance' => '0.00',
     ]);
@@ -33,14 +33,13 @@ function cashPayment(App\Models\Customer $c, User $u, string $amount, string $da
         'business_id' => $c->business_id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'payment_date' => $date, 'amount' => $amount, 'mode' => 'cash',
     ]);
-    $p->setConnection('pgsql_migrate');
     $p->created_by = $u->id;
     $p->save();
 }
 
 function cashSupplier(Business $b): App\Models\Supplier
 {
-    return App\Models\Supplier::on('pgsql_migrate')->create([
+    return App\Models\Supplier::create([
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Supp', 'opening_balance' => '0.00',
     ]);
@@ -52,7 +51,6 @@ function cashSupplierPayment(App\Models\Supplier $s, User $u, string $amount, st
         'business_id' => $s->business_id, 'uuid' => (string) Str::uuid(),
         'supplier_id' => $s->id, 'payment_date' => $date, 'amount' => $amount, 'mode' => 'cash',
     ]);
-    $sp->setConnection('pgsql_migrate');
     $sp->created_by = $u->id;
     $sp->archived_at = $archivedAt;
     $sp->save();
@@ -64,7 +62,6 @@ function cashExpense(Business $b, User $u, string $amount, string $date, ?string
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'category' => 'rent', 'amount' => $amount, 'spent_on' => $date,
     ]);
-    $e->setConnection('pgsql_migrate');
     $e->created_by = $u->id;
     $e->archived_at = $archivedAt;
     $e->save();

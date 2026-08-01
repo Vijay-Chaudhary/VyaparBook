@@ -16,9 +16,9 @@ it('suspends a tenant into read_only and audits the transition', function () {
         ->assertOk()
         ->assertJsonPath('subscription.status', 'read_only');
 
-    expect(Subscription::on('pgsql_platform')->where('business_id', $business->id)->first()->status)->toBe('read_only');
+    expect(Subscription::on('mysql_platform')->where('business_id', $business->id)->first()->status)->toBe('read_only');
 
-    $logs = PlatformAuditLog::on('pgsql_migrate')->where('action', 'suspend_tenant')->get();
+    $logs = PlatformAuditLog::where('action', 'suspend_tenant')->get();
     expect($logs)->toHaveCount(1);
     expect($logs[0]->admin_user_id)->toBe($admin->id)
         ->and($logs[0]->metadata['from'])->toBe('active')
@@ -67,7 +67,7 @@ it('is idempotent: a second suspend is a no-op with no second audit entry', func
             ->assertJsonPath('subscription.status', 'read_only');
     }
 
-    expect(PlatformAuditLog::on('pgsql_migrate')->where('action', 'suspend_tenant')->count())->toBe(1);
+    expect(PlatformAuditLog::where('action', 'suspend_tenant')->count())->toBe(1);
 });
 
 it('reactivates to the status the dates imply, never a blind active', function (string $seedStatus, string $expected) {
@@ -97,7 +97,7 @@ it('reactivate is a no-op on a tenant that is not suspended', function () {
         ->assertOk()
         ->assertJsonPath('subscription.status', 'active');
 
-    expect(PlatformAuditLog::on('pgsql_migrate')->where('action', 'reactivate_tenant')->count())->toBe(0);
+    expect(PlatformAuditLog::where('action', 'reactivate_tenant')->count())->toBe(0);
 });
 
 it('404s when suspending an unknown tenant', function () {

@@ -31,11 +31,11 @@ function plannedBatch(array $settings = []): array
 {
     $business = Business::factory()->create();
     $owner = User::factory()->create();
-    DB::connection('pgsql_migrate')->table('businesses')->where('id', $business->id)->update(
+    DB::table('businesses')->where('id', $business->id)->update(
         ['reminder_auto_enabled' => true, 'reminder_send_at' => '10:00:00'] + $settings
     );
 
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Ramesh Kumar', 'village' => 'Rampur',
         'phone' => '9876543210', 'opening_balance' => '0.00',
@@ -45,12 +45,11 @@ function plannedBatch(array $settings = []): array
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $customer->id, 'sale_date' => now()->subDays(60)->format('Y-m-d'),
     ]);
-    $sale->setConnection('pgsql_migrate');
     $sale->total = '2500.00';
     $sale->created_by = $owner->id;
     $sale->save();
 
-    $batch = ReminderBatch::on('pgsql_migrate')->create([
+    $batch = ReminderBatch::create([
         'business_id' => $business->id, 'scheduled_for' => now()->toDateString(),
         'status' => 'planned', 'planned_count' => 1,
     ]);
@@ -60,7 +59,6 @@ function plannedBatch(array $settings = []): array
         'channel' => 'cloud_api', 'amount_at_send' => '2500.00',
         'locale' => 'en', 'phone_e164' => '919876543210', 'batch_id' => $batch->id,
     ]);
-    $log->setConnection('pgsql_migrate');
     $log->status = 'planned';
     $log->save();
 
@@ -74,7 +72,7 @@ function dispatchFor(Business $b): void
 
 function reload(ReminderBatch $b): ReminderBatch
 {
-    return ReminderBatch::on('pgsql_migrate')->findOrFail($b->id);
+    return ReminderBatch::findOrFail($b->id);
 }
 
 beforeEach(function () {
@@ -90,7 +88,7 @@ it('queues the planned reminders once the send time has passed', function () {
 
     dispatchFor($business);
 
-    expect(ReminderLog::on('pgsql_migrate')->find($log->id)->status)->toBe('queued');
+    expect(ReminderLog::find($log->id)->status)->toBe('queued');
     expect(reload($batch)->status)->toBe('sent');
     expect(reload($batch)->sent_count)->toBe(1);
     Queue::assertPushed(SendReminderJob::class, 1);
@@ -103,7 +101,7 @@ it('refuses to send outside quiet hours and says so', function () {
     dispatchFor($business);
 
     Queue::assertNothingPushed();
-    expect(ReminderLog::on('pgsql_migrate')->find($log->id)->status)->toBe('planned');
+    expect(ReminderLog::find($log->id)->status)->toBe('planned');
     expect(reload($batch)->stopped_reason)->toBe('quiet_hours');
 });
 
@@ -114,7 +112,7 @@ it('refuses to send before the tenant\'s chosen time', function () {
     dispatchFor($business);
 
     Queue::assertNothingPushed();
-    expect(ReminderLog::on('pgsql_migrate')->find($log->id)->status)->toBe('planned');
+    expect(ReminderLog::find($log->id)->status)->toBe('planned');
 });
 
 it('refuses to send while the transport is still the log driver', function () {
@@ -129,7 +127,7 @@ it('refuses to send while the transport is still the log driver', function () {
 
 it('stops when the tenant switched automation off after planning', function () {
     [$business, , $batch] = plannedBatch();
-    DB::connection('pgsql_migrate')->table('businesses')->where('id', $business->id)
+    DB::table('businesses')->where('id', $business->id)
         ->update(['reminder_auto_enabled' => false]);
 
     dispatchFor($business->fresh());
@@ -140,24 +138,24 @@ it('stops when the tenant switched automation off after planning', function () {
 
 it('skips a row the owner cancelled', function () {
     [$business, , , $log] = plannedBatch();
-    DB::connection('pgsql_migrate')->table('reminder_logs')->where('id', $log->id)
+    DB::table('reminder_logs')->where('id', $log->id)
         ->update(['status' => 'cancelled']);
 
     dispatchFor($business);
 
     Queue::assertNothingPushed();
-    expect(ReminderLog::on('pgsql_migrate')->find($log->id)->status)->toBe('cancelled');
+    expect(ReminderLog::find($log->id)->status)->toBe('cancelled');
 });
 
 it('sends nothing when the whole batch was cancelled', function () {
     [$business, , $batch, $log] = plannedBatch();
-    DB::connection('pgsql_migrate')->table('reminder_batches')->where('id', $batch->id)
+    DB::table('reminder_batches')->where('id', $batch->id)
         ->update(['status' => 'cancelled']);
 
     dispatchFor($business);
 
     Queue::assertNothingPushed();
-    expect(ReminderLog::on('pgsql_migrate')->find($log->id)->status)->toBe('planned');
+    expect(ReminderLog::find($log->id)->status)->toBe('planned');
 });
 
 it('does not chase a customer who paid between planning and sending', function () {
@@ -170,14 +168,13 @@ it('does not chase a customer who paid between planning and sending', function (
         'customer_id' => $customer->id, 'payment_date' => now()->toDateString(),
         'amount' => '2500.00', 'mode' => 'cash',
     ]);
-    $payment->setConnection('pgsql_migrate');
     $payment->created_by = $owner->id;
     $payment->save();
 
     dispatchFor($business);
 
     Queue::assertNothingPushed();
-    expect(ReminderLog::on('pgsql_migrate')->find($log->id)->status)->toBe('skipped');
+    expect(ReminderLog::find($log->id)->status)->toBe('skipped');
 });
 
 it('does not send to someone who opted out after planning', function () {
@@ -188,5 +185,5 @@ it('does not send to someone who opted out after planning', function () {
     dispatchFor($business);
 
     Queue::assertNothingPushed();
-    expect(ReminderLog::on('pgsql_migrate')->find($log->id)->status)->toBe('skipped');
+    expect(ReminderLog::find($log->id)->status)->toBe('skipped');
 });

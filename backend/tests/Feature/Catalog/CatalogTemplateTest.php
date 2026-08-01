@@ -10,7 +10,7 @@ use App\Services\TokenService;
 function seedToken(Business $business, string $role = 'owner'): string
 {
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => $role,
@@ -41,7 +41,7 @@ it('leaves seeded rows freely editable by the tenant', function () {
     $this->withHeader('Authorization', "Bearer {$token}")
         ->postJson('/api/v1/catalog/seed', ['template' => 'namkeen']);
 
-    $product = Product::on('pgsql_migrate')->where('business_id', $business->id)->first();
+    $product = Product::where('business_id', $business->id)->first();
 
     // A seeded row is an ordinary tenant row — PRD §6's "every tenant edits freely".
     $this->withHeader('Authorization', "Bearer {$token}")
@@ -100,5 +100,5 @@ it('seeds only the caller business, never a neighbour', function () {
         ->postJson('/api/v1/catalog/seed', ['template' => 'namkeen'])
         ->assertStatus(201);
 
-    expect(Product::on('pgsql_migrate')->where('business_id', $theirs->id)->count())->toBe(0);
+    expect(Product::where('business_id', $theirs->id)->count())->toBe(0);
 });

@@ -24,7 +24,7 @@ function inRemTenant(string $businessId, callable $fn): mixed
 
 function remCustomer(Business $b, string $name, ?string $phone = '9876543210', string $opening = '0.00'): Customer
 {
-    return Customer::on('pgsql_migrate')->create([
+    return Customer::create([
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'name' => $name, 'village' => 'Rampur', 'phone' => $phone,
         'opening_balance' => $opening,
@@ -37,7 +37,6 @@ function remSale(Customer $c, User $u, string $total, string $date): void
         'business_id' => $c->business_id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'sale_date' => $date,
     ]);
-    $s->setConnection('pgsql_migrate');
     // total and created_by are deliberately not fillable (SaleWriter stamps them).
     $s->total = $total;
     $s->created_by = $u->id;
@@ -50,7 +49,6 @@ function remPayment(Customer $c, User $u, string $amount, string $date): void
         'business_id' => $c->business_id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'payment_date' => $date, 'amount' => $amount, 'mode' => 'cash',
     ]);
-    $p->setConnection('pgsql_migrate');
     $p->created_by = $u->id;
     $p->save();
 }
@@ -75,7 +73,7 @@ it('includes a customer exactly at both thresholds, and excludes one just under'
     $u = User::factory()->create();
     // Thresholds set explicitly: this test is about the BOUNDARY, and must not
     // silently change meaning when a default is retuned.
-    DB::connection('pgsql_migrate')->table('businesses')->where('id', $b->id)
+    DB::table('businesses')->where('id', $b->id)
         ->update(['reminder_min_outstanding' => '500.00', 'reminder_min_days' => 30]);
 
     // Exactly 500.00 owed, last paid exactly 30 days ago → included.
@@ -178,7 +176,7 @@ it('sorts by outstanding descending, biggest debt first', function () {
 it('respects per-shop thresholds rather than hardcoding the defaults', function () {
     $b = Business::factory()->create();
     $u = User::factory()->create();
-    DB::connection('pgsql_migrate')->table('businesses')->where('id', $b->id)
+    DB::table('businesses')->where('id', $b->id)
         ->update(['reminder_min_outstanding' => '5000.00', 'reminder_min_days' => 90]);
 
     $under = remCustomer($b, 'Under New Bar');

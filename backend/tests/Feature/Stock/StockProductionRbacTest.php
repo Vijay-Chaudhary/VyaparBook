@@ -16,7 +16,7 @@ use Illuminate\Support\Str;
 function stockRbacToken(Business $business, string $role): string
 {
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id, 'business_id' => $business->id, 'role' => $role,
     ]);
 
@@ -29,11 +29,11 @@ function stockRbacToken(Business $business, string $role): string
 function stockRbacFixtures(): array
 {
     $business = Business::factory()->create();
-    $material = RawMaterial::on('pgsql_migrate')->create([
+    $material = RawMaterial::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Besan', 'unit' => 'kg', 'reorder_level' => '10.000',
     ]);
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव',
     ]);
 

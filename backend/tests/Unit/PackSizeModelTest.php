@@ -7,7 +7,7 @@ use App\Models\PackSize;
 it('stores 100g as exactly 0.100 kg', function () {
     $business = Business::factory()->create();
 
-    $pack = PackSize::on('pgsql_migrate')->create([
+    $pack = PackSize::create([
         'business_id' => $business->id,
         'label' => '100g',
         'weight_kg' => '0.100',
@@ -19,7 +19,7 @@ it('stores 100g as exactly 0.100 kg', function () {
 it('defaults in_dropdown to true', function () {
     $business = Business::factory()->create();
 
-    $pack = PackSize::on('pgsql_migrate')->create([
+    $pack = PackSize::create([
         'business_id' => $business->id,
         'label' => '500g',
         'weight_kg' => '0.500',
@@ -31,13 +31,13 @@ it('defaults in_dropdown to true', function () {
 it('rejects a duplicate label within the same business', function () {
     $business = Business::factory()->create();
 
-    PackSize::on('pgsql_migrate')->create([
+    PackSize::create([
         'business_id' => $business->id,
         'label' => '500g',
         'weight_kg' => '0.500',
     ]);
 
-    expect(fn () => PackSize::on('pgsql_migrate')->create([
+    expect(fn () => PackSize::create([
         'business_id' => $business->id,
         'label' => '500g',
         'weight_kg' => '0.500',
@@ -48,10 +48,10 @@ it('allows the same label in a different business', function () {
     $a = Business::factory()->create();
     $b = Business::factory()->create();
 
-    PackSize::on('pgsql_migrate')->create([
+    PackSize::create([
         'business_id' => $a->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
-    $second = PackSize::on('pgsql_migrate')->create([
+    $second = PackSize::create([
         'business_id' => $b->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
 

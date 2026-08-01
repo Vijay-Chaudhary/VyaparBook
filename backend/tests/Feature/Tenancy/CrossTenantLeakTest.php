@@ -16,7 +16,7 @@ function ownerContext(): array
 {
     $owner = User::factory()->create();
     $business = Business::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $owner->id,
         'business_id' => $business->id,
         'role' => 'owner',
@@ -99,7 +99,7 @@ it('never lets accepting an expired invite create a membership', function () {
         ->postJson('/api/v1/invites/accept', ['token' => 'expired-token-123'])
         ->assertStatus(422);
 
-    expect(Membership::on('pgsql_migrate')->where('user_id', $newUser->id)->exists())->toBeFalse();
+    expect(Membership::where('user_id', $newUser->id)->exists())->toBeFalse();
 });
 
 it('never returns business Bs catalog to business A', function () {
@@ -107,11 +107,11 @@ it('never returns business Bs catalog to business A', function () {
     $businessB = Business::factory()->create();
 
     $userA = User::factory()->create();
-    $membershipA = Membership::on('pgsql_migrate')->create([
+    $membershipA = Membership::create([
         'user_id' => $userA->id, 'business_id' => $businessA->id, 'role' => 'owner',
     ]);
 
-    Product::on('pgsql_migrate')->create([
+    Product::create([
         'business_id' => $businessB->id, 'name_hi' => 'हल्दी', 'name_en' => 'Haldi',
     ]);
 
@@ -128,11 +128,11 @@ it('rejects business As owner reading business Bs product by id', function () {
     $businessB = Business::factory()->create();
 
     $userA = User::factory()->create();
-    $membershipA = Membership::on('pgsql_migrate')->create([
+    $membershipA = Membership::create([
         'user_id' => $userA->id, 'business_id' => $businessA->id, 'role' => 'owner',
     ]);
 
-    $foreign = Product::on('pgsql_migrate')->create([
+    $foreign = Product::create([
         'business_id' => $businessB->id, 'name_hi' => 'हल्दी',
     ]);
 
@@ -150,11 +150,11 @@ it('rejects business As owner archiving business Bs product', function () {
     $businessB = Business::factory()->create();
 
     $userA = User::factory()->create();
-    $membershipA = Membership::on('pgsql_migrate')->create([
+    $membershipA = Membership::create([
         'user_id' => $userA->id, 'business_id' => $businessA->id, 'role' => 'owner',
     ]);
 
-    $foreign = Product::on('pgsql_migrate')->create([
+    $foreign = Product::create([
         'business_id' => $businessB->id, 'name_hi' => 'हल्दी',
     ]);
 
@@ -168,14 +168,14 @@ it('rejects business As owner archiving business Bs product', function () {
     // above bound app('tenant.id') to business A for the rest of the process;
     // BelongsToTenant's scope would otherwise filter this business-B row out and
     // the read would see null — hiding, not proving, that the row is intact.
-    expect(Product::on('pgsql_migrate')->withoutGlobalScopes()->find($foreign->id)->archived_at)->toBeNull();
+    expect(Product::withoutGlobalScopes()->find($foreign->id)->archived_at)->toBeNull();
 });
 
 it('never returns business Bs khata to business A', function () {
     [$ownerA, $businessA, $tokenA] = ownerContext();
     [$ownerB, $businessB] = ownerContext();
 
-    Customer::on('pgsql_migrate')->create([
+    Customer::create([
         'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(), 'name' => 'Their Customer',
     ]);
 
@@ -190,18 +190,19 @@ it('rejects business As owner posting a sale for business Bs customer', function
     [$ownerB, $businessB] = ownerContext();
 
     // A pack in A's own catalog, so only the customer is cross-tenant.
-    $product = \App\Models\Product::on('pgsql_migrate')->create(['business_id' => $businessA->id, 'name_hi' => 'सेव']);
-    $packSize = \App\Models\PackSize::on('pgsql_migrate')->create(['business_id' => $businessA->id, 'label' => '500g', 'weight_kg' => '0.500']);
-    $pack = \App\Models\ProductPack::on('pgsql_migrate')->create([
+    $product = \App\Models\Product::create(['business_id' => $businessA->id, 'name_hi' => 'सेव']);
+    $packSize = \App\Models\PackSize::create(['business_id' => $businessA->id, 'label' => '500g', 'weight_kg' => '0.500']);
+    $pack = \App\Models\ProductPack::create([
         'business_id' => $businessA->id, 'product_id' => $product->id,
         'pack_size_id' => $packSize->id, 'default_sell_price' => '90.00',
     ]);
 
-    $foreignCustomer = Customer::on('pgsql_migrate')->create([
+    $foreignCustomer = Customer::create([
         'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(), 'name' => 'Their Customer',
     ]);
 
-    // 404, not 403: RLS hides B's customer, so findOrFail genuinely finds nothing.
+    // 404, not 403: the tenant scope adds a business_id predicate, so B's
+    // customer is genuinely not found rather than found-and-refused.
     $this->withHeader('Authorization', "Bearer {$tokenA}")
         ->postJson('/api/v1/sales', [
             'uuid' => (string) Str::uuid(), 'customer_id' => $foreignCustomer->id,
@@ -214,14 +215,13 @@ it('rejects business As owner voiding business Bs sale and leaves it untouched',
     [$ownerA, $businessA, $tokenA] = ownerContext();
     [$ownerB, $businessB] = ownerContext();
 
-    $customerB = Customer::on('pgsql_migrate')->create([
+    $customerB = Customer::create([
         'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(), 'name' => 'Their Customer',
     ]);
     $saleB = new Sale([
         'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $customerB->id, 'sale_date' => '2026-07-17',
     ]);
-    $saleB->setConnection('pgsql_migrate');
     $saleB->created_by = $ownerB->id;
     $saleB->total = '90.00';
     $saleB->save();
@@ -232,16 +232,16 @@ it('rejects business As owner voiding business Bs sale and leaves it untouched',
 
     // withoutGlobalScopes(): the request pinned app('tenant.id') to A, so a scoped
     // read of this business-B row would see null and prove nothing.
-    $fresh = Sale::on('pgsql_migrate')->withoutGlobalScopes()->find($saleB->id);
+    $fresh = Sale::withoutGlobalScopes()->find($saleB->id);
     expect($fresh->reverses_id)->toBeNull();
-    expect(Sale::on('pgsql_migrate')->withoutGlobalScopes()->where('reverses_id', $saleB->id)->exists())->toBeFalse();
+    expect(Sale::withoutGlobalScopes()->where('reverses_id', $saleB->id)->exists())->toBeFalse();
 });
 
 it('rejects a sync push mutation stamped with business Bs tenant_id and writes nothing', function () {
     [$ownerA, $businessA, $tokenA] = ownerContext();
     [$ownerB, $businessB] = ownerContext();
 
-    $customerA = Customer::on('pgsql_migrate')->create([
+    $customerA = Customer::create([
         'business_id' => $businessA->id, 'uuid' => (string) Str::uuid(), 'name' => 'My Customer',
     ]);
 
@@ -256,14 +256,14 @@ it('rejects a sync push mutation stamped with business Bs tenant_id and writes n
 
     expect($response->json('results.0.status'))->toBe('rejected');
     expect($response->json('results.0.reason'))->toBe('tenant_mismatch');
-    expect(\App\Models\Payment::on('pgsql_migrate')->count())->toBe(0);
+    expect(\App\Models\Payment::count())->toBe(0);
 });
 
 it('never returns business Bs stock to business A', function () {
     [$ownerA, $businessA, $tokenA] = ownerContext();
     [$ownerB, $businessB] = ownerContext();
 
-    \App\Models\RawMaterial::on('pgsql_migrate')->create([
+    \App\Models\RawMaterial::create([
         'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Their Besan', 'unit' => 'kg', 'reorder_level' => '10.000',
     ]);
@@ -278,12 +278,13 @@ it('rejects business As owner recording a movement for business Bs material', fu
     [$ownerA, $businessA, $tokenA] = ownerContext();
     [$ownerB, $businessB] = ownerContext();
 
-    $foreignMaterial = \App\Models\RawMaterial::on('pgsql_migrate')->create([
+    $foreignMaterial = \App\Models\RawMaterial::create([
         'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Theirs', 'unit' => 'kg',
     ]);
 
-    // 404, not 403: RLS hides B's material, so findOrFail genuinely finds nothing.
+    // 404, not 403: the tenant scope adds a business_id predicate, so B's
+    // material is genuinely not found rather than found-and-refused.
     $this->withHeader('Authorization', "Bearer {$tokenA}")
         ->postJson('/api/v1/stock-movements', [
             'uuid' => (string) Str::uuid(), 'raw_material_id' => $foreignMaterial->id,
@@ -293,7 +294,7 @@ it('rejects business As owner recording a movement for business Bs material', fu
 
     // And no movement leaked onto B's material. withoutGlobalScopes(): the request
     // pinned app('tenant.id') to A, so a scoped read would filter this B row out.
-    expect(\App\Models\StockMovement::on('pgsql_migrate')->withoutGlobalScopes()
+    expect(\App\Models\StockMovement::withoutGlobalScopes()
         ->where('raw_material_id', $foreignMaterial->id)->count())->toBe(0);
 });
 
@@ -302,9 +303,9 @@ it('rejects business As batch consuming business Bs material and leaves Bs stock
     [$ownerB, $businessB] = ownerContext();
 
     // A's own product (only the consumed material is cross-tenant).
-    $product = Product::on('pgsql_migrate')->create(['business_id' => $businessA->id, 'name_hi' => 'सेव']);
+    $product = Product::create(['business_id' => $businessA->id, 'name_hi' => 'सेव']);
 
-    $foreignMaterial = \App\Models\RawMaterial::on('pgsql_migrate')->create([
+    $foreignMaterial = \App\Models\RawMaterial::create([
         'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Theirs', 'unit' => 'kg',
     ]);
@@ -314,7 +315,6 @@ it('rejects business As batch consuming business Bs material and leaves Bs stock
         'raw_material_id' => $foreignMaterial->id, 'movement_date' => '2026-07-01',
         'kind' => 'in', 'qty' => '100.000',
     ]);
-    $seed->setConnection('pgsql_migrate');
     $seed->created_by = $ownerB->id;
     $seed->save();
 
@@ -328,11 +328,11 @@ it('rejects business As batch consuming business Bs material and leaves Bs stock
 
     // B's stock is exactly the seeded 100 — no draw-down leaked, no batch created.
     // withoutGlobalScopes() because the request pinned the tenant to A.
-    $onHand = (string) \App\Models\StockMovement::on('pgsql_migrate')->withoutGlobalScopes()
+    $onHand = (string) \App\Models\StockMovement::withoutGlobalScopes()
         ->where('raw_material_id', $foreignMaterial->id)
-        ->selectRaw('coalesce(sum(qty), 0)::text as agg')->value('agg');
+        ->selectRaw('CAST(coalesce(sum(qty), 0) AS CHAR) as agg')->value('agg');
     expect($onHand)->toBe('100.000');
-    expect(\App\Models\ProductionBatch::on('pgsql_migrate')->withoutGlobalScopes()
+    expect(\App\Models\ProductionBatch::withoutGlobalScopes()
         ->where('business_id', $businessA->id)->count())->toBe(0);
 });
 
@@ -341,16 +341,16 @@ it('never shows business Bs subscription payments in business As billing', funct
     [$ownerB, $businessB] = ownerContext();
 
     // A needs its own subscription for the billing endpoint to resolve.
-    Subscription::on('pgsql_migrate')->create([
+    Subscription::create([
         'business_id' => $businessA->id, 'plan' => 'free',
         'status' => 'trialing', 'trial_ends_at' => now()->addDays(14),
     ]);
-    $aPayment = SubscriptionPayment::on('pgsql_migrate')->create([
+    $aPayment = SubscriptionPayment::create([
         'business_id' => $businessA->id, 'uuid' => (string) Str::uuid(),
         'plan' => 'pro', 'amount' => '499.00', 'gst_amount' => '89.82',
         'mode' => 'upi', 'period_months' => 1, 'status' => 'pending',
     ]);
-    $bPayment = SubscriptionPayment::on('pgsql_migrate')->create([
+    $bPayment = SubscriptionPayment::create([
         'business_id' => $businessB->id, 'uuid' => (string) Str::uuid(),
         'plan' => 'pro', 'amount' => '999.00', 'gst_amount' => '179.82',
         'mode' => 'upi', 'period_months' => 1, 'status' => 'pending',
@@ -369,7 +369,7 @@ it('stamps a recorded payment with the callers tenant, ignoring a supplied busin
     [$ownerA, $businessA, $tokenA] = ownerContext();
     [$ownerB, $businessB] = ownerContext();
 
-    Subscription::on('pgsql_migrate')->create([
+    Subscription::create([
         'business_id' => $businessA->id, 'plan' => 'free',
         'status' => 'trialing', 'trial_ends_at' => now()->addDays(14),
     ]);
@@ -381,7 +381,7 @@ it('stamps a recorded payment with the callers tenant, ignoring a supplied busin
         ])
         ->assertCreated();
 
-    $payment = SubscriptionPayment::on('pgsql_migrate')->withoutGlobalScopes()
+    $payment = SubscriptionPayment::withoutGlobalScopes()
         ->latest('created_at')->first();
     expect($payment->business_id)->toBe($businessA->id);
     expect($payment->business_id)->not->toBe($businessB->id);
@@ -392,7 +392,7 @@ it('never lets business Bs read_only status gate business As writes', function (
     [$ownerB, $businessB] = ownerContext();
 
     // B is in dunning (read_only); A carries on normally on its own fail-open trial.
-    Subscription::on('pgsql_migrate')->create([
+    Subscription::create([
         'business_id' => $businessB->id, 'plan' => 'pro', 'status' => 'read_only',
         'trial_ends_at' => now()->subDays(30), 'current_period_end' => now()->subDay(),
     ]);

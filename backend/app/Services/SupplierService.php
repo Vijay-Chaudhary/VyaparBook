@@ -32,7 +32,7 @@ class SupplierService
         $rows = Supplier::query()
             ->where('business_id', $businessId)
             ->whereNull('archived_at')
-            ->selectRaw('id, name, village, (' . $this->outstandingExpr() . ')::text as outstanding')
+            ->selectRaw('id, name, village, CAST((' . $this->outstandingExpr() . ') AS CHAR) as outstanding')
             ->get();
 
         $suppliers = $rows

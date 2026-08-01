@@ -14,14 +14,14 @@ use Illuminate\Support\Str;
 /** Build a product_pack on the migrate connection (bypasses RLS) for one business. */
 function packFor(Business $business, string $sellPrice = '90.00'): ProductPack
 {
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'base_cost_per_kg' => '120.00',
     ]);
-    $packSize = PackSize::on('pgsql_migrate')->create([
+    $packSize = PackSize::create([
         'business_id' => $business->id, 'label' => Str::random(6), 'weight_kg' => '0.500',
     ]);
 
-    return ProductPack::on('pgsql_migrate')->create([
+    return ProductPack::create([
         'business_id' => $business->id,
         'product_id' => $product->id,
         'pack_size_id' => $packSize->id,
@@ -32,7 +32,7 @@ function packFor(Business $business, string $sellPrice = '90.00'): ProductPack
 /** A customer on the migrate connection (bypasses RLS) for one business. */
 function customerFor(Business $business): Customer
 {
-    return Customer::on('pgsql_migrate')->create([
+    return Customer::create([
         'business_id' => $business->id,
         'uuid' => (string) Str::uuid(),
         'name' => 'Ram Traders',
@@ -55,7 +55,6 @@ function saleWithLines(Business $business, Customer $customer, User $user, array
         'customer_id' => $customer->id,
         'sale_date' => '2026-07-17',
     ]);
-    $sale->setConnection('pgsql_migrate');
     $sale->created_by = $user->id;
     $sale->total = $total;
     $sale->save();
@@ -68,7 +67,6 @@ function saleWithLines(Business $business, Customer $customer, User $user, array
             'qty' => $qty,
             'rate' => $rate,
         ]);
-        $line->setConnection('pgsql_migrate');
         $line->line_total = bcmul((string) $rate, (string) $qty, 2);
         $line->save();
     }
@@ -84,7 +82,7 @@ it('relates a sale to its lines and stamps created_by, version and sync_seq', fu
 
     $sale = saleWithLines($business, $customer, $user, [[$pack, 3, '90.00']]);
 
-    $fresh = Sale::on('pgsql_migrate')->with('lines')->find($sale->id);
+    $fresh = Sale::with('lines')->find($sale->id);
     expect($fresh->lines)->toHaveCount(1);
     expect($fresh->total)->toBe('270.00');
     expect($fresh->created_by)->toBe($user->id);
@@ -103,7 +101,7 @@ it('freezes the line rate as a snapshot, independent of the pack price later', f
     // The catalog re-prices the pack afterwards.
     $pack->update(['default_sell_price' => '999.00']);
 
-    $line = SaleLine::on('pgsql_migrate')->where('sale_id', $sale->id)->first();
+    $line = SaleLine::where('sale_id', $sale->id)->first();
     expect($line->rate)->toBe('90.00');       // still the sale-time price
     expect($line->line_total)->toBe('90.00');
 });
@@ -123,12 +121,11 @@ it('resolves a reversal back to the original it voids', function () {
         'sale_date' => '2026-07-18',
         'reverses_id' => $original->id,
     ]);
-    $reversal->setConnection('pgsql_migrate');
     $reversal->created_by = $user->id;
     $reversal->total = '-180.00';
     $reversal->save();
 
-    $fresh = Sale::on('pgsql_migrate')->with('reverses')->find($reversal->id);
+    $fresh = Sale::with('reverses')->find($reversal->id);
     expect($fresh->reverses->id)->toBe($original->id);
     expect($fresh->total)->toBe('-180.00');
 });

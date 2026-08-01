@@ -12,10 +12,12 @@ use Illuminate\View\View;
  * The Blade platform (Superadmin) console — server-rendered twin of the JWT
  * /api/v1/admin/* surface (docs/frontend-plan.md §7 Phase 7).
  *
- * Reads run on the SELECT-only BYPASSRLS connection (pgsql_platform), exactly as
- * the API's Admin\TenantController does: the listing spans every tenant with no
- * tenant GUC set, and the connection physically cannot mutate. The console is
- * cross-tenant by design; there is no tenant scope here.
+ * Reads run on the SELECT-only connection (mysql_platform), exactly as the API's
+ * Admin\TenantController does: the listing spans every tenant, and the
+ * connection's user is granted SELECT and nothing else, so the console
+ * physically cannot mutate a tenant's data. The console is cross-tenant by
+ * design; the queries below are raw builders, which the Eloquent tenant scope
+ * does not reach in the first place.
  *
  * Session-gated to platform admins by the platform_admin.web middleware.
  */
@@ -30,7 +32,7 @@ class ConsoleController extends Controller
 
         $q = $data['q'] ?? null;
 
-        $tenants = DB::connection('pgsql_platform')
+        $tenants = DB::connection('mysql_platform')
             ->table('businesses as b')
             ->leftJoin('subscriptions as s', 's.business_id', '=', 'b.id')
             ->select([
@@ -44,7 +46,7 @@ class ConsoleController extends Controller
                 's.trial_ends_at',
                 's.current_period_end',
             ])
-            ->when($q !== null, fn ($query) => $query->where('b.name', 'ilike', '%'.$q.'%'))
+            ->when($q !== null, fn ($query) => $query->where('b.name', 'like', '%'.$q.'%'))
             ->orderByDesc('b.created_at')
             ->paginate(25)
             ->withQueryString(); // keep ?q= across page links
@@ -58,7 +60,7 @@ class ConsoleController extends Controller
     /** Single-tenant drill-down: business, billing, members, recent payments. */
     public function show(string $id): View
     {
-        $platform = DB::connection('pgsql_platform');
+        $platform = DB::connection('mysql_platform');
 
         $business = $platform->table('businesses')
             ->where('id', $id)

@@ -24,7 +24,6 @@
         <env name="CACHE_STORE" value="array"/>
         <!-- Tests run against a dedicated database so a suite run never wipes dev data. -->
         <env name="DB_DATABASE" value="vyaparbook_test"/>
-        <env name="DB_MIGRATE_DATABASE" value="vyaparbook_test"/>
         <env name="MAIL_MAILER" value="array"/>
         <env name="PULSE_ENABLED" value="false"/>
         <env name="QUEUE_CONNECTION" value="sync"/>

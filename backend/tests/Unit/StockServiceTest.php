@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 
 function stockMaterial(Business $business, ?string $reorder = '10.000'): RawMaterial
 {
-    return RawMaterial::on('pgsql_migrate')->create([
+    return RawMaterial::create([
         'business_id' => $business->id,
         'uuid' => (string) Str::uuid(),
         'name' => 'Besan',
@@ -29,7 +29,6 @@ function stockMovement(RawMaterial $m, User $u, string $kind, string $qty, strin
         'kind' => $kind,
         'qty' => $qty, // caller passes the already-signed effect
     ]);
-    $movement->setConnection('pgsql_migrate');
     $movement->created_by = $u->id;
     $movement->save();
 

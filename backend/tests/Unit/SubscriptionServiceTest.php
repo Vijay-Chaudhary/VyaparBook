@@ -46,9 +46,9 @@ it('provisions a single 14-day trial idempotently', function () use ($inTenant) 
     ]);
 
     expect($first->id)->toBe($second->id);
-    expect(Subscription::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(1);
+    expect(Subscription::where('business_id', $business->id)->count())->toBe(1);
 
-    $row = Subscription::on('pgsql_migrate')->where('business_id', $business->id)->first();
+    $row = Subscription::where('business_id', $business->id)->first();
     expect($row->status)->toBe('trialing');
     expect($row->trial_ends_at->timestamp)->toEqualWithDelta(now()->addDays(14)->timestamp, 60);
 });

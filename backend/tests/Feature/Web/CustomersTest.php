@@ -14,7 +14,7 @@ use Illuminate\Support\Str;
 /** A customer seeded on the migration connection, like the other seed helpers. */
 function cusCustomer(Business $b, string $name = 'Ramesh Kumar', string $opening = '0.00'): Customer
 {
-    return Customer::on('pgsql_migrate')->create([
+    return Customer::create([
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'name' => $name, 'village' => 'Rampur', 'phone' => '9876543210',
         'opening_balance' => $opening,
@@ -27,7 +27,6 @@ function cusSale(Business $b, User $u, Customer $c, string $total, string $date)
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'sale_date' => $date,
     ]);
-    $s->setConnection('pgsql_migrate');
     $s->total = $total;          // not fillable — SaleWriter stamps it in prod
     $s->created_by = $u->id;
     $s->save();
@@ -41,7 +40,6 @@ function cusPayment(Business $b, User $u, Customer $c, string $amount, string $d
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'payment_date' => $date, 'amount' => $amount, 'mode' => 'cash',
     ]);
-    $p->setConnection('pgsql_migrate');
     $p->created_by = $u->id;
     $p->save();
 
@@ -155,7 +153,7 @@ describe('create', function () {
             'opening_balance' => '250.50',
         ])->assertRedirect(route('customers', ['business' => $business->id]));
 
-        $row = Customer::on('pgsql_migrate')->where('business_id', $business->id)
+        $row = Customer::where('business_id', $business->id)
             ->where('name', 'Nayi Dukan')->firstOrFail();
 
         expect($row->village)->toBe('Hata')
@@ -171,7 +169,7 @@ describe('create', function () {
             ->post('/customers', ['business' => $business->id, 'name' => ''])
             ->assertSessionHasErrors('name');
 
-        expect(Customer::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(0);
+        expect(Customer::where('business_id', $business->id)->count())->toBe(0);
     });
 
     it('is idempotent on a replayed uuid, so a double submit adds one row', function () {
@@ -184,7 +182,7 @@ describe('create', function () {
             ]);
         }
 
-        expect(Customer::on('pgsql_migrate')->where('business_id', $business->id)
+        expect(Customer::where('business_id', $business->id)
             ->where('name', 'Double Tap')->count())->toBe(1);
     });
 
@@ -198,7 +196,7 @@ describe('create', function () {
             ])->assertRedirect(route('customers', ['business' => $business->id]));
         }
 
-        expect(Customer::on('pgsql_migrate')->where('business_id', $business->id)
+        expect(Customer::where('business_id', $business->id)
             ->where('name', 'Santosh Singh')->count())->toBe(2);
     });
 });
@@ -209,7 +207,6 @@ describe('update', function () {
         // this is how the owner unblocks them.
         [$owner, $business] = pwOwner();
         $c = cusCustomer($business, 'No Phone Yet');
-        $c->setConnection('pgsql_migrate');
         $c->phone = null;
         $c->save();
 
@@ -220,7 +217,7 @@ describe('update', function () {
             'phone' => '9123456780',
         ])->assertRedirect(route('customers.show', ['customer' => $c->id, 'business' => $business->id]));
 
-        $fresh = Customer::on('pgsql_migrate')->find($c->id);
+        $fresh = Customer::find($c->id);
         expect($fresh->name)->toBe('Phone Added')
             ->and($fresh->village)->toBe('Mathauli')
             ->and($fresh->phone)->toBe('9123456780');
@@ -236,8 +233,7 @@ describe('update', function () {
             'business' => $business->id, 'name' => 'After',
         ]);
 
-        $fresh = Customer::on('pgsql_migrate')->find($c->id);
-        $fresh->setConnection('pgsql_migrate');
+        $fresh = Customer::find($c->id);
         expect(app(App\Services\KhataService::class)->outstandingFor($fresh))->toBe('1000.00');
     });
 
@@ -252,7 +248,7 @@ describe('update', function () {
 
         // withoutGlobalScopes: the request left tenant.id bound in the container,
         // so BelongsToTenant would otherwise hide the other tenant's row entirely.
-        expect(Customer::on('pgsql_migrate')->withoutGlobalScopes()->find($foreign->id)->name)
+        expect(Customer::withoutGlobalScopes()->find($foreign->id)->name)
             ->toBe('Not Yours');
     });
 });
@@ -266,12 +262,12 @@ describe('archive', function () {
         $this->actingAs($owner)->delete('/customers/' . $c->id, ['business' => $business->id])
             ->assertRedirect(route('customers', ['business' => $business->id]));
 
-        $fresh = Customer::on('pgsql_migrate')->find($c->id);
+        $fresh = Customer::find($c->id);
         expect($fresh)->not->toBeNull()                 // the row survives
             ->and($fresh->archived_at)->not->toBeNull();
 
         // and the sale it carried is still there to be counted
-        expect(Sale::on('pgsql_migrate')->where('customer_id', $c->id)->count())->toBe(1);
+        expect(Sale::where('customer_id', $c->id)->count())->toBe(1);
     });
 
     it('drops an archived customer out of the active list', function () {
@@ -292,7 +288,7 @@ describe('archive', function () {
         $this->actingAs($owner)->post('/customers/' . $c->id . '/restore', ['business' => $business->id])
             ->assertRedirect(route('customers', ['business' => $business->id]));
 
-        expect(Customer::on('pgsql_migrate')->find($c->id)->archived_at)->toBeNull();
+        expect(Customer::find($c->id)->archived_at)->toBeNull();
     });
 
     it('refuses to archive another tenant\'s customer', function () {
@@ -302,7 +298,7 @@ describe('archive', function () {
 
         $this->actingAs($owner)->delete('/customers/' . $foreign->id, ['business' => $business->id]);
 
-        expect(Customer::on('pgsql_migrate')->withoutGlobalScopes()->find($foreign->id)->archived_at)
+        expect(Customer::withoutGlobalScopes()->find($foreign->id)->archived_at)
             ->toBeNull();
     });
 });
@@ -321,16 +317,16 @@ describe('corrections', function () {
             ->assertRedirect(route('customers.show', ['customer' => $customer->id, 'business' => $business->id]));
 
         // Original untouched, byte for byte.
-        $original = DB::connection('pgsql_migrate')->table('sales')->where('id', $sale->id)->first();
+        $original = DB::table('sales')->where('id', $sale->id)->first();
         expect((string) $original->total)->toBe('500.00');
         expect($original->reverses_id)->toBeNull();
 
         // And a reversal pointing at it, so the two net to nothing.
-        $reversal = DB::connection('pgsql_migrate')->table('sales')
+        $reversal = DB::table('sales')
             ->where('reverses_id', $sale->id)->sole();
         expect((string) $reversal->total)->toBe('-500.00');
 
-        $fresh = Customer::on('pgsql_migrate')->find($customer->id);
+        $fresh = Customer::find($customer->id);
         expect((new App\Services\KhataService())->outstandingFor($fresh))->toBe('0.00');
     });
 
@@ -343,10 +339,10 @@ describe('corrections', function () {
             ->post("/customers/{$customer->id}/payments/{$payment->id}/reverse", ['business' => $business->id])
             ->assertRedirect();
 
-        expect((string) DB::connection('pgsql_migrate')->table('payments')
+        expect((string) DB::table('payments')
             ->where('reverses_id', $payment->id)->value('amount'))->toBe('-200.00');
 
-        $fresh = Customer::on('pgsql_migrate')->find($customer->id);
+        $fresh = Customer::find($customer->id);
         expect((new App\Services\KhataService())->outstandingFor($fresh))->toBe('500.00');
     });
 
@@ -361,7 +357,7 @@ describe('corrections', function () {
             ->assertSessionHas('error', __('customers.already_voided'));
 
         // Still exactly one reversal — a second would double the correction.
-        expect(DB::connection('pgsql_migrate')->table('sales')->where('reverses_id', $sale->id)->count())->toBe(1);
+        expect(DB::table('sales')->where('reverses_id', $sale->id)->count())->toBe(1);
     });
 
     it('refuses to void a row that is itself a correction', function () {
@@ -373,7 +369,7 @@ describe('corrections', function () {
             ->post("/customers/{$customer->id}/sales/{$sale->id}/void", ['business' => $business->id])
             ->assertRedirect();
 
-        $reversalId = DB::connection('pgsql_migrate')->table('sales')->where('reverses_id', $sale->id)->value('id');
+        $reversalId = DB::table('sales')->where('reverses_id', $sale->id)->value('id');
 
         // Reversing a reversal is a re-entry, not a correction — if the sale
         // really did happen, record it again rather than un-voiding.
@@ -450,6 +446,6 @@ describe('corrections', function () {
             ->post("/customers/{$theirCustomer->id}/sales/{$theirSale->id}/void", ['business' => $business->id])
             ->assertNotFound();
 
-        expect(DB::connection('pgsql_migrate')->table('sales')->where('reverses_id', $theirSale->id)->count())->toBe(0);
+        expect(DB::table('sales')->where('reverses_id', $theirSale->id)->count())->toBe(0);
     });
 });

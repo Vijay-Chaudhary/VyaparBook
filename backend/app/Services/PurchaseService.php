@@ -23,7 +23,7 @@ class PurchaseService
             ->where('business_id', $material->business_id)
             ->where('raw_material_id', $material->id)
             ->whereNull('archived_at')
-            ->selectRaw('coalesce(sum(total), 0)::text as tot, coalesce(sum(qty), 0)::text as q')
+            ->selectRaw('CAST(coalesce(sum(total), 0) AS CHAR) as tot, CAST(coalesce(sum(qty), 0) AS CHAR) as q')
             ->first();
 
         return $this->weightedAvg((string) ($row->tot ?? '0'), (string) ($row->q ?? '0'));
@@ -64,17 +64,17 @@ class PurchaseService
             ->whereNull('rm.archived_at')
             ->selectRaw(<<<'SQL'
                 rm.name,
-                coalesce((select sum(sm.qty) from stock_movements sm
+                CAST(coalesce((select sum(sm.qty) from stock_movements sm
                           where sm.raw_material_id = rm.id
-                            and sm.business_id = rm.business_id), 0)::text as on_hand,
-                coalesce((select sum(p.total) from purchases p
+                            and sm.business_id = rm.business_id), 0) AS CHAR) as on_hand,
+                CAST(coalesce((select sum(p.total) from purchases p
                           where p.raw_material_id = rm.id
                             and p.business_id = rm.business_id
-                            and p.archived_at is null), 0)::text as purchased_total,
-                coalesce((select sum(p.qty) from purchases p
+                            and p.archived_at is null), 0) AS CHAR) as purchased_total,
+                CAST(coalesce((select sum(p.qty) from purchases p
                           where p.raw_material_id = rm.id
                             and p.business_id = rm.business_id
-                            and p.archived_at is null), 0)::text as purchased_qty
+                            and p.archived_at is null), 0) AS CHAR) as purchased_qty
                 SQL)
             ->orderBy('rm.name')
             ->get();

@@ -65,7 +65,7 @@ class CogsService
             ->where('business_id', $businessId)
             ->whereNull('archived_at')
             ->groupBy('raw_material_id')
-            ->selectRaw('raw_material_id, sum(total)::text as tot, sum(qty)::text as q')
+            ->selectRaw('raw_material_id, CAST(sum(total) AS CHAR) as tot, CAST(sum(qty) AS CHAR) as q')
             ->get();
 
         $costs = [];
@@ -100,7 +100,7 @@ class CogsService
             ->join('production_batches as pb', 'pb.id', '=', 'mc.production_batch_id')
             ->where('mc.business_id', $businessId)
             ->groupBy('pb.product_id', 'mc.raw_material_id')
-            ->selectRaw('pb.product_id, mc.raw_material_id, sum(mc.qty)::text as qty')
+            ->selectRaw('pb.product_id, mc.raw_material_id, CAST(sum(mc.qty) AS CHAR) as qty')
             ->get();
 
         $costByProduct = [];
@@ -117,7 +117,7 @@ class CogsService
         $output = DB::table('production_batches')
             ->where('business_id', $businessId)
             ->groupBy('product_id')
-            ->selectRaw('product_id, sum(output_kg)::text as kg')
+            ->selectRaw('product_id, CAST(sum(output_kg) AS CHAR) as kg')
             ->pluck('kg', 'product_id');
 
         $perKg = [];
@@ -156,7 +156,7 @@ class CogsService
         $packs = DB::table('product_packs as pp')
             ->join('pack_sizes as ps', 'ps.id', '=', 'pp.pack_size_id')
             ->where('pp.business_id', $businessId)
-            ->selectRaw('pp.id, pp.product_id, pp.default_cost_price::text as est, ps.weight_kg::text as kg')
+            ->selectRaw('pp.id, pp.product_id, CAST(pp.default_cost_price AS CHAR) as est, CAST(ps.weight_kg AS CHAR) as kg')
             ->get();
 
         $costs = [];

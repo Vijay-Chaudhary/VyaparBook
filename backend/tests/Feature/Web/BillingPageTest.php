@@ -27,13 +27,13 @@ function webBillingOwner(string $status = 'trialing', string $plan = 'free'): ar
     $business = Business::factory()->create();
     $user = User::factory()->create();
 
-    Membership::on('pgsql_migrate')->create([
+    Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => 'owner',
     ]);
 
-    Subscription::on('pgsql_migrate')->create([
+    Subscription::create([
         'business_id' => $business->id,
         'plan' => $plan,
         'status' => $status,
@@ -119,7 +119,7 @@ describe('record payment', function () {
             ->assertRedirect(route('billing', ['business' => $business->id]))
             ->assertSessionHas('billing_status', 'payment_recorded');
 
-        $payment = SubscriptionPayment::on('pgsql_migrate')
+        $payment = SubscriptionPayment
             ->where('business_id', $business->id)->first();
 
         expect($payment)->not->toBeNull();
@@ -129,7 +129,7 @@ describe('record payment', function () {
         expect((string) $payment->gst_amount)->toBe('89.82');
 
         // The subscription is untouched: activation is the platform's job.
-        expect(Subscription::on('pgsql_migrate')->where('business_id', $business->id)->value('status'))
+        expect(Subscription::where('business_id', $business->id)->value('status'))
             ->toBe('past_due');
     });
 
@@ -145,7 +145,7 @@ describe('record payment', function () {
         $this->actingAs($owner)->post('/billing/payment', $body);
         $this->actingAs($owner)->post('/billing/payment', $body); // double submit
 
-        expect(SubscriptionPayment::on('pgsql_migrate')->where('uuid', $uuid)->count())->toBe(1);
+        expect(SubscriptionPayment::where('uuid', $uuid)->count())->toBe(1);
     });
 
     it('validates the amount and plan', function () {
@@ -161,7 +161,7 @@ describe('record payment', function () {
             ])
             ->assertSessionHasErrors(['plan', 'amount']);
 
-        expect(SubscriptionPayment::on('pgsql_migrate')->where('business_id', $business->id)->exists())
+        expect(SubscriptionPayment::where('business_id', $business->id)->exists())
             ->toBeFalse();
     });
 
@@ -176,7 +176,7 @@ describe('record payment', function () {
             ])
             ->assertRedirect(route('app'));
 
-        expect(SubscriptionPayment::on('pgsql_migrate')->where('business_id', $other->id)->exists())
+        expect(SubscriptionPayment::where('business_id', $other->id)->exists())
             ->toBeFalse();
     });
 });

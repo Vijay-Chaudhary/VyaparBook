@@ -7,7 +7,7 @@ use App\Models\Product;
 it('generates a uuid primary key and starts at version 1', function () {
     $business = Business::factory()->create();
 
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id,
         'name_hi' => 'सेव',
         'name_en' => 'Sev',
@@ -22,7 +22,7 @@ it('generates a uuid primary key and starts at version 1', function () {
 it('casts money to a 2-decimal string, not a float', function () {
     $business = Business::factory()->create();
 
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id,
         'name_hi' => 'सेव',
         'base_cost_per_kg' => '120.5',

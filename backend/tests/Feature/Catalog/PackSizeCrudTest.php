@@ -10,7 +10,7 @@ use App\Services\TokenService;
 function packOwnerToken(Business $business): string
 {
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => 'owner',
@@ -30,7 +30,7 @@ it('creates a pack size', function () {
 
 it('rejects a duplicate label in the same business', function () {
     $business = Business::factory()->create();
-    PackSize::on('pgsql_migrate')->create([
+    PackSize::create([
         'business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
 
@@ -44,7 +44,7 @@ it('allows the same label in a different business', function () {
     $mine = Business::factory()->create();
     $theirs = Business::factory()->create();
 
-    PackSize::on('pgsql_migrate')->create([
+    PackSize::create([
         'business_id' => $theirs->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
 

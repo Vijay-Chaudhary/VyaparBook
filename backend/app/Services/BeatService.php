@@ -29,7 +29,9 @@ class BeatService
         $query = Beat::query()
             ->where('business_id', $businessId)
             ->whereNull('archived_at')
-            ->whereRaw('weekdays @> ?::jsonb', [json_encode([$isoDay])])
+            // JSON_CONTAINS is MySQL's equivalent of Postgres's `@>`: true when
+            // every element of the candidate array is present in the column.
+            ->whereRaw('json_contains(weekdays, ?)', [json_encode([$isoDay])])
             ->with(['beatCustomers.customer'])
             ->orderBy('name');
 

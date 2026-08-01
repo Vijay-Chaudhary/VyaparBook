@@ -13,12 +13,13 @@ class StockService
      * adjust ±), so the sum is the real balance — always recomputable, never a
      * stored number that can drift from the ledger (PRD §10).
      *
-     * ::text so Postgres returns an exact decimal string, never a PHP float that
-     * could drift before we read it. Scale 3 mirrors the movement/reorder scale.
+     * CAST(... AS CHAR) so the sum comes back as an exact decimal string, never
+     * a PHP float that could drift before we read it. Scale 3 mirrors the
+     * movement/reorder scale.
      */
     public function onHandFor(RawMaterial $material): string
     {
-        $sum = (string) $material->movements()->selectRaw('coalesce(sum(qty), 0)::text as agg')->value('agg');
+        $sum = (string) $material->movements()->selectRaw('CAST(coalesce(sum(qty), 0) AS CHAR) as agg')->value('agg');
 
         return bcadd($sum, '0', 3);
     }

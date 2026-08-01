@@ -9,7 +9,7 @@ use App\Services\TokenService;
 it('resolves tenant id and role from the token for a member', function () {
     $user = User::factory()->create();
     $business = Business::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => 'owner',

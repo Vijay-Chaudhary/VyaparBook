@@ -19,7 +19,7 @@ function pricingSetup(): array
 {
     [$owner, $business] = pwOwner();
 
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेंवड़ा', 'name_en' => 'Senvda',
         'base_cost_per_kg' => '93.00',
     ]);
@@ -27,10 +27,10 @@ function pricingSetup(): array
     $packs = [];
 
     foreach ([['300g', '0.300', '30.00', '27.90'], ['400g', '0.400', '36.00', '37.20'], ['1kg', '1.000', '100.00', null]] as [$label, $weight, $sell, $cost]) {
-        $size = PackSize::on('pgsql_migrate')->create([
+        $size = PackSize::create([
             'business_id' => $business->id, 'label' => $label, 'weight_kg' => $weight,
         ]);
-        $packs[$label] = ProductPack::on('pgsql_migrate')->create([
+        $packs[$label] = ProductPack::create([
             'business_id' => $business->id, 'product_id' => $product->id,
             'pack_size_id' => $size->id, 'default_sell_price' => $sell,
             'default_cost_price' => $cost,
@@ -52,7 +52,7 @@ describe('access', function () {
     it('refuses a salesman, since setting cost is not a daily operational job', function () {
         [, $businessId] = pricingSetup();
         $salesman = User::factory()->create();
-        App\Models\Membership::on('pgsql_migrate')->create([
+        App\Models\Membership::create([
             'user_id' => $salesman->id, 'business_id' => $businessId, 'role' => 'salesman',
         ]);
 
@@ -117,9 +117,9 @@ describe('saving', function () {
             ],
         ])->assertRedirect(route('pricing', ['business' => $businessId]));
 
-        expect((string) DB::connection('pgsql_migrate')->table('products')
+        expect((string) DB::table('products')
             ->where('id', $product->id)->value('base_cost_per_kg'))->toBe('95.50');
-        expect((string) DB::connection('pgsql_migrate')->table('product_packs')
+        expect((string) DB::table('product_packs')
             ->where('id', $packs['300g']->id)->value('default_sell_price'))->toBe('32.00');
     });
 
@@ -135,7 +135,7 @@ describe('saving', function () {
             ],
         ])->assertRedirect();
 
-        expect(DB::connection('pgsql_migrate')->table('product_packs')
+        expect(DB::table('product_packs')
             ->where('id', $packs['300g']->id)->value('default_cost_price'))->toBeNull();
     });
 
@@ -149,7 +149,7 @@ describe('saving', function () {
             ],
         ])->assertSessionHasErrors();
 
-        expect((string) DB::connection('pgsql_migrate')->table('product_packs')
+        expect((string) DB::table('product_packs')
             ->where('id', $packs['300g']->id)->value('default_sell_price'))->toBe('30.00');
     });
 
@@ -166,7 +166,7 @@ describe('saving', function () {
 
         // Skipped silently under RLS rather than 404ing, so one stale id in a
         // form cannot lose the rest of a good submission.
-        expect((string) DB::connection('pgsql_migrate')->table('product_packs')
+        expect((string) DB::table('product_packs')
             ->where('id', $theirPacks['300g']->id)->value('default_sell_price'))->toBe('30.00');
     });
 });
@@ -181,7 +181,7 @@ describe('recosting', function () {
             'business' => $businessId,
         ])->assertRedirect();
 
-        $costs = DB::connection('pgsql_migrate')->table('product_packs')
+        $costs = DB::table('product_packs')
             ->whereIn('id', collect($packs)->pluck('id'))->pluck('default_cost_price', 'id');
 
         expect((string) $costs[$packs['300g']->id])->toBe('27.90');  // 93 × 0.300
@@ -196,7 +196,7 @@ describe('recosting', function () {
         // deliberately not reused for this.
         [$owner, $businessId, $product, $packs] = pricingSetup();
 
-        DB::connection('pgsql_migrate')->table('products')
+        DB::table('products')
             ->where('id', $product->id)->update(['base_cost_per_kg' => '93.33']);
 
         $this->actingAs($owner)->post('/pricing/' . $product->id . '/recost', [
@@ -204,20 +204,20 @@ describe('recosting', function () {
         ])->assertRedirect();
 
         // 93.33 × 0.300 = 27.999 exactly → must land on 28.00, not 27.99.
-        expect((string) DB::connection('pgsql_migrate')->table('product_packs')
+        expect((string) DB::table('product_packs')
             ->where('id', $packs['300g']->id)->value('default_cost_price'))->toBe('28.00');
     });
 
     it('refuses to recost a product with no per-kg cost, rather than zeroing it', function () {
         [$owner, $businessId, $product, $packs] = pricingSetup();
-        DB::connection('pgsql_migrate')->table('products')
+        DB::table('products')
             ->where('id', $product->id)->update(['base_cost_per_kg' => null]);
 
         $this->actingAs($owner)->post('/pricing/' . $product->id . '/recost', [
             'business' => $businessId,
         ])->assertRedirect();
 
-        expect((string) DB::connection('pgsql_migrate')->table('product_packs')
+        expect((string) DB::table('product_packs')
             ->where('id', $packs['300g']->id)->value('default_cost_price'))->toBe('27.90');
     });
 });

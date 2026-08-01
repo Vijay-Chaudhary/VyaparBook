@@ -14,12 +14,12 @@ function payTenant(string $role = 'owner'): array
 {
     $business = Business::factory()->create();
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => $role,
     ]);
-    Subscription::on('pgsql_migrate')->create([
+    Subscription::create([
         'business_id' => $business->id,
         'plan' => 'free',
         'status' => 'trialing',
@@ -41,7 +41,7 @@ it('records a pending payment with GST and leaves the subscription untouched', f
         ->assertJsonPath('status', 'pending')
         ->assertJsonPath('gst_amount', '89.82');
 
-    expect(Subscription::on('pgsql_migrate')->where('business_id', $business->id)->first()->status)
+    expect(Subscription::where('business_id', $business->id)->first()->status)
         ->toBe('trialing');
 });
 
@@ -52,7 +52,7 @@ it('is idempotent by uuid', function () {
     $this->withHeader('Authorization', "Bearer {$token}")->postJson('/api/v1/billing/payments', $body)->assertCreated();
     $this->withHeader('Authorization', "Bearer {$token}")->postJson('/api/v1/billing/payments', $body)->assertOk();
 
-    expect(SubscriptionPayment::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(1);
+    expect(SubscriptionPayment::where('business_id', $business->id)->count())->toBe(1);
 });
 
 it('forbids non-owners from recording a payment', function () {

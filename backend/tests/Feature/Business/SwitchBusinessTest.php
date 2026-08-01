@@ -9,8 +9,8 @@ it('lists every business the user belongs to', function () {
     $user = User::factory()->create();
     $businessA = Business::factory()->create(['name' => 'Shop A']);
     $businessB = Business::factory()->create(['name' => 'Shop B']);
-    Membership::on('pgsql_migrate')->create(['user_id' => $user->id, 'business_id' => $businessA->id, 'role' => 'owner']);
-    Membership::on('pgsql_migrate')->create(['user_id' => $user->id, 'business_id' => $businessB->id, 'role' => 'salesman']);
+    Membership::create(['user_id' => $user->id, 'business_id' => $businessA->id, 'role' => 'owner']);
+    Membership::create(['user_id' => $user->id, 'business_id' => $businessB->id, 'role' => 'salesman']);
 
     $token = (new TokenService())->issue($user);
 
@@ -25,8 +25,8 @@ it('switches to a business the user is a member of', function () {
     $user = User::factory()->create();
     $businessA = Business::factory()->create();
     $businessB = Business::factory()->create();
-    $membershipA = Membership::on('pgsql_migrate')->create(['user_id' => $user->id, 'business_id' => $businessA->id, 'role' => 'owner']);
-    Membership::on('pgsql_migrate')->create(['user_id' => $user->id, 'business_id' => $businessB->id, 'role' => 'salesman']);
+    $membershipA = Membership::create(['user_id' => $user->id, 'business_id' => $businessA->id, 'role' => 'owner']);
+    Membership::create(['user_id' => $user->id, 'business_id' => $businessB->id, 'role' => 'salesman']);
 
     $tokenForA = (new TokenService())->issue($user, $membershipA);
 
@@ -57,7 +57,7 @@ it('rejects switching into a business that someone else is a member of', functio
     $user = User::factory()->create();
     $stranger = User::factory()->create();
     $strangersBusiness = Business::factory()->create();
-    Membership::on('pgsql_migrate')->create([
+    Membership::create([
         'user_id' => $stranger->id,
         'business_id' => $strangersBusiness->id,
         'role' => 'owner',

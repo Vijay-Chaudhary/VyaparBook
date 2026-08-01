@@ -27,7 +27,7 @@ it('rejects login with the wrong password', function () {
 it('scopes the token to the business when the user has exactly one membership', function () {
     $user = \App\Models\User::factory()->create(['email' => 'solo@example.com']);
     $business = \App\Models\Business::factory()->create();
-    \App\Models\Membership::on('pgsql_migrate')->create([
+    \App\Models\Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => 'owner',

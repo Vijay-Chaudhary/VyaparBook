@@ -11,7 +11,7 @@ use App\Services\TokenService;
 function ppOwnerToken(Business $business): string
 {
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => 'owner',
@@ -22,10 +22,10 @@ function ppOwnerToken(Business $business): string
 
 it('fills the cost price from the per-kg base cost when omitted', function () {
     $business = Business::factory()->create();
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'base_cost_per_kg' => '120.00',
     ]);
-    $pack = PackSize::on('pgsql_migrate')->create([
+    $pack = PackSize::create([
         'business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
 
@@ -41,10 +41,10 @@ it('fills the cost price from the per-kg base cost when omitted', function () {
 
 it('keeps an explicit cost price instead of the suggestion', function () {
     $business = Business::factory()->create();
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'base_cost_per_kg' => '120.00',
     ]);
-    $pack = PackSize::on('pgsql_migrate')->create([
+    $pack = PackSize::create([
         'business_id' => $business->id, 'label' => '100g', 'weight_kg' => '0.100',
     ]);
 
@@ -63,10 +63,10 @@ it('refuses to pair a product with another business pack size', function () {
     $mine = Business::factory()->create();
     $theirs = Business::factory()->create();
 
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $mine->id, 'name_hi' => 'सेव',
     ]);
-    $foreignPack = PackSize::on('pgsql_migrate')->create([
+    $foreignPack = PackSize::create([
         'business_id' => $theirs->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
 

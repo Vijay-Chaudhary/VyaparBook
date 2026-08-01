@@ -14,7 +14,7 @@ function queuedReminder(array $overrides = []): array
 {
     [$owner, $business] = pwOwner();
 
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Ramesh Kumar', 'village' => 'Rampur',
         'phone' => '9876543210', 'opening_balance' => '0.00',
@@ -24,7 +24,6 @@ function queuedReminder(array $overrides = []): array
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $customer->id, 'sale_date' => now()->subDays(60)->format('Y-m-d'),
     ]);
-    $sale->setConnection('pgsql_migrate');
     $sale->total = '2500.00';
     $sale->created_by = $owner->id;
     $sale->save();
@@ -37,7 +36,6 @@ function queuedReminder(array $overrides = []): array
         'locale' => 'en',
         'phone_e164' => '919876543210',
     ]);
-    $log->setConnection('pgsql_migrate');
     $log->created_by = $owner->id;
     $log->save();
 
@@ -46,7 +44,7 @@ function queuedReminder(array $overrides = []): array
 
 function freshLog(ReminderLog $log): ReminderLog
 {
-    return ReminderLog::on('pgsql_migrate')->findOrFail($log->id);
+    return ReminderLog::findOrFail($log->id);
 }
 
 beforeEach(function () {

@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 use App\Platform\PlatformAudit;
 use App\Reminders\StopWords;
 use App\Reminders\WhatsAppConfig;
+use App\Support\Tenancy;
 use Illuminate\Http\Request;
 use Illuminate\Http\Response;
 use Illuminate\Support\Facades\DB;
@@ -103,7 +104,7 @@ class WhatsAppWebhookController extends Controller
 
         // Privileged connection: this row belongs to a tenant we have no pin
         // for, and Meta's callback is the only thing that can resolve it.
-        $row = DB::connection('pgsql_migrate')->table('reminder_logs')
+        $row = DB::table('reminder_logs')
             ->where('provider_message_id', $id)->first();
 
         if ($row === null) {
@@ -120,7 +121,7 @@ class WhatsAppWebhookController extends Controller
             return;
         }
 
-        DB::connection('pgsql_migrate')->table('reminder_logs')->where('id', $row->id)->update([
+        DB::table('reminder_logs')->where('id', $row->id)->update([
             'status' => $newStatus,
             'status_at' => now(),
             'error_code' => isset($status['errors'][0]['code']) ? (string) $status['errors'][0]['code'] : null,
@@ -153,7 +154,7 @@ class WhatsAppWebhookController extends Controller
      * what they asked us not to do.
      *
      * Therefore a deliberate cross-tenant write — the only one in the app. It
-     * runs on the privileged connection, selects solely on the phone number,
+     * runs inside Tenancy::withoutTenant(), selects solely on the phone number,
      * and is audited, because a write that crosses tenants must never be
      * invisible.
      */
@@ -164,18 +165,21 @@ class WhatsAppWebhookController extends Controller
         // expecting a normalised column.
         $local = mb_substr($e164, -10);
 
-        DB::connection('pgsql_migrate')->transaction(function () use ($local, $e164) {
-            $ids = DB::connection('pgsql_migrate')->table('customers')
+        Tenancy::withoutTenant(fn () => DB::transaction(function () use ($local, $e164) {
+            $ids = DB::table('customers')
                 ->whereNull('archived_at')
                 ->whereNull('reminder_opt_out_at')
-                ->whereRaw("regexp_replace(coalesce(phone, ''), '\\D', '', 'g') LIKE ?", ['%'.$local])
+                // MySQL's REGEXP_REPLACE is global by default, so Postgres's
+                // trailing 'g' flag has no equivalent and an explicit class
+                // replaces \D.
+                ->whereRaw("regexp_replace(coalesce(phone, ''), '[^0-9]', '') LIKE ?", ['%'.$local])
                 ->pluck('id');
 
             if ($ids->isEmpty()) {
                 return;
             }
 
-            DB::connection('pgsql_migrate')->table('customers')
+            DB::table('customers')
                 ->whereIn('id', $ids)
                 ->update(['reminder_opt_out_at' => now(), 'updated_at' => now()]);
 
@@ -183,6 +187,6 @@ class WhatsAppWebhookController extends Controller
                 'phone_suffix' => mb_substr($e164, -4),
                 'customers' => $ids->count(),
             ]);
-        });
+        }));
     }
 }

@@ -36,7 +36,7 @@ class FinishedGoodsService
         $produced = DB::table('production_batches')
             ->where('business_id', $businessId)
             ->groupBy('product_id')
-            ->selectRaw('product_id, coalesce(sum(output_kg), 0)::text as kg')
+            ->selectRaw('product_id, CAST(coalesce(sum(output_kg), 0) AS CHAR) as kg')
             ->pluck('kg', 'product_id');
 
         // qty is an integer count of packs; weight_kg turns it into kg. The
@@ -46,7 +46,7 @@ class FinishedGoodsService
             ->join('pack_sizes', 'pack_sizes.id', '=', 'product_packs.pack_size_id')
             ->where('sale_lines.business_id', $businessId)
             ->groupBy('product_packs.product_id')
-            ->selectRaw('product_packs.product_id as product_id, coalesce(sum(sale_lines.qty * pack_sizes.weight_kg), 0)::text as kg')
+            ->selectRaw('product_packs.product_id as product_id, CAST(coalesce(sum(sale_lines.qty * pack_sizes.weight_kg), 0) AS CHAR) as kg')
             ->pluck('kg', 'product_id');
 
         $products = Product::query()

@@ -32,7 +32,7 @@ function gstShop(string $defaultRate = '5.00', ?string $gstin = '09ABCDE1234F1Z5
     $business = Business::factory()->create();
     $owner = User::factory()->create();
 
-    DB::connection('pgsql_migrate')->table('businesses')->where('id', $business->id)->update([
+    DB::table('businesses')->where('id', $business->id)->update([
         'gstin' => $gstin, 'default_gst_rate_percent' => $defaultRate, 'state_code' => '09',
     ]);
 
@@ -41,7 +41,7 @@ function gstShop(string $defaultRate = '5.00', ?string $gstin = '09ABCDE1234F1Z5
 
 function gstSale(Business $b, User $u, string $lineTotal = '105.00', int $qty = 1, ?string $rate = null, ?string $hsn = '21069099'): Sale
 {
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $b->id, 'name_hi' => 'Bhujia', 'name_en' => 'Bhujia',
     ]);
     // Assigned explicitly, not mass-filled: the GST columns are deliberately
@@ -51,15 +51,15 @@ function gstSale(Business $b, User $u, string $lineTotal = '105.00', int $qty = 
     $product->save();
     // firstOrCreate: pack_sizes is unique per (business, label), and several
     // tests invoice more than one sale for the same shop.
-    $size = PackSize::on('pgsql_migrate')->firstOrCreate(
+    $size = PackSize::firstOrCreate(
         ['business_id' => $b->id, 'label' => '1kg'],
         ['weight_kg' => '1.000'],
     );
-    $pack = ProductPack::on('pgsql_migrate')->create([
+    $pack = ProductPack::create([
         'business_id' => $b->id, 'product_id' => $product->id,
         'pack_size_id' => $size->id, 'default_sell_price' => $lineTotal,
     ]);
-    $customer = Customer::on('pgsql_migrate')->firstOrCreate(
+    $customer = Customer::firstOrCreate(
         ['business_id' => $b->id, 'name' => 'Ramesh'],
         ['uuid' => (string) Str::uuid(), 'village' => 'Rampur', 'opening_balance' => '0.00'],
     );
@@ -68,7 +68,6 @@ function gstSale(Business $b, User $u, string $lineTotal = '105.00', int $qty = 
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $customer->id, 'sale_date' => now()->toDateString(),
     ]);
-    $sale->setConnection('pgsql_migrate');
     $sale->total = bcmul($lineTotal, (string) $qty, 2);
     $sale->created_by = $u->id;
     $sale->save();
@@ -77,7 +76,6 @@ function gstSale(Business $b, User $u, string $lineTotal = '105.00', int $qty = 
         'business_id' => $b->id, 'sale_id' => $sale->id,
         'product_pack_id' => $pack->id, 'qty' => $qty, 'rate' => $lineTotal,
     ]);
-    $line->setConnection('pgsql_migrate');
     $line->line_total = bcmul($lineTotal, (string) $qty, 2);
     $line->save();
 
@@ -95,7 +93,7 @@ function issue(Business $b, User $u, Sale $sale, ?string $buyerGstin = null): In
  */
 function soleLine(Invoice $invoice): object
 {
-    return DB::connection('pgsql_migrate')->table('invoice_lines')
+    return DB::table('invoice_lines')
         ->where('invoice_id', $invoice->id)->sole();
 }
 
@@ -166,7 +164,7 @@ it('snapshots the line so a later product change cannot alter a filed invoice', 
     expect($line->hsn_code)->toBe('21069099');
 
     // Change the product afterwards; the filed document must not move.
-    DB::connection('pgsql_migrate')->table('products')->where('business_id', $b->id)
+    DB::table('products')->where('business_id', $b->id)
         ->update(['gst_rate_percent' => '28.00', 'hsn_code' => '99999999']);
 
     $reloaded = soleLine($invoice);
@@ -207,7 +205,6 @@ it('refuses to invoice a reversal', function () {
         'customer_id' => $original->customer_id, 'sale_date' => now()->toDateString(),
         'reverses_id' => $original->id,
     ]);
-    $reversal->setConnection('pgsql_migrate');
     $reversal->total = '-105.00';
     $reversal->created_by = $u->id;
     $reversal->save();

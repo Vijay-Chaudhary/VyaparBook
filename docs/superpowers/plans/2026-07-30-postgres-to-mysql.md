@@ -66,7 +66,7 @@
 
 **Files:** none.
 
-- [ ] **Step 1: Install the MySQL PDO driver and start the server**
+- [x] **Step 1: Install the MySQL PDO driver and start the server**
 
 The machine currently has `pdo_pgsql` only, so no MySQL connection is possible at all.
 
@@ -84,7 +84,7 @@ echo "deb [signed-by=/etc/apt/keyrings/deb.sury.org-php.gpg] https://packages.su
 sudo apt update && sudo apt install php8.3-mysql
 ```
 
-- [ ] **Step 2: Verify the driver is loaded**
+- [x] **Step 2: Verify the driver is loaded**
 
 Run: `php -r "var_export(PDO::getAvailableDrivers());"`
 Expected: an array containing `'mysql'`. If it shows only `'pgsql'`, stop — nothing later will work.
@@ -146,7 +146,7 @@ Expected: `ERROR 1142 (42000): CREATE command denied`
 - Delete: `database/migrations/2026_07_17_000001_create_sync_seq_sequence.php`
 - Create: `database/migrations/2026_07_30_000001_create_sync_sequences_table.php`
 
-- [ ] **Step 1: See what one migration looks like before and after**
+- [x] **Step 1: See what one migration looks like before and after**
 
 `database/migrations/2026_07_26_000001_create_orders_tables.php` currently ends with:
 
@@ -164,7 +164,7 @@ Expected: `ERROR 1142 (42000): CREATE command denied`
 
 That whole `foreach` is **deleted** — not translated. And `Schema::connection('pgsql_migrate')->create(...)` becomes `Schema::create(...)`.
 
-- [ ] **Step 2: Remove the connection pin across all migrations**
+- [x] **Step 2: Remove the connection pin across all migrations**
 
 ```bash
 cd backend
@@ -172,12 +172,12 @@ sed -i "s/Schema::connection('pgsql_migrate')->/Schema::/g" database/migrations/
 sed -i "s/DB::connection('pgsql_migrate')->/DB::/g" database/migrations/*.php
 ```
 
-- [ ] **Step 3: Verify the pin is gone**
+- [x] **Step 3: Verify the pin is gone**
 
 Run: `grep -rc "pgsql_migrate" database/migrations/ | grep -v ':0' || echo CLEAN`
 Expected: `CLEAN`
 
-- [ ] **Step 4: Delete every RLS block by hand**
+- [x] **Step 4: Delete every RLS block by hand**
 
 These are multi-line and vary in shape, so do them per file rather than with `sed`. Find them:
 
@@ -186,12 +186,12 @@ Expected: 23 files.
 
 In each, delete the statements that mention `ENABLE ROW LEVEL SECURITY`, `FORCE ROW LEVEL SECURITY`, and `CREATE POLICY` — including any `foreach` wrapper that exists only to issue them. Leave every `Schema::create` and column definition untouched.
 
-- [ ] **Step 5: Verify no RLS remains**
+- [x] **Step 5: Verify no RLS remains**
 
 Run: `grep -rn "ROW LEVEL SECURITY\|CREATE POLICY\|current_setting" database/migrations/ || echo CLEAN`
 Expected: `CLEAN`
 
-- [ ] **Step 6: Replace the sequence with a per-tenant counter table**
+- [x] **Step 6: Replace the sequence with a per-tenant counter table**
 
 ```bash
 git rm database/migrations/2026_07_17_000001_create_sync_seq_sequence.php
@@ -275,7 +275,7 @@ is always scoped by business_id."
 **Files:**
 - Modify: `app/Traits/HasSyncSequence.php`
 
-- [ ] **Step 1: Write the failing test**
+- [x] **Step 1: Write the failing test**
 
 Create `tests/Feature/Sync/SyncSequenceTest.php`:
 
@@ -347,7 +347,7 @@ it('creates the counter row on demand rather than needing business creation to s
 Run: `./vendor/bin/pest tests/Feature/Sync/SyncSequenceTest.php`
 Expected: FAIL — `nextval` does not exist in MySQL.
 
-- [ ] **Step 3: Rewrite the trait**
+- [x] **Step 3: Rewrite the trait**
 
 Replace `app/Traits/HasSyncSequence.php` entirely:
 
@@ -462,7 +462,7 @@ when the sequence is drawn."
 - Modify: `tests/RefreshesTenantDatabase.php`
 - Modify: ~105 test files using `on('pgsql_migrate')` / `setConnection('pgsql_migrate')`
 
-- [ ] **Step 1: Rewrite the harness docblock and connection**
+- [x] **Step 1: Rewrite the harness docblock and connection**
 
 In `tests/RefreshesTenantDatabase.php`, the `migrate:fresh` call becomes:
 
@@ -492,20 +492,53 @@ Replace the docblock, which currently explains a three-reason Postgres problem t
  */
 ```
 
-- [ ] **Step 2: Strip the connection pin from every test**
+> **DEVIATION (applied).** This step also has to rewrite `truncateTenantTables()`,
+> which the plan overlooked. It reads `pg_tables` and issues
+> `TRUNCATE ... RESTART IDENTITY CASCADE` — neither exists in MySQL. Now it takes
+> the table list from `Schema::getTables()` and truncates one table at a time
+> inside `SET FOREIGN_KEY_CHECKS = 0/1` (MySQL's `TRUNCATE` has no `CASCADE` and
+> refuses to run on a table another table's FK points at). `RESTART IDENTITY`
+> needs no equivalent: MySQL's `TRUNCATE` already resets `AUTO_INCREMENT`.
+
+- [x] **Step 2: Strip the connection pin from every test**
+
+> **DEVIATION (applied).** The first `sed` above is wrong: `Model::on('pgsql_migrate')->create()`
+> becomes `Model->create()`, which does not parse. The arrow must be consumed
+> along with the call. Four more shapes the original set missed also needed
+> rules. What was actually run:
 
 ```bash
 cd backend
+shopt -s globstar
+sed -i "s/::on('pgsql_migrate')->/::/g" tests/**/*.php tests/*.php
 sed -i "s/::on('pgsql_migrate')//g" tests/**/*.php tests/*.php
 sed -i "/->setConnection('pgsql_migrate');/d" tests/**/*.php tests/*.php
 sed -i "s/DB::connection('pgsql_migrate')->/DB::/g" tests/**/*.php tests/*.php
+sed -i "s/Schema::connection('pgsql_migrate')->/Schema::/g" tests/**/*.php tests/*.php
+sed -i "s/->connection('pgsql_migrate')//g" tests/**/*.php tests/*.php
 sed -i "s/'--database' => 'pgsql_migrate',//g" tests/**/*.php tests/*.php
 ```
 
-- [ ] **Step 3: Verify**
+Then `php -l` every file under `tests/` — `sed` across ~105 files earns a parse check.
+
+- [x] **Step 3: Verify**
 
 Run: `grep -rn "pgsql" tests/ || echo CLEAN`
 Expected: `CLEAN`. Anything left is a shape the `sed` missed — fix by hand.
+
+> **DEVIATION (applied).** Six sites survived the `sed`, all fixed by hand:
+> - `tests/Feature/AppRoleMigrationTest.php` — **deleted**. It asserted
+>   `vyaparbook_app` exists in `pg_roles`; the migration that created that role
+>   was deleted in Task 2, so the test had nothing left to prove.
+> - `tests/Feature/Export/TenantEraseTest.php:133` — `information_schema.columns
+>   where table_schema = 'public'` is a Postgres-ism; now `= database()`.
+> - `tests/Feature/Web/RemindersTest.php:350` — a line-wrapped
+>   `DB::connection('pgsql_migrate')\n->table(...)` the single-line pattern could
+>   not see.
+> - Three stale comments (`OrderWriterTest` ×2, `ShreeRajShyamajiSeederTest` ×1)
+>   explaining RLS/GUC behaviour that no longer exists.
+>
+> `pgsql_platform` call sites are deliberately left — they are Task 7.
 
 - [ ] **Step 4: Run the suite to see where you actually are**
 
@@ -532,7 +565,7 @@ writes committing rather than rolling back."
 - Modify: `app/Support/TenantContext.php`
 - Modify: `app/Http/Middleware/SetTenantContext.php:56` and `:72`
 
-- [ ] **Step 1: Rewrite `TenantContext`**
+- [x] **Step 1: Rewrite `TenantContext`**
 
 MySQL has no session GUCs. Tenant identity now lives solely in the container binding the app already reads.
 
@@ -593,7 +626,7 @@ class TenantContext
 }
 ```
 
-- [ ] **Step 2: Delete both `set_config` calls from the middleware**
+- [x] **Step 2: Delete both `set_config` calls from the middleware**
 
 In `app/Http/Middleware/SetTenantContext.php`, delete this line (~56) and its two-line comment above it:
 
@@ -609,10 +642,18 @@ and this one (~72), keeping the two `app()->bind(...)` lines that follow it:
 
 **Keep** the surrounding `DB::beginTransaction()` / `commit()` / `rollBack()`. It is no longer needed for GUC scoping but still gives each request atomicity.
 
-- [ ] **Step 3: Verify no GUC calls remain**
+- [x] **Step 3: Verify no GUC calls remain**
 
 Run: `grep -rn "set_config\|current_setting" app/ || echo CLEAN`
 Expected: `CLEAN`
+
+> **DEVIATION (applied).** A third GUC site the plan never lists:
+> `app/Platform/PlatformTenantContext.php:29-30` sets both
+> `app.current_user_id` and `app.current_tenant` before a platform write. Both
+> statements are deleted; the surrounding `app()->bind()` / restore pair already
+> pins the tenant and is now the only mechanism. Its docblock claimed the write
+> "goes THROUGH row-level security … (defense in depth)" — rewritten, since the
+> app scope is the single layer now.
 
 - [ ] **Step 4: Run the tenancy middleware tests**
 

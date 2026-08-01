@@ -45,7 +45,7 @@ describe('crud', function () {
         $this->actingAs($owner)->post('/suppliers', $payload);
         $this->actingAs($owner)->post('/suppliers', $payload);   // replay
 
-        expect(Supplier::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(1);
+        expect(Supplier::where('business_id', $business->id)->count())->toBe(1);
     });
 
     it('shows a ledger whose running balance reconciles with outstanding', function () {
@@ -69,7 +69,7 @@ describe('crud', function () {
             ->assertSee('−₹600.00')     // the payment, credited
             ->assertSee('₹900.00');     // running balance = outstanding
 
-        expect(SupplierPayment::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(1);
+        expect(SupplierPayment::where('business_id', $business->id)->count())->toBe(1);
     });
 
     it('rejects a non-positive payment and an unknown mode', function () {
@@ -84,7 +84,7 @@ describe('crud', function () {
             'business' => $business->id, 'amount' => '10', 'payment_date' => '2026-07-06', 'mode' => 'barter',
         ])->assertSessionHasErrors('mode');
 
-        expect(SupplierPayment::on('pgsql_migrate')->withoutGlobalScopes()->count())->toBe(0);
+        expect(SupplierPayment::withoutGlobalScopes()->count())->toBe(0);
     });
 
     it('does not leak or accept another tenant\'s supplier', function () {
@@ -106,6 +106,6 @@ describe('crud', function () {
             'business' => $business->id, 'amount' => '100', 'payment_date' => '2026-07-06', 'mode' => 'cash',
         ])->assertRedirect();
 
-        expect(SupplierPayment::on('pgsql_migrate')->withoutGlobalScopes()->count())->toBe(0);
+        expect(SupplierPayment::withoutGlobalScopes()->count())->toBe(0);
     });
 });

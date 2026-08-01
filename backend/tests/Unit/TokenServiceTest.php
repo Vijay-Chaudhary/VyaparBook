@@ -20,7 +20,7 @@ it('issues a token with no tid when no membership is given', function () {
 it('issues a token with tid and role when a membership is given', function () {
     $user = User::factory()->create();
     $business = Business::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => 'owner',

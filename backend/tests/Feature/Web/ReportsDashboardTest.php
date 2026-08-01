@@ -12,7 +12,7 @@ function reportsOwner(): array
 {
     $business = Business::factory()->create();
     $user = User::factory()->create();
-    Membership::on('pgsql_migrate')->create([
+    Membership::create([
         'user_id' => $user->id, 'business_id' => $business->id, 'role' => 'owner',
     ]);
 
@@ -42,7 +42,7 @@ describe('access', function () {
 describe('render', function () {
     it('links each customer in the outstanding list to their khata', function () {
         [$owner, $business] = reportsOwner();
-        $customer = Customer::on('pgsql_migrate')->create([
+        $customer = Customer::create([
             'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
             'name' => 'Ramesh', 'village' => 'Rampur', 'opening_balance' => '1500.00',
         ]);
@@ -57,7 +57,7 @@ describe('render', function () {
 
     it('shows the dashboard heading and the total-due figure for the owner', function () {
         [$owner, $business] = reportsOwner();
-        Customer::on('pgsql_migrate')->create([
+        Customer::create([
             'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
             'name' => 'Ramesh', 'village' => 'Rampur', 'opening_balance' => '1500.00',
         ]);
@@ -66,7 +66,6 @@ describe('render', function () {
             'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
             'category' => 'rent', 'amount' => '1200.00', 'spent_on' => now()->format('Y-m-d'),
         ]);
-        $e->setConnection('pgsql_migrate');
         $e->created_by = $owner->id;
         $e->save();
 
@@ -110,7 +109,7 @@ describe('phase 2a', function () {
         // 100kg @ ₹42 = ₹4,200 stock value; supplier payable 500 + 4,200 = 4,700.
         $this->actingAs($owner)->post('/purchases', [
             'business' => $business->id, 'supplier_id' => $sup->id,
-            'raw_material_id' => \App\Models\RawMaterial::on('pgsql_migrate')
+            'raw_material_id' => \App\Models\RawMaterial
                 ->where('business_id', $business->id)->where('name', 'Besan')->value('id'),
             'purchase_date' => '2026-07-04', 'qty' => '100', 'unit_cost' => '42',
         ])->assertRedirect();
@@ -133,7 +132,7 @@ describe('phase 2a', function () {
         pwMaterial($other, 'Foreign Material');
         $this->actingAs($otherOwner)->post('/purchases', [
             'business' => $other->id, 'supplier_id' => $foreignSup->id,
-            'raw_material_id' => \App\Models\RawMaterial::on('pgsql_migrate')
+            'raw_material_id' => \App\Models\RawMaterial
                 ->where('business_id', $other->id)->value('id'),
             'purchase_date' => '2026-07-04', 'qty' => '10', 'unit_cost' => '900',
         ]);
@@ -161,7 +160,7 @@ describe('phase 2b', function () {
         // Bought in: never produced, so ₹77 estimate stands and is flagged.
         [, $namkeenPack] = cogsProduct($business, 'Namkeen', '1.000', '77.00');
 
-        $c = App\Models\Customer::on('pgsql_migrate')->create([
+        $c = App\Models\Customer::create([
             'business_id' => $business->id, 'uuid' => (string) Illuminate\Support\Str::uuid(),
             'name' => 'Ramesh', 'opening_balance' => '0.00',
         ]);
@@ -183,7 +182,7 @@ describe('finished goods', function () {
     it('shows produced, sold and on-hand kg per product', function () {
         [$owner, $business] = reportsOwner();
 
-        $product = App\Models\Product::on('pgsql_migrate')->create([
+        $product = App\Models\Product::create([
             'business_id' => $business->id, 'name_hi' => 'Aloo Bhujia', 'name_en' => 'Aloo Bhujia',
         ]);
 
@@ -191,7 +190,6 @@ describe('finished goods', function () {
             'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
             'product_id' => $product->id, 'batch_date' => now()->toDateString(), 'output_kg' => '20.000',
         ]);
-        $batch->setConnection('pgsql_migrate');
         $batch->created_by = $owner->id;
         $batch->save();
 

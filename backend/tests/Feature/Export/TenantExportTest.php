@@ -19,14 +19,14 @@ function seedTenantWithCustomers(array $names): Business
 {
     $business = Business::factory()->create();
 
-    Membership::on('pgsql_migrate')->create([
+    Membership::create([
         'user_id' => User::factory()->create()->id,
         'business_id' => $business->id,
         'role' => 'owner',
     ]);
 
     foreach ($names as $name) {
-        Customer::on('pgsql_migrate')->create([
+        Customer::create([
             'business_id' => $business->id,
             'uuid' => (string) Str::uuid(),
             'name' => $name,
@@ -87,7 +87,7 @@ it('covers every tenant-owned table so nothing is silently omitted', function ()
     // would slip through. Any table carrying business_id is tenant-owned and
     // must appear in a portability export; a silently incomplete one is a
     // compliance failure that looks like a success.
-    $tenantTables = collect(DB::connection('pgsql_migrate')->select(
+    $tenantTables = collect(DB::select(
         'select table_name from information_schema.columns
          where column_name = ? and table_schema = ?',
         ['business_id', 'public']
@@ -113,7 +113,7 @@ it('writes a readable JSON file and audits the export', function () {
     $decoded = json_decode(file_get_contents($path), true, 512, JSON_THROW_ON_ERROR);
     expect($decoded['data']['customers'][0]['name'])->toBe('Ram Traders');
 
-    $log = PlatformAuditLog::on('pgsql_migrate')->where('action', 'export_tenant')->first();
+    $log = PlatformAuditLog::where('action', 'export_tenant')->first();
     expect($log)->not->toBeNull();
     // CLI has no logged-in console admin — a null actor here is deliberate.
     expect($log->admin_user_id)->toBeNull()

@@ -12,14 +12,14 @@ use Illuminate\Support\Str;
 $fixture = fn (string $name) => dirname(__DIR__, 2) . '/fixtures/import/' . $name;
 
 $ownerFor = function (Business $business): void {
-    Membership::on('pgsql_migrate')->create([
+    Membership::create([
         'user_id' => User::factory()->create()->id,
         'business_id' => $business->id,
         'role' => 'owner',
     ]);
 };
 
-$customerCount = fn (Business $b) => Customer::on('pgsql_migrate')
+$customerCount = fn (Business $b) => Customer
     ->withoutGlobalScopes()->where('business_id', $b->id)->count();
 
 it('imports customers and exits 0', function () use ($fixture, $customerCount) {
@@ -44,7 +44,7 @@ it('imports raw materials with their opening stock', function () use ($fixture, 
         'path' => $fixture('raw-materials.csv'),
     ])->assertExitCode(0);
 
-    $besan = RawMaterial::on('pgsql_migrate')->withoutGlobalScopes()
+    $besan = RawMaterial::withoutGlobalScopes()
         ->where('business_id', $business->id)->where('name', 'Besan')->first();
     expect((new StockService())->onHandFor($besan))->toBe('100.000');
 });
@@ -82,7 +82,7 @@ it('exits 1 for an unknown business', function () use ($fixture) {
         'path' => $fixture('customers.csv'),
     ])->assertExitCode(1);
 
-    expect(Customer::on('pgsql_migrate')->withoutGlobalScopes()->count())->toBe(0);
+    expect(Customer::withoutGlobalScopes()->count())->toBe(0);
 });
 
 it('exits 1 for an unknown type', function () use ($fixture) {
@@ -99,7 +99,7 @@ it('never touches another tenant (cross-tenant isolation)', function () use ($fi
     $businessA = Business::factory()->create();
     $businessB = Business::factory()->create();
 
-    Customer::on('pgsql_migrate')->create([
+    Customer::create([
         'business_id' => $businessB->id,
         'uuid' => (string) Str::uuid(),
         'name' => 'B-Only Customer',
@@ -130,7 +130,7 @@ it('imports customers from an xlsx and stores excel-native values correctly', fu
         'path' => $fixture('customers.xlsx'),
     ])->assertExitCode(0);
 
-    $customers = Customer::on('pgsql_migrate')->withoutGlobalScopes()
+    $customers = Customer::withoutGlobalScopes()
         ->where('business_id', $business->id)->orderBy('name')->get();
 
     expect($customers)->toHaveCount(4);

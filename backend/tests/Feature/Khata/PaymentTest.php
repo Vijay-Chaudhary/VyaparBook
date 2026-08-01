@@ -15,12 +15,12 @@ function paymentSetup(string $role = 'owner', string $opening = '500.00'): array
 {
     $business = Business::factory()->create();
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id, 'business_id' => $business->id, 'role' => $role,
     ]);
     $token = (new TokenService())->issue($user, $membership);
 
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Ram Traders', 'opening_balance' => $opening,
     ]);
@@ -47,7 +47,7 @@ it('records a payment that lowers outstanding', function () {
         ->assertStatus(201)
         ->assertJson(['amount' => '200.00', 'mode' => 'cash']);
 
-    $fresh = Customer::on('pgsql_migrate')->find($customer->id);
+    $fresh = Customer::find($customer->id);
     expect((new KhataService())->outstandingFor($fresh))->toBe('300.00'); // 500 - 200
 });
 
@@ -59,7 +59,7 @@ it('replays the same payment when the same uuid is posted twice', function () {
     $second = postPayment($token, $customer, '200.00', $uuid)->assertStatus(200);
 
     expect($second->json('id'))->toBe($first->json('id'));
-    expect(Payment::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(1);
+    expect(Payment::where('business_id', $business->id)->count())->toBe(1);
 });
 
 it('lets an accountant record a payment but not reverse one', function () {
@@ -83,9 +83,9 @@ it('reverses a payment append-only and restores outstanding', function () {
         ->assertJson(['amount' => '-200.00', 'reverses_id' => $payment->json('id')]);
 
     // Original untouched; outstanding back to the opening balance.
-    $original = Payment::on('pgsql_migrate')->find($payment->json('id'));
+    $original = Payment::find($payment->json('id'));
     expect($original->reverses_id)->toBeNull();
-    $fresh = Customer::on('pgsql_migrate')->find($customer->id);
+    $fresh = Customer::find($customer->id);
     expect((new KhataService())->outstandingFor($fresh))->toBe('500.00');
 });
 
@@ -114,7 +114,7 @@ it('rejects an invalid payment mode and a non-positive amount', function () {
 it('returns 404 recording a payment for another businesses customer', function () {
     [$mine, $token, $mineCustomer] = paymentSetup();
     $theirs = Business::factory()->create();
-    $foreign = Customer::on('pgsql_migrate')->create([
+    $foreign = Customer::create([
         'business_id' => $theirs->id, 'uuid' => (string) Str::uuid(), 'name' => 'Theirs',
     ]);
 

@@ -26,19 +26,19 @@ function inFgTenant(string $businessId, callable $fn): mixed
 
 function fgProduct(Business $b, string $name = 'Aloo Bhujia'): Product
 {
-    return Product::on('pgsql_migrate')->create([
+    return Product::create([
         'business_id' => $b->id, 'name_hi' => $name, 'name_en' => $name,
     ]);
 }
 
 function fgPack(Business $b, Product $p, string $label, string $weightKg): ProductPack
 {
-    $size = PackSize::on('pgsql_migrate')->firstOrCreate(
+    $size = PackSize::firstOrCreate(
         ['business_id' => $b->id, 'label' => $label],
         ['weight_kg' => $weightKg],
     );
 
-    return ProductPack::on('pgsql_migrate')->create([
+    return ProductPack::create([
         'business_id' => $b->id, 'product_id' => $p->id,
         'pack_size_id' => $size->id, 'default_sell_price' => '50.00',
     ]);
@@ -50,7 +50,6 @@ function fgProduce(Product $p, User $u, string $outputKg, string $date = '2026-0
         'business_id' => $p->business_id, 'uuid' => (string) Str::uuid(),
         'product_id' => $p->id, 'batch_date' => $date, 'output_kg' => $outputKg,
     ]);
-    $batch->setConnection('pgsql_migrate');
     $batch->created_by = $u->id;
     $batch->save();
 }
@@ -58,7 +57,7 @@ function fgProduce(Product $p, User $u, string $outputKg, string $date = '2026-0
 /** A sale of $qty packs; negative qty is a return, as the domain allows. */
 function fgSell(ProductPack $pack, User $u, int $qty, string $date = '2026-07-05'): Sale
 {
-    $customer = Customer::on('pgsql_migrate')->firstOrCreate(
+    $customer = Customer::firstOrCreate(
         ['business_id' => $pack->business_id, 'name' => 'Cust'],
         ['uuid' => (string) Str::uuid(), 'village' => 'V', 'opening_balance' => '0.00'],
     );
@@ -67,7 +66,6 @@ function fgSell(ProductPack $pack, User $u, int $qty, string $date = '2026-07-05
         'business_id' => $pack->business_id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $customer->id, 'sale_date' => $date,
     ]);
-    $sale->setConnection('pgsql_migrate');
     $sale->total = '100.00';
     $sale->created_by = $u->id;
     $sale->save();
@@ -76,7 +74,6 @@ function fgSell(ProductPack $pack, User $u, int $qty, string $date = '2026-07-05
         'business_id' => $pack->business_id, 'sale_id' => $sale->id,
         'product_pack_id' => $pack->id, 'qty' => $qty, 'rate' => '50.00',
     ]);
-    $line->setConnection('pgsql_migrate');
     $line->line_total = '100.00';
     $line->save();
 
@@ -159,7 +156,6 @@ it('self-nets a full reversal without excluding any row', function () {
         'customer_id' => $sale->customer_id, 'sale_date' => '2026-07-06',
         'reverses_id' => $sale->id,
     ]);
-    $reversal->setConnection('pgsql_migrate');
     $reversal->total = '-100.00';
     $reversal->created_by = $u->id;
     $reversal->save();
@@ -168,7 +164,6 @@ it('self-nets a full reversal without excluding any row', function () {
         'business_id' => $b->id, 'sale_id' => $reversal->id,
         'product_pack_id' => $pack->id, 'qty' => -4, 'rate' => '50.00',
     ]);
-    $line->setConnection('pgsql_migrate');
     $line->line_total = '-100.00';
     $line->save();
 

@@ -24,17 +24,17 @@ function backfillSetup(): array
     $business = Business::factory()->create();
     $user = User::factory()->create();
 
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Ram Traders', 'opening_balance' => '0.00',
     ]);
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
-    $size = PackSize::on('pgsql_migrate')->create([
+    $size = PackSize::create([
         'business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
-    $pack = ProductPack::on('pgsql_migrate')->create([
+    $pack = ProductPack::create([
         'business_id' => $business->id, 'product_id' => $product->id,
         'pack_size_id' => $size->id, 'default_sell_price' => '90.00',
     ]);
@@ -48,13 +48,13 @@ function legacyOrderLine(Business $b, User $u, Customer $c, ProductPack $pack, s
     $orderId = (string) Str::uuid();
     $lineId = (string) Str::uuid();
 
-    DB::connection('pgsql_migrate')->table('orders')->insert([
+    DB::table('orders')->insert([
         'id' => $orderId, 'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'order_date' => '2026-07-20', 'status' => $status,
         'total' => '170.00', 'created_by' => $u->id, 'sync_seq' => 1,
         'created_at' => now(), 'updated_at' => now(),
     ]);
-    DB::connection('pgsql_migrate')->table('order_lines')->insert([
+    DB::table('order_lines')->insert([
         'id' => $lineId, 'business_id' => $b->id, 'order_id' => $orderId,
         'product_pack_id' => $pack->id, 'qty' => 2, 'rate' => '85.00',
         'ordered_qty' => null, 'ordered_rate' => null,
@@ -75,7 +75,7 @@ function runBackfill(): void
 
 function orderedPair(string $lineId): array
 {
-    $line = DB::connection('pgsql_migrate')->table('order_lines')->where('id', $lineId)->first();
+    $line = DB::table('order_lines')->where('id', $lineId)->first();
 
     return [$line->ordered_qty, $line->ordered_rate === null ? null : (string) $line->ordered_rate];
 }
@@ -110,7 +110,7 @@ it('never overwrites an original it already has', function () {
     [$business, $user, $customer, $pack] = backfillSetup();
 
     $lineId = legacyOrderLine($business, $user, $customer, $pack, OrderStatus::PENDING);
-    DB::connection('pgsql_migrate')->table('order_lines')->where('id', $lineId)
+    DB::table('order_lines')->where('id', $lineId)
         ->update(['ordered_qty' => 10, 'ordered_rate' => '90.00']);
 
     runBackfill();

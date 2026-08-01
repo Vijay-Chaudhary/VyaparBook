@@ -17,17 +17,17 @@ function floorPack(?string $cost, ?string $perKg, string $weight = '0.500'): Pro
 {
     $business = Business::factory()->create();
 
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
     $product->base_cost_per_kg = $perKg;
     $product->save();
 
-    $size = PackSize::on('pgsql_migrate')->create([
+    $size = PackSize::create([
         'business_id' => $business->id, 'label' => 'P', 'weight_kg' => $weight,
     ]);
 
-    $pack = ProductPack::on('pgsql_migrate')->create([
+    $pack = ProductPack::create([
         'business_id' => $business->id, 'product_id' => $product->id,
         'pack_size_id' => $size->id, 'default_sell_price' => '100.00',
         'default_cost_price' => $cost,

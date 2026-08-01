@@ -15,7 +15,7 @@ function stockPullSetup(string $role = 'owner'): array
 {
     $business = Business::factory()->create();
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id, 'business_id' => $business->id, 'role' => $role,
     ]);
 
@@ -24,7 +24,7 @@ function stockPullSetup(string $role = 'owner'): array
 
 function seedPullMaterial(Business $business, string $name = 'Besan'): RawMaterial
 {
-    return RawMaterial::on('pgsql_migrate')->create([
+    return RawMaterial::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => $name, 'unit' => 'kg', 'reorder_level' => '10.000',
     ]);
@@ -36,7 +36,6 @@ function seedPullMovement(RawMaterial $m, User $u, string $qty = '100.000'): Sto
         'business_id' => $m->business_id, 'uuid' => (string) Str::uuid(),
         'raw_material_id' => $m->id, 'movement_date' => '2026-07-10', 'kind' => 'in', 'qty' => $qty,
     ]);
-    $movement->setConnection('pgsql_migrate');
     $movement->created_by = $u->id;
     $movement->save();
 
@@ -54,14 +53,13 @@ it('streams the tenant stock and production rows on an initial pull', function (
     $material = seedPullMaterial($business);
     seedPullMovement($material, $user);
 
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव',
     ]);
     $batch = new ProductionBatch([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'product_id' => $product->id, 'batch_date' => '2026-07-15', 'output_kg' => '30.000',
     ]);
-    $batch->setConnection('pgsql_migrate');
     $batch->created_by = $user->id;
     $batch->save();
 

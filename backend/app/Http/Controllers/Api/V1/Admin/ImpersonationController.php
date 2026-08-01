@@ -39,7 +39,7 @@ class ImpersonationController extends Controller
             'reason' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $platform = DB::connection('pgsql_platform');
+        $platform = DB::connection('mysql_platform');
 
         $business = $platform->table('businesses')->where('id', $id)->first(['id', 'name']);
 

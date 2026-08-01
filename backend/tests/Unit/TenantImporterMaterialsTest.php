@@ -8,7 +8,7 @@ use App\Models\StockMovement;
 use App\Models\User;
 use App\Services\StockService;
 
-$materialFor = fn (Business $b, string $name) => RawMaterial::on('pgsql_migrate')
+$materialFor = fn (Business $b, string $name) => RawMaterial
     ->withoutGlobalScopes()
     ->where('business_id', $b->id)
     ->where('name', $name)
@@ -27,7 +27,7 @@ it('imports a raw material and its opening stock as one in-movement', function (
     $material = $materialFor($business, 'Besan');
     expect($material)->not->toBeNull();
     expect((new StockService())->onHandFor($material))->toBe('100.000');
-    expect(StockMovement::on('pgsql_migrate')->withoutGlobalScopes()
+    expect(StockMovement::withoutGlobalScopes()
         ->where('raw_material_id', $material->id)->where('kind', 'in')->count())->toBe(1);
 });
 
@@ -45,7 +45,7 @@ it('does not double the opening stock on a plain re-run', function () use ($mate
 
     $material = $materialFor($business, 'Besan');
     expect((new StockService())->onHandFor($material))->toBe('100.000');
-    expect(StockMovement::on('pgsql_migrate')->withoutGlobalScopes()
+    expect(StockMovement::withoutGlobalScopes()
         ->where('raw_material_id', $material->id)->count())->toBe(1);
 });
 
@@ -63,7 +63,7 @@ it('corrects the single opening movement when re-imported with a new figure', fu
 
     $material = $materialFor($business, 'Besan');
     expect((new StockService())->onHandFor($material))->toBe('80.000');
-    expect(StockMovement::on('pgsql_migrate')->withoutGlobalScopes()
+    expect(StockMovement::withoutGlobalScopes()
         ->where('raw_material_id', $material->id)->count())->toBe(1);
 });
 
@@ -77,7 +77,7 @@ it('creates no movement for a material without opening stock', function () use (
 
     $material = $materialFor($business, 'Salt');
     expect((new StockService())->onHandFor($material))->toBe('0.000');
-    expect(StockMovement::on('pgsql_migrate')->withoutGlobalScopes()
+    expect(StockMovement::withoutGlobalScopes()
         ->where('raw_material_id', $material->id)->count())->toBe(0);
 });
 

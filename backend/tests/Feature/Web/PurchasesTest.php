@@ -37,7 +37,7 @@ describe('crud', function () {
             ->assertSee('₹1,000.00');   // 25 × 40, computed server-side
 
         // The costed stock-in the purchase implies.
-        expect(StockMovement::on('pgsql_migrate')->withoutGlobalScopes()
+        expect(StockMovement::withoutGlobalScopes()
             ->where('business_id', $business->id)->where('kind', 'in')->count())->toBe(1);
     });
 
@@ -54,7 +54,7 @@ describe('crud', function () {
         $this->actingAs($owner)->post('/purchases', $base + ['qty' => '10', 'unit_cost' => '0'])
             ->assertSessionHasErrors('unit_cost');
 
-        expect(Purchase::on('pgsql_migrate')->withoutGlobalScopes()->where('business_id', $business->id)->count())->toBe(0);
+        expect(Purchase::withoutGlobalScopes()->where('business_id', $business->id)->count())->toBe(0);
     });
 
     it('is idempotent on a replayed uuid', function () {
@@ -69,9 +69,9 @@ describe('crud', function () {
         $this->actingAs($owner)->post('/purchases', $payload);
         $this->actingAs($owner)->post('/purchases', $payload);   // replay
 
-        expect(Purchase::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(1);
+        expect(Purchase::where('business_id', $business->id)->count())->toBe(1);
         // and no second stock-in, which would silently double on-hand
-        expect(StockMovement::on('pgsql_migrate')->withoutGlobalScopes()->where('business_id', $business->id)->count())->toBe(1);
+        expect(StockMovement::withoutGlobalScopes()->where('business_id', $business->id)->count())->toBe(1);
     });
 
     it('deleting a purchase archives it and reverses the stock-in', function () {
@@ -83,13 +83,13 @@ describe('crud', function () {
             'business' => $business->id, 'supplier_id' => $s->id, 'raw_material_id' => $m->id,
             'purchase_date' => '2026-07-04', 'qty' => '25', 'unit_cost' => '40',
         ]);
-        $p = Purchase::on('pgsql_migrate')->where('business_id', $business->id)->firstOrFail();
+        $p = Purchase::where('business_id', $business->id)->firstOrFail();
 
         $this->actingAs($owner)->delete('/purchases/' . $p->id, ['business' => $business->id])
             ->assertRedirect();
 
-        expect(Purchase::on('pgsql_migrate')->withoutGlobalScopes()->find($p->id)->archived_at)->not->toBeNull();
-        expect(StockMovement::on('pgsql_migrate')->withoutGlobalScopes()->where('purchase_id', $p->id)->count())->toBe(0);
+        expect(Purchase::withoutGlobalScopes()->find($p->id)->archived_at)->not->toBeNull();
+        expect(StockMovement::withoutGlobalScopes()->where('purchase_id', $p->id)->count())->toBe(0);
     });
 
     it('refuses a supplier belonging to another tenant', function () {
@@ -105,7 +105,7 @@ describe('crud', function () {
             'qty' => '25', 'unit_cost' => '40',
         ])->assertNotFound();
 
-        expect(Purchase::on('pgsql_migrate')->withoutGlobalScopes()->count())->toBe(0);
+        expect(Purchase::withoutGlobalScopes()->count())->toBe(0);
     });
 
     it('refuses to delete another tenant\'s purchase', function () {
@@ -118,13 +118,13 @@ describe('crud', function () {
             'business' => $other->id, 'supplier_id' => $s->id, 'raw_material_id' => $m->id,
             'purchase_date' => '2026-07-04', 'qty' => '25', 'unit_cost' => '40',
         ]);
-        $foreign = Purchase::on('pgsql_migrate')->where('business_id', $other->id)->firstOrFail();
+        $foreign = Purchase::where('business_id', $other->id)->firstOrFail();
 
         $this->actingAs($owner)->delete('/purchases/' . $foreign->id, ['business' => $business->id])
             ->assertRedirect();
 
-        expect(Purchase::on('pgsql_migrate')->withoutGlobalScopes()->find($foreign->id)->archived_at)->toBeNull();
+        expect(Purchase::withoutGlobalScopes()->find($foreign->id)->archived_at)->toBeNull();
         // its stock-in survives too
-        expect(StockMovement::on('pgsql_migrate')->withoutGlobalScopes()->where('purchase_id', $foreign->id)->count())->toBe(1);
+        expect(StockMovement::withoutGlobalScopes()->where('purchase_id', $foreign->id)->count())->toBe(1);
     });
 });

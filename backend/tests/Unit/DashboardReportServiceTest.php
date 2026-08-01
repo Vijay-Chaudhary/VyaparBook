@@ -31,7 +31,6 @@ function dashPayment(Customer $c, User $u, string $amount, string $date): Paymen
         'business_id' => $c->business_id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'payment_date' => $date, 'amount' => $amount, 'mode' => 'cash',
     ]);
-    $p->setConnection('pgsql_migrate');
     $p->created_by = $u->id;
     $p->save();
 
@@ -110,7 +109,6 @@ function stockIn(App\Models\RawMaterial $m, User $u, string $qty): void
         'raw_material_id' => $m->id, 'movement_date' => '2026-07-01',
         'kind' => 'in', 'qty' => $qty,
     ]);
-    $mv->setConnection('pgsql_migrate');
     $mv->created_by = $u->id;
     $mv->save();
 }
@@ -120,12 +118,11 @@ function dashBatch(Business $b, User $u, string $kg, string $date): void
 {
     $batch = new App\Models\ProductionBatch([
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
-        'product_id' => App\Models\Product::on('pgsql_migrate')->create([
+        'product_id' => App\Models\Product::create([
             'business_id' => $b->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
         ])->id,
         'batch_date' => $date, 'output_kg' => $kg,
     ]);
-    $batch->setConnection('pgsql_migrate');
     $batch->created_by = $u->id;
     $batch->save();
 }
@@ -136,14 +133,13 @@ function dashExpense(App\Models\Business $b, App\Models\User $u, string $categor
         'business_id' => $b->id, 'uuid' => (string) Illuminate\Support\Str::uuid(),
         'category' => $category, 'amount' => $amount, 'spent_on' => $date, 'note' => $note,
     ]);
-    $e->setConnection('pgsql_migrate');
     $e->created_by = $u->id;
     $e->save();
 }
 
 function dashSupplierPayment(App\Models\Business $b, App\Models\User $u, string $amount, string $date): void
 {
-    $s = App\Models\Supplier::on('pgsql_migrate')->firstOrCreate(
+    $s = App\Models\Supplier::firstOrCreate(
         ['business_id' => $b->id, 'name' => 'Supplier'],
         ['uuid' => (string) Illuminate\Support\Str::uuid(), 'opening_balance' => '0.00'],
     );
@@ -151,7 +147,6 @@ function dashSupplierPayment(App\Models\Business $b, App\Models\User $u, string 
         'business_id' => $b->id, 'uuid' => (string) Illuminate\Support\Str::uuid(),
         'supplier_id' => $s->id, 'payment_date' => $date, 'amount' => $amount, 'mode' => 'cash',
     ]);
-    $sp->setConnection('pgsql_migrate');
     $sp->created_by = $u->id;
     $sp->save();
 }
@@ -186,11 +181,11 @@ it('flags materials below reorder and ranks product performance', function () {
     $u = User::factory()->create();
 
     // Low stock: Besan on-hand 150 (reorder 100 → OK), Salt on-hand 4 (reorder 20 → LOW).
-    $besan = App\Models\RawMaterial::on('pgsql_migrate')->create([
+    $besan = App\Models\RawMaterial::create([
         'business_id' => $a->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Besan', 'unit' => 'kg', 'reorder_level' => '100.000',
     ]);
-    $salt = App\Models\RawMaterial::on('pgsql_migrate')->create([
+    $salt = App\Models\RawMaterial::create([
         'business_id' => $a->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Salt', 'unit' => 'kg', 'reorder_level' => '20.000',
     ]);
@@ -198,13 +193,13 @@ it('flags materials below reorder and ranks product performance', function () {
     stockIn($salt, $u, '4.000');
 
     // Product performance: two packs of one product sold this year.
-    $product = App\Models\Product::on('pgsql_migrate')->create([
+    $product = App\Models\Product::create([
         'business_id' => $a->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
-    $ps = App\Models\PackSize::on('pgsql_migrate')->create([
+    $ps = App\Models\PackSize::create([
         'business_id' => $a->id, 'label' => '1kg', 'weight_kg' => '1.000',
     ]);
-    $pack = App\Models\ProductPack::on('pgsql_migrate')->create([
+    $pack = App\Models\ProductPack::create([
         'business_id' => $a->id, 'product_id' => $product->id, 'pack_size_id' => $ps->id,
         'default_sell_price' => '100.00', 'default_cost_price' => '93.00',
     ]);
@@ -258,13 +253,13 @@ it('computes an estimated monthly gross profit: sales minus product cost, before
     $a = Business::factory()->create();
     $u = User::factory()->create();
 
-    $product = App\Models\Product::on('pgsql_migrate')->create([
+    $product = App\Models\Product::create([
         'business_id' => $a->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
-    $ps = App\Models\PackSize::on('pgsql_migrate')->create([
+    $ps = App\Models\PackSize::create([
         'business_id' => $a->id, 'label' => '1kg', 'weight_kg' => '1.000',
     ]);
-    $pack = App\Models\ProductPack::on('pgsql_migrate')->create([
+    $pack = App\Models\ProductPack::create([
         'business_id' => $a->id, 'product_id' => $product->id, 'pack_size_id' => $ps->id,
         'default_sell_price' => '100.00', 'default_cost_price' => '93.00',
     ]);
@@ -332,13 +327,13 @@ it('assembles net profit for a profitable month, a loss month, and guards zero-s
     $u = User::factory()->create();
 
     // One product pack: sell 100, cost 93 → gross profit 7 per unit.
-    $product = App\Models\Product::on('pgsql_migrate')->create([
+    $product = App\Models\Product::create([
         'business_id' => $a->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
-    $ps = App\Models\PackSize::on('pgsql_migrate')->create([
+    $ps = App\Models\PackSize::create([
         'business_id' => $a->id, 'label' => '1kg', 'weight_kg' => '1.000',
     ]);
-    $pack = App\Models\ProductPack::on('pgsql_migrate')->create([
+    $pack = App\Models\ProductPack::create([
         'business_id' => $a->id, 'product_id' => $product->id, 'pack_size_id' => $ps->id,
         'default_sell_price' => '100.00', 'default_cost_price' => '93.00',
     ]);

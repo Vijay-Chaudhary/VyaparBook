@@ -98,10 +98,10 @@ describe('suspend / reactivate', function () {
             ->assertRedirect(route('admin.console.show', $business->id))
             ->assertSessionHas('console_status', 'suspended');
 
-        expect(Subscription::on('pgsql_migrate')->where('business_id', $business->id)->value('status'))
+        expect(Subscription::where('business_id', $business->id)->value('status'))
             ->toBe('read_only');
 
-        $log = PlatformAuditLog::on('pgsql_migrate')
+        $log = PlatformAuditLog
             ->where('action', 'suspend_tenant')->where('target_business_id', $business->id)->first();
         expect($log)->not->toBeNull();
         expect($log->admin_user_id)->toBe($admin->id);
@@ -116,7 +116,7 @@ describe('suspend / reactivate', function () {
             ->assertSessionHas('console_status', 'reactivated');
 
         // read_only with an open period → active (naturalStatus).
-        expect(Subscription::on('pgsql_migrate')->where('business_id', $business->id)->value('status'))
+        expect(Subscription::where('business_id', $business->id)->value('status'))
             ->toBe('active');
     });
 });
@@ -131,12 +131,12 @@ describe('payments', function () {
             ->assertRedirect(route('admin.console.show', $business->id))
             ->assertSessionHas('console_status', 'payment_verified');
 
-        expect(SubscriptionPayment::on('pgsql_migrate')->where('id', $payment->id)->value('status'))
+        expect(SubscriptionPayment::where('id', $payment->id)->value('status'))
             ->toBe('verified');
-        expect(Subscription::on('pgsql_migrate')->where('business_id', $business->id)->value('status'))
+        expect(Subscription::where('business_id', $business->id)->value('status'))
             ->toBe('active');
 
-        expect(PlatformAuditLog::on('pgsql_migrate')
+        expect(PlatformAuditLog
             ->where('action', 'verify_payment')->where('target_business_id', $business->id)->exists())
             ->toBeTrue();
     });
@@ -150,9 +150,9 @@ describe('payments', function () {
             ->assertRedirect(route('admin.console.show', $business->id))
             ->assertSessionHas('console_status', 'payment_rejected');
 
-        expect(SubscriptionPayment::on('pgsql_migrate')->where('id', $payment->id)->value('status'))
+        expect(SubscriptionPayment::where('id', $payment->id)->value('status'))
             ->toBe('rejected');
-        expect(PlatformAuditLog::on('pgsql_migrate')
+        expect(PlatformAuditLog
             ->where('action', 'reject_payment')->where('target_business_id', $business->id)->exists())
             ->toBeTrue();
     });
@@ -160,13 +160,13 @@ describe('payments', function () {
     it('refuses to verify an already-rejected payment', function () {
         [$business] = seedTenantWithOwner();
         $payment = pendingPayment($business->id);
-        SubscriptionPayment::on('pgsql_migrate')->where('id', $payment->id)->update(['status' => 'rejected']);
+        SubscriptionPayment::where('id', $payment->id)->update(['status' => 'rejected']);
 
         $this->actingAs(platformAdminUser())
             ->post(route('admin.console.payment.verify', [$business->id, $payment->id]))
             ->assertSessionHas('console_error', 'verify_rejected');
 
-        expect(SubscriptionPayment::on('pgsql_migrate')->where('id', $payment->id)->value('status'))
+        expect(SubscriptionPayment::where('id', $payment->id)->value('status'))
             ->toBe('rejected');
     });
 });
@@ -187,7 +187,7 @@ describe('impersonation (view as tenant)', function () {
         expect($impersonation['token'])->toBeString()->not->toBeEmpty();
         expect($impersonation['expires_at'])->toBeString(); // 30-min window
 
-        expect(PlatformAuditLog::on('pgsql_migrate')
+        expect(PlatformAuditLog
             ->where('action', 'impersonate_tenant')->where('target_business_id', $business->id)->exists())
             ->toBeTrue();
     });
@@ -233,7 +233,7 @@ describe('impersonation (view as tenant)', function () {
             ->assertSessionHas('console_error', 'role_absent')
             ->assertSessionMissing('impersonation');
 
-        expect(PlatformAuditLog::on('pgsql_migrate')
+        expect(PlatformAuditLog
             ->where('action', 'impersonate_tenant')->where('target_business_id', $business->id)->exists())
             ->toBeFalse();
     });

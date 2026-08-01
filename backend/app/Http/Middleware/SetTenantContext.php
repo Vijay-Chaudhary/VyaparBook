@@ -49,13 +49,13 @@ class SetTenantContext
         app()->bind('tenant.role', fn () => null);
         app()->bind('tenant.user_id', fn () => $userId);
 
+        // Under Postgres this transaction also scoped the tenant GUC that RLS
+        // policies read. MySQL has neither, and the tenant now lives only in the
+        // container bindings above — but the transaction stays, because it still
+        // gives each request atomicity.
         DB::beginTransaction();
 
         try {
-            // set_config(..., true) is SET LOCAL with bind parameters — Postgres
-            // rejects placeholders in a bare `SET LOCAL`.
-            DB::statement("select set_config('app.current_user_id', ?, true)", [(string) $userId]);
-
             if ($tid !== null) {
                 // An impersonation token is authorised by the admin-flag check
                 // above instead — its holder is deliberately not a member.
@@ -69,7 +69,6 @@ class SetTenantContext
                     return response()->json(['message' => 'Not a member of this business.'], 403);
                 }
 
-                DB::statement("select set_config('app.current_tenant', ?, true)", [(string) $tid]);
                 app()->bind('tenant.id', fn () => $tid);
                 app()->bind('tenant.role', fn () => $role);
             }

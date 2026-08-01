@@ -37,7 +37,7 @@ class CashFlowService
         $byMonth = Payment::query()
             ->where('business_id', $businessId)
             ->whereRaw('extract(year from payment_date) = ?', [$year])
-            ->selectRaw('extract(month from payment_date)::int as m, coalesce(sum(amount), 0)::text as agg')
+            ->selectRaw('CAST(extract(month from payment_date) AS SIGNED) as m, CAST(coalesce(sum(amount), 0) AS CHAR) as agg')
             ->groupBy('m')
             ->pluck('agg', 'm');
 
@@ -51,7 +51,7 @@ class CashFlowService
             ->where('business_id', $businessId)
             ->whereNull('archived_at')
             ->whereRaw('extract(year from payment_date) = ?', [$year])
-            ->selectRaw('extract(month from payment_date)::int as m, coalesce(sum(amount), 0)::text as agg')
+            ->selectRaw('CAST(extract(month from payment_date) AS SIGNED) as m, CAST(coalesce(sum(amount), 0) AS CHAR) as agg')
             ->groupBy('m')
             ->pluck('agg', 'm');
 
@@ -65,7 +65,7 @@ class CashFlowService
             ->where('business_id', $businessId)
             ->whereNull('archived_at')
             ->whereRaw('extract(year from spent_on) = ?', [$year])
-            ->selectRaw('extract(month from spent_on)::int as m, coalesce(sum(amount), 0)::text as agg')
+            ->selectRaw('CAST(extract(month from spent_on) AS SIGNED) as m, CAST(coalesce(sum(amount), 0) AS CHAR) as agg')
             ->groupBy('m')
             ->pluck('agg', 'm');
 
@@ -85,17 +85,17 @@ class CashFlowService
         $in = (string) Payment::query()
             ->where('business_id', $businessId)
             ->whereRaw('payment_date < ?', [$start])
-            ->selectRaw('coalesce(sum(amount), 0)::text as agg')->value('agg');
+            ->selectRaw('CAST(coalesce(sum(amount), 0) AS CHAR) as agg')->value('agg');
 
         $supplierOut = (string) SupplierPayment::query()
             ->where('business_id', $businessId)->whereNull('archived_at')
             ->whereRaw('payment_date < ?', [$start])
-            ->selectRaw('coalesce(sum(amount), 0)::text as agg')->value('agg');
+            ->selectRaw('CAST(coalesce(sum(amount), 0) AS CHAR) as agg')->value('agg');
 
         $expenseOut = (string) Expense::query()
             ->where('business_id', $businessId)->whereNull('archived_at')
             ->whereRaw('spent_on < ?', [$start])
-            ->selectRaw('coalesce(sum(amount), 0)::text as agg')->value('agg');
+            ->selectRaw('CAST(coalesce(sum(amount), 0) AS CHAR) as agg')->value('agg');
 
         return bcsub(bcsub(bcadd($in, '0', 2), $supplierOut, 2), $expenseOut, 2);
     }

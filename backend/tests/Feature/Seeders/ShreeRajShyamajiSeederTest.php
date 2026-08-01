@@ -20,15 +20,15 @@ use App\Services\KhataService;
 use App\Services\StockService;
 use Database\Seeders\ShreeRajShyamajiSeeder;
 
-/** The seeder writes on pgsql_migrate, so assertions read from there too. */
+/** The business the seeder creates, looked up by its seeded name. */
 function srsBusiness(): Business
 {
-    return Business::on('pgsql_migrate')->where('name', 'Shree Raj Shyama Ji Namkeen')->firstOrFail();
+    return Business::where('name', 'Shree Raj Shyama Ji Namkeen')->firstOrFail();
 }
 
 function srsCount(string $class): int
 {
-    return $class::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count();
+    return $class::where('business_id', srsBusiness()->id)->count();
 }
 
 beforeEach(function () {
@@ -45,7 +45,7 @@ it('seeds the masters onto one business', function () {
 });
 
 it('keeps same-named customers in different villages apart', function () {
-    $rows = Customer::on('pgsql_migrate')
+    $rows = Customer
         ->where('business_id', srsBusiness()->id)
         ->where('name', 'Santosh Singh')
         ->orderBy('village')
@@ -56,7 +56,7 @@ it('keeps same-named customers in different villages apart', function () {
 });
 
 it('records oil in the unit it is bought in', function () {
-    $oil = RawMaterial::on('pgsql_migrate')
+    $oil = RawMaterial
         ->where('business_id', srsBusiness()->id)
         ->where('name', 'Refined Oil')
         ->firstOrFail();
@@ -65,7 +65,7 @@ it('records oil in the unit it is bought in', function () {
 });
 
 it('seeds every purchase with the total the invoices add up to', function () {
-    $rows = Purchase::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->get();
+    $rows = Purchase::where('business_id', srsBusiness()->id)->get();
 
     expect($rows)->toHaveCount(23);
 
@@ -76,7 +76,7 @@ it('seeds every purchase with the total the invoices add up to', function () {
 it('raises stock for every purchase, so on-hand is not zero', function () {
     // on-hand is a sum over stock_movements, not a column: a Purchase row alone
     // moves nothing. PurchaseWriter pairs each with a positive `in` movement.
-    $ins = StockMovement::on('pgsql_migrate')
+    $ins = StockMovement
         ->where('business_id', srsBusiness()->id)
         ->whereNotNull('purchase_id')
         ->get();
@@ -86,8 +86,8 @@ it('raises stock for every purchase, so on-hand is not zero', function () {
 });
 
 it('seeds the sale lines and groups them into sales by customer and date', function () {
-    $lines = SaleLine::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->get();
-    $sales = Sale::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->get();
+    $lines = SaleLine::where('business_id', srsBusiness()->id)->get();
+    $sales = Sale::where('business_id', srsBusiness()->id)->get();
 
     expect($lines)->toHaveCount(103);
     expect($sales)->toHaveCount(59);
@@ -97,10 +97,10 @@ it('seeds the sale lines and groups them into sales by customer and date', funct
 });
 
 it('holds the writer invariant that a sale equals the sum of its lines', function () {
-    $sales = Sale::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->get();
+    $sales = Sale::where('business_id', srsBusiness()->id)->get();
 
     foreach ($sales as $sale) {
-        $sum = SaleLine::on('pgsql_migrate')->where('sale_id', $sale->id)->get()
+        $sum = SaleLine::where('sale_id', $sale->id)->get()
             ->reduce(fn (string $c, $l) => bcadd($c, (string) $l->line_total, 2), '0.00');
 
         expect($sum)->toBe(number_format((float) $sale->total, 2, '.', ''), "sale {$sale->id}");
@@ -110,7 +110,7 @@ it('holds the writer invariant that a sale equals the sum of its lines', functio
 it('keeps the return as a negative line rather than deleting the sale', function () {
     // Byash ji returned 9 of 15 packs on 11-Jun. Reversals stay as rows so
     // outstanding remains recomputable (PRD §9).
-    $line = SaleLine::on('pgsql_migrate')
+    $line = SaleLine
         ->where('business_id', srsBusiness()->id)
         ->where('qty', '<', 0)
         ->firstOrFail();
@@ -120,7 +120,7 @@ it('keeps the return as a negative line rather than deleting the sale', function
 });
 
 it('leaves the outstanding the owner is actually owed', function () {
-    $payments = Payment::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->get();
+    $payments = Payment::where('business_id', srsBusiness()->id)->get();
 
     expect($payments)->toHaveCount(46);
 
@@ -143,11 +143,10 @@ it('leaves each customer owing what the owner ledger says', function () {
 
     foreach ($expected as $key => $due) {
         [$name, $village] = explode('|', $key);
-        $customer = Customer::on('pgsql_migrate')
+        $customer = Customer
             ->where('business_id', srsBusiness()->id)
             ->where('name', $name)->where('village', $village)
             ->firstOrFail();
-        $customer->setConnection('pgsql_migrate');
 
         expect($khata->outstandingFor($customer))->toBe($due, $key);
     }
@@ -156,9 +155,9 @@ it('leaves each customer owing what the owner ledger says', function () {
 it('totals the outstanding across the whole book', function () {
     $business = srsBusiness();
 
-    $sales = Sale::on('pgsql_migrate')->where('business_id', $business->id)->get()
+    $sales = Sale::where('business_id', $business->id)->get()
         ->reduce(fn (string $c, $s) => bcadd($c, (string) $s->total, 2), '0.00');
-    $paid = Payment::on('pgsql_migrate')->where('business_id', $business->id)->get()
+    $paid = Payment::where('business_id', $business->id)->get()
         ->reduce(fn (string $c, $p) => bcadd($c, (string) $p->amount, 2), '0.00');
 
     expect(bcsub($sales, $paid, 2))->toBe('42894.00');
@@ -167,7 +166,7 @@ it('totals the outstanding across the whole book', function () {
 it('charges each customer the rate they were actually given', function () {
     // Senvda 800g runs Rs 72 to Rs 80 depending on the customer. A seeder that
     // used the pack default everywhere would erase that.
-    $rates = SaleLine::on('pgsql_migrate')
+    $rates = SaleLine
         ->join('product_packs as pp', 'pp.id', '=', 'sale_lines.product_pack_id')
         ->join('pack_sizes as ps', 'ps.id', '=', 'pp.pack_size_id')
         ->join('products as p', 'p.id', '=', 'pp.product_id')
@@ -179,7 +178,7 @@ it('charges each customer the rate they were actually given', function () {
 });
 
 it('seeds the reconstructed batches', function () {
-    $batches = ProductionBatch::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->get();
+    $batches = ProductionBatch::where('business_id', srsBusiness()->id)->get();
 
     expect($batches)->toHaveCount(7);
 
@@ -192,7 +191,7 @@ it('never lets a material close below zero', function () {
     // bought would make the whole valuation fiction.
     $stock = app(StockService::class);
 
-    foreach (RawMaterial::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->get() as $material) {
+    foreach (RawMaterial::where('business_id', srsBusiness()->id)->get() as $material) {
         $onHand = $stock->onHandFor($material);
 
         expect(bccomp($onHand, '0.000', 3))->toBeGreaterThanOrEqual(0, "{$material->name} closed at {$onHand}");
@@ -212,14 +211,14 @@ it('costs every product below what it sells for', function () {
 
     expect($costs)->not->toBeEmpty();
 
-    foreach (ProductPack::on('pgsql_migrate')->where('business_id', $businessId)->get() as $pack) {
+    foreach (ProductPack::where('business_id', $businessId)->get() as $pack) {
         $cost = $costs[$pack->id] ?? null;
         if ($cost === null) {
             continue;
         }
 
-        $product = Product::on('pgsql_migrate')->find($pack->product_id);
-        $size = PackSize::on('pgsql_migrate')->find($pack->pack_size_id);
+        $product = Product::find($pack->product_id);
+        $size = PackSize::find($pack->pack_size_id);
         $costPerKg = (float) $cost->costRupees / (float) $size->weight_kg;
         $margin = ($revenuePerKg[$product->name_en] - $costPerKg) / $revenuePerKg[$product->name_en];
 
@@ -229,28 +228,28 @@ it('costs every product below what it sells for', function () {
 
 it('is idempotent, so a second db:seed does not double the books', function () {
     $before = [
-        Customer::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
-        Sale::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
-        SaleLine::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
-        Payment::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
-        Purchase::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
-        ProductionBatch::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
+        Customer::where('business_id', srsBusiness()->id)->count(),
+        Sale::where('business_id', srsBusiness()->id)->count(),
+        SaleLine::where('business_id', srsBusiness()->id)->count(),
+        Payment::where('business_id', srsBusiness()->id)->count(),
+        Purchase::where('business_id', srsBusiness()->id)->count(),
+        ProductionBatch::where('business_id', srsBusiness()->id)->count(),
     ];
 
     $this->seed(ShreeRajShyamajiSeeder::class);   // beforeEach already ran it once
 
     expect([
-        Customer::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
-        Sale::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
-        SaleLine::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
-        Payment::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
-        Purchase::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
-        ProductionBatch::on('pgsql_migrate')->where('business_id', srsBusiness()->id)->count(),
+        Customer::where('business_id', srsBusiness()->id)->count(),
+        Sale::where('business_id', srsBusiness()->id)->count(),
+        SaleLine::where('business_id', srsBusiness()->id)->count(),
+        Payment::where('business_id', srsBusiness()->id)->count(),
+        Purchase::where('business_id', srsBusiness()->id)->count(),
+        ProductionBatch::where('business_id', srsBusiness()->id)->count(),
     ])->toBe($before);
 });
 
 it('leaves no demo tenant behind', function () {
-    expect(Business::on('pgsql_migrate')->whereIn('name', [
+    expect(Business::whereIn('name', [
         'Demo Namkeen Bhandar', 'Demo Sweets House',
     ])->count())->toBe(0);
 });

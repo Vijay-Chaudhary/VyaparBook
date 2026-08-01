@@ -12,7 +12,7 @@ use App\Services\TokenService;
 function readToken(Business $business, string $role = 'owner'): string
 {
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => $role,
@@ -23,14 +23,14 @@ function readToken(Business $business, string $role = 'owner'): string
 
 function seedOneProductPack(Business $business, array $packAttrs = []): array
 {
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
         'base_cost_per_kg' => '120.00',
     ]);
-    $packSize = PackSize::on('pgsql_migrate')->create(array_merge([
+    $packSize = PackSize::create(array_merge([
         'business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500',
     ], $packAttrs));
-    $productPack = ProductPack::on('pgsql_migrate')->create([
+    $productPack = ProductPack::create([
         'business_id' => $business->id,
         'product_id' => $product->id,
         'pack_size_id' => $packSize->id,
