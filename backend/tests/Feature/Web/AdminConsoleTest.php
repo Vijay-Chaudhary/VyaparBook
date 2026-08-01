@@ -101,8 +101,7 @@ describe('suspend / reactivate', function () {
         expect(Subscription::where('business_id', $business->id)->value('status'))
             ->toBe('read_only');
 
-        $log = PlatformAuditLog
-            ->where('action', 'suspend_tenant')->where('target_business_id', $business->id)->first();
+        $log = PlatformAuditLog::where('action', 'suspend_tenant')->where('target_business_id', $business->id)->first();
         expect($log)->not->toBeNull();
         expect($log->admin_user_id)->toBe($admin->id);
     });
@@ -136,8 +135,7 @@ describe('payments', function () {
         expect(Subscription::where('business_id', $business->id)->value('status'))
             ->toBe('active');
 
-        expect(PlatformAuditLog
-            ->where('action', 'verify_payment')->where('target_business_id', $business->id)->exists())
+        expect(PlatformAuditLog::where('action', 'verify_payment')->where('target_business_id', $business->id)->exists())
             ->toBeTrue();
     });
 
@@ -152,8 +150,7 @@ describe('payments', function () {
 
         expect(SubscriptionPayment::where('id', $payment->id)->value('status'))
             ->toBe('rejected');
-        expect(PlatformAuditLog
-            ->where('action', 'reject_payment')->where('target_business_id', $business->id)->exists())
+        expect(PlatformAuditLog::where('action', 'reject_payment')->where('target_business_id', $business->id)->exists())
             ->toBeTrue();
     });
 
@@ -187,8 +184,7 @@ describe('impersonation (view as tenant)', function () {
         expect($impersonation['token'])->toBeString()->not->toBeEmpty();
         expect($impersonation['expires_at'])->toBeString(); // 30-min window
 
-        expect(PlatformAuditLog
-            ->where('action', 'impersonate_tenant')->where('target_business_id', $business->id)->exists())
+        expect(PlatformAuditLog::where('action', 'impersonate_tenant')->where('target_business_id', $business->id)->exists())
             ->toBeTrue();
     });
 
@@ -233,8 +229,7 @@ describe('impersonation (view as tenant)', function () {
             ->assertSessionHas('console_error', 'role_absent')
             ->assertSessionMissing('impersonation');
 
-        expect(PlatformAuditLog
-            ->where('action', 'impersonate_tenant')->where('target_business_id', $business->id)->exists())
+        expect(PlatformAuditLog::where('action', 'impersonate_tenant')->where('target_business_id', $business->id)->exists())
             ->toBeFalse();
     });
 });

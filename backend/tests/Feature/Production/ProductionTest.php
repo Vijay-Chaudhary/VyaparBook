@@ -82,8 +82,7 @@ it('creates a batch that records consumptions and draws stock down', function ()
     expect($batch->consumptions()->count())->toBe(2);
 
     // the out movements carry the batch id (traceable draw-down)
-    $tagged = StockMovement
-        ->where('production_batch_id', $batch->id)->get();
+    $tagged = StockMovement::where('production_batch_id', $batch->id)->get();
     expect($tagged)->toHaveCount(2);
     expect($tagged->every(fn ($m) => $m->kind === 'out'))->toBeTrue();
 });
@@ -287,8 +286,7 @@ describe('reversing a batch', function () {
         expect($stock->onHandFor($oil))->toBe('40.000');    // 32 + 8 back
 
         // Finished goods nets to nothing: Σ output_kg across both batches.
-        $totalOutput = (string) ProductionBatch
-            ->where('business_id', $business->id)->sum('output_kg');
+        $totalOutput = (string) ProductionBatch::where('business_id', $business->id)->sum('output_kg');
         expect(bccomp($totalOutput, '0', 3))->toBe(0);
     });
 
@@ -311,8 +309,7 @@ describe('reversing a batch', function () {
         test()->withHeader('Authorization', "Bearer {$token}")
             ->postJson("/api/v1/production/{$batchId}/reverse")->assertStatus(201);
 
-        $total = (string) App\Models\MaterialConsumption
-            ->where('business_id', $business->id)->sum('qty');
+        $total = (string) App\Models\MaterialConsumption::where('business_id', $business->id)->sum('qty');
         expect(bccomp($total, '0', 3))->toBe(0);
     });
 

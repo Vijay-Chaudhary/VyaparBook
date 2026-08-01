@@ -38,8 +38,7 @@ it('records an audit entry carrying the rejection reason', function () {
         ->postJson("/api/v1/admin/tenants/{$business->id}/payments/{$payment->id}/reject", ['reason' => 'duplicate'])
         ->assertOk();
 
-    $logs = PlatformAuditLog
-        ->where('action', 'reject_payment')
+    $logs = PlatformAuditLog::where('action', 'reject_payment')
         ->where('target_business_id', $business->id)
         ->get();
 

@@ -275,8 +275,7 @@ describe('reversing a movement', function () {
             'consumptions' => [['raw_material_id' => $material->id, 'qty' => '25.000']],
         ])->assertStatus(201);
 
-        $drawDown = StockMovement
-            ->whereNotNull('production_batch_id')->firstOrFail();
+        $drawDown = StockMovement::whereNotNull('production_batch_id')->firstOrFail();
 
         test()->withHeader('Authorization', "Bearer {$token}")
             ->postJson("/api/v1/stock-movements/{$drawDown->id}/reverse")

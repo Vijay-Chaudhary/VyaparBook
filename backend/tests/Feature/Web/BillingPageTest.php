@@ -119,8 +119,7 @@ describe('record payment', function () {
             ->assertRedirect(route('billing', ['business' => $business->id]))
             ->assertSessionHas('billing_status', 'payment_recorded');
 
-        $payment = SubscriptionPayment
-            ->where('business_id', $business->id)->first();
+        $payment = SubscriptionPayment::where('business_id', $business->id)->first();
 
         expect($payment)->not->toBeNull();
         expect($payment->status)->toBe('pending');       // never auto-activated

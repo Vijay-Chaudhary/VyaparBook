@@ -1,107 +1,57 @@
 # VyaparBook Backend
 
-Laravel 11 API for VyaparBook's tenancy & auth core. No Docker — Postgres,
-PgBouncer, and Redis run as native local services.
+Laravel 11 API for VyaparBook's tenancy & auth core. No Docker — MySQL and Redis
+run as native local services.
 
 ## Prerequisites
 
-- PHP 8.3, Composer
-- PostgreSQL 15+
-- PgBouncer
+- PHP 8.3, Composer, `php8.3-mysql`
+- MySQL 8
 - Redis
 
-## One-time Postgres setup
+## One-time MySQL setup
 
-1. Create the database and a privileged superuser role for migrations (or use
-   your existing `postgres` superuser):
-   ```sql
-   CREATE DATABASE vyaparbook;
-   ```
-2. After running migrations once (`php artisan migrate --database=pgsql_migrate`,
-   see below), the `vyaparbook_app` role will exist but have no password set —
-   the migration creates the role but deliberately never sets a password, so no
-   secret is embedded in migration history. Until you set one, the app cannot
-   connect and every request fails with `password authentication failed for user
-   "vyaparbook_app"`. Set it to match your `.env`:
-   ```sql
-   ALTER ROLE vyaparbook_app WITH PASSWORD 'change-me';
-   ```
-3. Create the test database. `phpunit.xml` points the suite at it so that running
-   tests never wipes your development data:
-   ```sql
-   CREATE DATABASE vyaparbook_test;
-   ```
-   No grants are needed by hand — the `create_app_role` migration grants against
-   whichever database it runs on, and the test suite migrates this one on its
-   first run.
+Run as root (`sudo mysql`). Both host patterns are needed: MySQL resolves
+`127.0.0.1` back to `localhost`, so a grant to `'%'` alone is not matched and you
+get a confusing `Access denied for user ...@'localhost'` even though `DB_HOST` is
+`127.0.0.1`.
 
-## PgBouncer setup
+```sql
+CREATE DATABASE IF NOT EXISTS vyaparbook
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-> **Status: not yet wired up** (re-verified 2026-07-15). The PgBouncer process is
-> up and accepting connections on 6432, but it is still the stock package config:
-> connecting through it fails with `FATAL: no such database` for both
-> `vyaparbook` and `vyaparbook_test`, so nothing routes through the proxy. `.env`
-> also has `DB_PORT=5432` (direct to Postgres) while `.env.example` correctly
-> says `6432` — the working `.env` has drifted. The steps below are what it takes
-> to close the gap; they need root. Until they are applied, treat
-> `tests/Feature/Tenancy/PgBouncerPooledConnectionTest.php` as proving Postgres
-> `SET LOCAL` semantics only, not PgBouncer behaviour (the test says as much).
+-- phpunit.xml points the suite at its own database so a test run never wipes
+-- development data.
+CREATE DATABASE IF NOT EXISTS vyaparbook_test
+  CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 
-In `/etc/pgbouncer/pgbouncer.ini`:
-```ini
-[databases]
-vyaparbook = host=127.0.0.1 port=5432 dbname=vyaparbook
-vyaparbook_test = host=127.0.0.1 port=5432 dbname=vyaparbook_test
+CREATE USER IF NOT EXISTS 'vyaparbook_app'@'localhost' IDENTIFIED BY 'change-me';
+CREATE USER IF NOT EXISTS 'vyaparbook_app'@'%'         IDENTIFIED BY 'change-me';
+GRANT ALL PRIVILEGES ON vyaparbook.*      TO 'vyaparbook_app'@'localhost';
+GRANT ALL PRIVILEGES ON vyaparbook.*      TO 'vyaparbook_app'@'%';
+GRANT ALL PRIVILEGES ON vyaparbook_test.* TO 'vyaparbook_app'@'localhost';
+GRANT ALL PRIVILEGES ON vyaparbook_test.* TO 'vyaparbook_app'@'%';
 
-[pgbouncer]
-pool_mode = transaction
-listen_addr = 127.0.0.1
-listen_port = 6432
-auth_type = scram-sha-256
-auth_file = /etc/pgbouncer/userlist.txt
+-- SELECT and nothing else. The superadmin console reads across every tenant, so
+-- this grant is what makes it physically unable to mutate a shop's data.
+CREATE USER IF NOT EXISTS 'vyapar_platform_ro'@'localhost' IDENTIFIED BY 'platform_ro_pw';
+CREATE USER IF NOT EXISTS 'vyapar_platform_ro'@'%'         IDENTIFIED BY 'platform_ro_pw';
+GRANT SELECT ON vyaparbook.*      TO 'vyapar_platform_ro'@'localhost';
+GRANT SELECT ON vyaparbook.*      TO 'vyapar_platform_ro'@'%';
+GRANT SELECT ON vyaparbook_test.* TO 'vyapar_platform_ro'@'localhost';
+GRANT SELECT ON vyaparbook_test.* TO 'vyapar_platform_ro'@'%';
 ```
 
-`pool_mode = transaction` is required — this project's tenant isolation relies on
-`SET LOCAL` inside one transaction per request, which only works correctly under
-transaction pooling (see `docs/superpowers/specs/2026-07-04-tenancy-auth-core-design.md` §4).
-Under `session` pooling the GUC would outlive the request; under `statement`
-pooling multi-statement transactions break outright.
+Verify that decimals arrive as PHP **strings**, not floats — every rupee in this
+system is a decimal string through bcmath, and floats silently corrupt khatas:
 
-List both databases, not just `vyaparbook` — PgBouncer rejects any database not
-named here with `FATAL: no such database`, and the test suite connects to
-`vyaparbook_test`.
-
-In `/etc/pgbouncer/userlist.txt`, add the app role and its **plaintext** password:
-```
-"vyaparbook_app" "<password>"
-```
-
-The plaintext is deliberate, not laziness. This Postgres runs
-`password_encryption = scram-sha-256` and stores `vyaparbook_app`'s password as a
-SCRAM verifier (`select rolname, rolpassword from pg_authid` to confirm).
-PgBouncer authenticates twice — client→proxy, then proxy→Postgres — and the
-second hop needs to answer a SCRAM challenge, which is only possible from the
-plaintext password or a stored SCRAM secret. An md5 hash in `userlist.txt` is
-enough to check an incoming client but cannot produce a SCRAM response, so the
-backend connection fails even though the client hop looks fine. Keep the file
-`chmod 640`, owned by the `postgres` user.
-
-The alternative that avoids storing the plaintext is `auth_query` — point
-PgBouncer at a `SECURITY DEFINER` function that reads `pg_shadow`, so it fetches
-each role's verifier from Postgres on demand. Worth doing before this reaches a
-real server; the plaintext file is acceptable only for local dev.
-
-Then restart and verify the connection actually goes through the proxy:
 ```bash
-sudo service pgbouncer restart
-PGPASSWORD=<password> psql -h 127.0.0.1 -p 6432 -U vyaparbook_app -d vyaparbook_test -c 'select 1;'
+php artisan tinker --execute="var_dump(gettype(DB::select('SELECT CAST(1.5 AS DECIMAL(12,2)) d')[0]->d));"
+# => string(6) "string"
 ```
-A `select 1` that returns through 6432 is the real check — `pg_isready` on 6432
-succeeds even against the stock config, because PgBouncer answers the port long
-before it knows whether the database is routable. That false green is what hid
-this gap.
 
-Once that succeeds, set `DB_PORT=6432` in `.env` and re-run `php artisan test`.
+If it prints `double`, `PDO::ATTR_EMULATE_PREPARES` is not taking effect — stop
+and fix it. `tests/Feature/Database/DecimalFidelityTest.php` pins this.
 
 ## App setup
 
@@ -111,12 +61,8 @@ composer install
 cp .env.example .env
 php artisan key:generate
 php artisan jwt:secret
-# Fill in DB_* and DB_MIGRATE_* in .env to match your Postgres/PgBouncer setup.
-# DB_PORT must be PgBouncer's port (6432), not Postgres's (5432) — pointing it at
-# 5432 bypasses PgBouncer entirely, so nothing in the app or the test suite ever
-# exercises transaction pooling and the Task 16 test proves less than it appears to.
-# DB_MIGRATE_PORT is the one that goes direct to Postgres (5432).
-php artisan migrate --database=pgsql_migrate
+# Fill in DB_* in .env to match the setup above.
+php artisan migrate --seed
 php artisan serve
 ```
 
@@ -128,7 +74,7 @@ php artisan queue:work
 
 On WSL, the native services do not survive a restart and must be started by hand:
 ```bash
-sudo service postgresql start && sudo service pgbouncer start && sudo service redis-server start
+sudo service mysql start && sudo service redis-server start
 ```
 
 ## Running tests
@@ -139,20 +85,24 @@ php artisan test
 ```
 
 The suite does not use Laravel's `RefreshDatabase` — see `tests/RefreshesTenantDatabase.php`
-for why (it is incompatible with the restricted role, RLS, and the one-transaction-per-request
-design). It migrates once per run and truncates as the privileged role between tests.
+for why. It migrates once per run and clears the tables between tests, so every
+write genuinely commits — ~900 tests rely on that.
 
 ## Notes
 
-- All schema migrations run against the `pgsql_migrate` connection (a privileged
-  role, direct to Postgres) — the app's runtime connection (`pgsql`, through
-  PgBouncer, as the restricted `vyaparbook_app` role) has no DDL rights by design.
-- Every tenant-scoped table is protected by Postgres Row-Level Security *and* an
-  app-level scope (defense in depth) — see `app/Traits/BelongsToTenant.php`.
-  `memberships` is the deliberate exception to the flat scope: it carries a
-  bespoke RLS policy so a user's memberships stay visible before any tenant is
-  selected. `businesses`, `users`, `invites`, and `otp_codes` are not tenant-owned
-  data and carry no RLS — see the design spec for the reasoning.
+- Migrations and the app share ONE connection. The old two-role split existed
+  only so the app role could not bypass row-level security; MySQL has no RLS, so
+  it protected nothing.
+- **Tenant isolation is a single application layer.** `app/Traits/BelongsToTenant.php`
+  scopes every Eloquent query and FAILS CLOSED — it throws rather than returning
+  every tenant's rows when no tenant is bound. Cross-tenant work goes through
+  `Tenancy::withoutTenant()` (five sanctioned sites; `grep -rn withoutTenant`
+  is the audit). A test-environment query tripwire catches raw builders, which a
+  global scope structurally cannot reach — as do `$model->fresh()` and
+  `->refresh()`, which build their queries without scopes.
+  `memberships` is deliberately outside the scope: it is keyed by user as
+  legitimately as by business, which is what makes login-before-tenant work.
+  `businesses`, `users`, `invites`, and `otp_codes` are not tenant-owned.
 
 ## Catalog API
 
@@ -172,12 +122,12 @@ file — no migration, no code change. `blank` is a valid template that seeds no
 
 Two behaviours that look like bugs and are not:
 
-- **A cross-tenant row returns 404, not 403.** RLS hides other tenants' rows, so
-  `findOrFail` genuinely finds nothing. This also avoids confirming that another
-  tenant's id is real.
+- **A cross-tenant row returns 404, not 403.** The tenant scope adds a
+  `business_id` predicate, so `findOrFail` genuinely finds nothing. This also
+  avoids confirming that another tenant's id is real.
 - **`Rule::unique('pack_sizes', 'label')` has no tenant clause.** Validation runs
-  inside the request transaction with `app.current_tenant` set, so RLS has already
-  narrowed the table to one business.
+  with the tenant bound, so the scope has already narrowed the table to one
+  business.
 
 Archiving is evaluated at read time and never cascaded: a product pack is hidden
 when it, its product, or its pack size is archived, but archiving a product does
@@ -216,14 +166,14 @@ Four rules that look surprising and are deliberate:
   row (`200`) instead of creating a duplicate (`201`). The REST endpoints and
   `sync/push` share one write path (`LedgerWriter`), so online and offline creates
   cannot drift.
-- **A cross-tenant reference returns 404, not 403** (RLS hides the row), and
+- **A cross-tenant reference returns 404, not 403** (the scope hides the row), and
   `sync/push` rejects any mutation whose `tenant_id` ≠ the session tenant at the
-  app layer *before* RLS's `WITH CHECK` would — reported per item, never fatal to
+  app layer — reported per item, never fatal to
   the batch.
 
-Delta sync uses a globally monotonic `sync_seq` (a Postgres sequence stamped on
+Delta sync uses a per-tenant monotonic `sync_seq` (a counter row stamped on
 every insert/update via `HasSyncSequence`). `pull` returns rows with `sync_seq >
-since` ordered by `sync_seq`, plus the new cursor; RLS guarantees the response
+since` ordered by `sync_seq`, plus the new cursor; the tenant scope guarantees the response
 holds only the caller's tenant. Archived rows ride the delta so the client learns
 to hide them.
 
@@ -273,7 +223,7 @@ Rules that look surprising and are deliberate:
   row (`200`) instead of a duplicate (`201`), and a batch replay performs no second
   draw-down. `material_consumptions` is a child of its batch (no `uuid`), like
   `sale_lines`.
-- **A cross-tenant reference returns 404, not 403** (RLS hides the row).
+- **A cross-tenant reference returns 404, not 403** (the scope hides the row).
 
 ## Billing & Subscription API
 
@@ -357,6 +307,6 @@ Rules that are deliberate:
 - **`--dry-run` validates and tallies without persisting** — the whole import runs inside a
   transaction that is rolled back, so you see the `Created/Updated/Skipped` report and every
   error with zero writes.
-- **Single-tenant, RLS-scoped.** The importer opens one transaction, switches both the
-  Postgres tenant GUC and the app-level `tenant.id` scope in (the `TenantAwareJob` pattern),
-  then commits — writes are confined to the target tenant by RLS *and* the app scope.
+- **Single-tenant, scoped.** The importer opens one transaction, binds the target
+  tenant (the `TenantAwareJob` pattern), then commits — writes are confined to that
+  tenant by `BelongsToTenant`.

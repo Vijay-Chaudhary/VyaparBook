@@ -51,7 +51,7 @@ class PurchaseService
      *
      * One query for every material, not StockService::onHandFor per row: the
      * dashboard renders this for the whole catalogue, and a per-material loop
-     * would be 2 queries × N materials. Postgres does the summing; the division
+     * would be 2 queries × N materials. The database does the summing; the division
      * and the multiply stay in bcmath at the same scales costPerKgFor uses, so
      * a row here and a single-material call can never disagree.
      *

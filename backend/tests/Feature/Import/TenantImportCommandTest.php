@@ -19,8 +19,7 @@ $ownerFor = function (Business $business): void {
     ]);
 };
 
-$customerCount = fn (Business $b) => Customer
-    ->withoutGlobalScopes()->where('business_id', $b->id)->count();
+$customerCount = fn (Business $b) => Customer::withoutGlobalScopes()->where('business_id', $b->id)->count();
 
 it('imports customers and exits 0', function () use ($fixture, $customerCount) {
     $business = Business::factory()->create();

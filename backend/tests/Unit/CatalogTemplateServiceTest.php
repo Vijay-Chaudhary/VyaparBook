@@ -42,12 +42,9 @@ it('fills each pack cost from the product base cost per kg', function () {
         app(CatalogTemplateService::class)->apply('namkeen', $business->id);
     });
 
-    $sev = Product
-        ->where('business_id', $business->id)->where('name_en', 'Sev')->first();
-    $oneKg = PackSize
-        ->where('business_id', $business->id)->where('label', '1kg')->first();
-    $pack = ProductPack
-        ->where('product_id', $sev->id)->where('pack_size_id', $oneKg->id)->first();
+    $sev = Product::where('business_id', $business->id)->where('name_en', 'Sev')->first();
+    $oneKg = PackSize::where('business_id', $business->id)->where('label', '1kg')->first();
+    $pack = ProductPack::where('product_id', $sev->id)->where('pack_size_id', $oneKg->id)->first();
 
     // Sev base_cost_per_kg 130.00 × 1.000 kg
     expect($pack->default_cost_price)->toBe('130.00');

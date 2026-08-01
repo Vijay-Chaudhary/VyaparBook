@@ -8,8 +8,7 @@ use App\Models\StockMovement;
 use App\Models\User;
 use App\Services\StockService;
 
-$materialFor = fn (Business $b, string $name) => RawMaterial
-    ->withoutGlobalScopes()
+$materialFor = fn (Business $b, string $name) => RawMaterial::withoutGlobalScopes()
     ->where('business_id', $b->id)
     ->where('name', $name)
     ->first();

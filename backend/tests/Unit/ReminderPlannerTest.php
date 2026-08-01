@@ -72,8 +72,7 @@ function planFor(Business $b): ?ReminderBatch
 
 function plannedNames(Business $b): array
 {
-    return ReminderLog
-        ->where('business_id', $b->id)->where('status', 'planned')
+    return ReminderLog::where('business_id', $b->id)->where('status', 'planned')
         ->get()
         ->map(fn ($l) => Customer::find($l->customer_id)->name)
         ->sort()->values()->all();

@@ -39,8 +39,7 @@ it('writes a single audit-trail entry naming the admin, action and target', func
         ->postJson("/api/v1/admin/tenants/{$business->id}/payments/{$payment->id}/verify")
         ->assertOk();
 
-    $logs = PlatformAuditLog
-        ->where('action', 'verify_payment')
+    $logs = PlatformAuditLog::where('action', 'verify_payment')
         ->where('target_business_id', $business->id)
         ->get();
 

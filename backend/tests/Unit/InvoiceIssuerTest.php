@@ -41,6 +41,7 @@ function gstShop(string $defaultRate = '5.00', ?string $gstin = '09ABCDE1234F1Z5
 
 function gstSale(Business $b, User $u, string $lineTotal = '105.00', int $qty = 1, ?string $rate = null, ?string $hsn = '21069099'): Sale
 {
+    return asTenant($b->id, function () use ($b, $u, $lineTotal, $qty, $rate, $hsn) {
     $product = Product::create([
         'business_id' => $b->id, 'name_hi' => 'Bhujia', 'name_en' => 'Bhujia',
     ]);
@@ -80,6 +81,7 @@ function gstSale(Business $b, User $u, string $lineTotal = '105.00', int $qty = 
     $line->save();
 
     return $sale;
+    });
 }
 
 function issue(Business $b, User $u, Sale $sale, ?string $buyerGstin = null): Invoice
@@ -88,12 +90,14 @@ function issue(Business $b, User $u, Sale $sale, ?string $buyerGstin = null): In
 }
 
 /**
- * The sole line of an invoice, read past the tenant scope — these assertions
- * run outside the pin, where BelongsToTenant would hide every row.
+ * The sole line of an invoice. A raw builder, so the Eloquent scope never
+ * applied to it either way — but it must carry business_id explicitly, which
+ * is what the query tripwire checks for.
  */
 function soleLine(Invoice $invoice): object
 {
     return DB::table('invoice_lines')
+        ->where('business_id', $invoice->business_id)
         ->where('invoice_id', $invoice->id)->sole();
 }
 
@@ -148,7 +152,11 @@ it('totals to exactly the sale total, so the invoice cannot contradict the khata
 
     $invoice = issue($b, $u, $sale);
 
-    expect((string) $invoice->grand_total)->toBe((string) $sale->fresh()->total);
+    // Sale::find, not $sale->fresh(): Eloquent's fresh() builds its query with
+    // newQueryWithoutScopes(), so it walks straight past BelongsToTenant and
+    // reads unscoped. The query tripwire catches it.
+    $freshTotal = asTenant($b->id, fn () => Sale::findOrFail($sale->id)->total);
+    expect((string) $invoice->grand_total)->toBe((string) $freshTotal);
     $sum = bcadd(bcadd((string) $invoice->taxable_total, (string) $invoice->cgst_total, 2), (string) $invoice->sgst_total, 2);
     expect($sum)->toBe((string) $invoice->grand_total);
 });

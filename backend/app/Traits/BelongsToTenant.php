@@ -19,6 +19,11 @@ use Illuminate\Database\Eloquent\Builder;
  * is greppable. Note this binds Eloquent only: a raw DB::table() walks straight
  * past it, which is what the query tripwire in QueryTripwireServiceProvider
  * exists to catch in tests.
+ *
+ * TWO ELOQUENT METHODS ALSO BYPASS IT, and neither is obvious: `$model->fresh()`
+ * and `$model->refresh()` build their query with newQueryWithoutScopes(), so
+ * they re-read a row with NO tenant predicate. Prefer `Model::findOrFail($id)`
+ * when re-reading a tenant-owned row; the tripwire flags the difference.
  */
 trait BelongsToTenant
 {

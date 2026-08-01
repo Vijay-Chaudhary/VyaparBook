@@ -8,21 +8,23 @@ use App\Models\Customer;
 use App\Models\Payment;
 use App\Models\Sale;
 use App\Models\User;
+use App\Support\Tenancy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
-/** A customer seeded on the migration connection, like the other seed helpers. */
+/** A customer belonging to $b. */
 function cusCustomer(Business $b, string $name = 'Ramesh Kumar', string $opening = '0.00'): Customer
 {
-    return Customer::create([
+    return asTenant($b->id, fn () => Customer::create([
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'name' => $name, 'village' => 'Rampur', 'phone' => '9876543210',
         'opening_balance' => $opening,
-    ]);
+    ]));
 }
 
 function cusSale(Business $b, User $u, Customer $c, string $total, string $date): Sale
 {
+    return asTenant($b->id, function () use ($b, $u, $c, $total, $date) {
     $s = new Sale([
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'sale_date' => $date,
@@ -32,10 +34,12 @@ function cusSale(Business $b, User $u, Customer $c, string $total, string $date)
     $s->save();
 
     return $s;
+    });
 }
 
 function cusPayment(Business $b, User $u, Customer $c, string $amount, string $date): Payment
 {
+    return asTenant($b->id, function () use ($b, $u, $c, $amount, $date) {
     $p = new Payment([
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'payment_date' => $date, 'amount' => $amount, 'mode' => 'cash',
@@ -44,6 +48,7 @@ function cusPayment(Business $b, User $u, Customer $c, string $amount, string $d
     $p->save();
 
     return $p;
+    });
 }
 
 describe('access', function () {
@@ -246,9 +251,11 @@ describe('update', function () {
             'business' => $business->id, 'name' => 'Hijacked',
         ]);
 
-        // withoutGlobalScopes: the request left tenant.id bound in the container,
-        // so BelongsToTenant would otherwise hide the other tenant's row entirely.
-        expect(Customer::withoutGlobalScopes()->find($foreign->id)->name)
+        // Deliberately cross-tenant: the assertion is that the OTHER shop's row
+        // is unchanged, which cannot be read from inside this tenant.
+        // withoutTenant rather than withoutGlobalScopes, so the intent is
+        // greppable and the query tripwire knows it was meant.
+        expect(Tenancy::withoutTenant(fn () => Customer::find($foreign->id)->name))
             ->toBe('Not Yours');
     });
 });
@@ -298,7 +305,9 @@ describe('archive', function () {
 
         $this->actingAs($owner)->delete('/customers/' . $foreign->id, ['business' => $business->id]);
 
-        expect(Customer::withoutGlobalScopes()->find($foreign->id)->archived_at)
+        // Cross-tenant on purpose, as above: the other shop's customer must be
+        // untouched.
+        expect(Tenancy::withoutTenant(fn () => Customer::find($foreign->id)->archived_at))
             ->toBeNull();
     });
 });
@@ -317,12 +326,13 @@ describe('corrections', function () {
             ->assertRedirect(route('customers.show', ['customer' => $customer->id, 'business' => $business->id]));
 
         // Original untouched, byte for byte.
-        $original = DB::table('sales')->where('id', $sale->id)->first();
+        $original = DB::table('sales')->where('business_id', $business->id)
+            ->where('id', $sale->id)->first();
         expect((string) $original->total)->toBe('500.00');
         expect($original->reverses_id)->toBeNull();
 
         // And a reversal pointing at it, so the two net to nothing.
-        $reversal = DB::table('sales')
+        $reversal = DB::table('sales')->where('business_id', $business->id)
             ->where('reverses_id', $sale->id)->sole();
         expect((string) $reversal->total)->toBe('-500.00');
 
@@ -339,7 +349,7 @@ describe('corrections', function () {
             ->post("/customers/{$customer->id}/payments/{$payment->id}/reverse", ['business' => $business->id])
             ->assertRedirect();
 
-        expect((string) DB::table('payments')
+        expect((string) DB::table('payments')->where('business_id', $business->id)
             ->where('reverses_id', $payment->id)->value('amount'))->toBe('-200.00');
 
         $fresh = Customer::find($customer->id);
@@ -357,7 +367,8 @@ describe('corrections', function () {
             ->assertSessionHas('error', __('customers.already_voided'));
 
         // Still exactly one reversal — a second would double the correction.
-        expect(DB::table('sales')->where('reverses_id', $sale->id)->count())->toBe(1);
+        expect(DB::table('sales')->where('business_id', $business->id)
+            ->where('reverses_id', $sale->id)->count())->toBe(1);
     });
 
     it('refuses to void a row that is itself a correction', function () {
@@ -369,7 +380,8 @@ describe('corrections', function () {
             ->post("/customers/{$customer->id}/sales/{$sale->id}/void", ['business' => $business->id])
             ->assertRedirect();
 
-        $reversalId = DB::table('sales')->where('reverses_id', $sale->id)->value('id');
+        $reversalId = DB::table('sales')->where('business_id', $business->id)
+            ->where('reverses_id', $sale->id)->value('id');
 
         // Reversing a reversal is a re-entry, not a correction — if the sale
         // really did happen, record it again rather than un-voiding.
@@ -446,6 +458,10 @@ describe('corrections', function () {
             ->post("/customers/{$theirCustomer->id}/sales/{$theirSale->id}/void", ['business' => $business->id])
             ->assertNotFound();
 
-        expect(DB::table('sales')->where('reverses_id', $theirSale->id)->count())->toBe(0);
+        // Cross-tenant on purpose: the assertion IS that nothing was written
+        // for the other shop, which cannot be checked from inside this tenant.
+        expect(Tenancy::withoutTenant(
+            fn () => DB::table('sales')->where('reverses_id', $theirSale->id)->count()
+        ))->toBe(0);
     });
 });

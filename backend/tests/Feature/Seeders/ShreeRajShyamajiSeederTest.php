@@ -45,8 +45,7 @@ it('seeds the masters onto one business', function () {
 });
 
 it('keeps same-named customers in different villages apart', function () {
-    $rows = Customer
-        ->where('business_id', srsBusiness()->id)
+    $rows = Customer::where('business_id', srsBusiness()->id)
         ->where('name', 'Santosh Singh')
         ->orderBy('village')
         ->pluck('village')
@@ -56,8 +55,7 @@ it('keeps same-named customers in different villages apart', function () {
 });
 
 it('records oil in the unit it is bought in', function () {
-    $oil = RawMaterial
-        ->where('business_id', srsBusiness()->id)
+    $oil = RawMaterial::where('business_id', srsBusiness()->id)
         ->where('name', 'Refined Oil')
         ->firstOrFail();
 
@@ -76,8 +74,7 @@ it('seeds every purchase with the total the invoices add up to', function () {
 it('raises stock for every purchase, so on-hand is not zero', function () {
     // on-hand is a sum over stock_movements, not a column: a Purchase row alone
     // moves nothing. PurchaseWriter pairs each with a positive `in` movement.
-    $ins = StockMovement
-        ->where('business_id', srsBusiness()->id)
+    $ins = StockMovement::where('business_id', srsBusiness()->id)
         ->whereNotNull('purchase_id')
         ->get();
 
@@ -110,8 +107,7 @@ it('holds the writer invariant that a sale equals the sum of its lines', functio
 it('keeps the return as a negative line rather than deleting the sale', function () {
     // Byash ji returned 9 of 15 packs on 11-Jun. Reversals stay as rows so
     // outstanding remains recomputable (PRD §9).
-    $line = SaleLine
-        ->where('business_id', srsBusiness()->id)
+    $line = SaleLine::where('business_id', srsBusiness()->id)
         ->where('qty', '<', 0)
         ->firstOrFail();
 
@@ -143,8 +139,7 @@ it('leaves each customer owing what the owner ledger says', function () {
 
     foreach ($expected as $key => $due) {
         [$name, $village] = explode('|', $key);
-        $customer = Customer
-            ->where('business_id', srsBusiness()->id)
+        $customer = Customer::where('business_id', srsBusiness()->id)
             ->where('name', $name)->where('village', $village)
             ->firstOrFail();
 
@@ -166,8 +161,7 @@ it('totals the outstanding across the whole book', function () {
 it('charges each customer the rate they were actually given', function () {
     // Senvda 800g runs Rs 72 to Rs 80 depending on the customer. A seeder that
     // used the pack default everywhere would erase that.
-    $rates = SaleLine
-        ->join('product_packs as pp', 'pp.id', '=', 'sale_lines.product_pack_id')
+    $rates = SaleLine::join('product_packs as pp', 'pp.id', '=', 'sale_lines.product_pack_id')
         ->join('pack_sizes as ps', 'ps.id', '=', 'pp.pack_size_id')
         ->join('products as p', 'p.id', '=', 'pp.product_id')
         ->where('sale_lines.business_id', srsBusiness()->id)

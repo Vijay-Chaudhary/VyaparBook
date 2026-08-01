@@ -295,7 +295,12 @@ class DashboardReportService
             ->join('sales as s', 's.id', '=', 'sl.sale_id')
             ->where('sl.business_id', $businessId)
             ->whereRaw('extract(year from s.sale_date) = ?', [$year])
-            ->groupByRaw('extract(month from s.sale_date), sl.product_pack_id')
+            // Group by the SELECT aliases, not by repeating the expression.
+            // Postgres accepted `group by extract(...)` alongside the same
+            // expression in the select list; MySQL's ONLY_FULL_GROUP_BY does
+            // not recognise the two as the same thing and rejects the query
+            // (1055). Grouping by alias is what the sibling trends already do.
+            ->groupBy('m', 'pack_id')
             ->selectRaw('CAST(extract(month from s.sale_date) AS SIGNED) as m,
                 sl.product_pack_id as pack_id,
                 CAST(sum(sl.qty) AS SIGNED) as qty,
@@ -417,7 +422,10 @@ class DashboardReportService
             ->groupBy('pp.id', 'prod.name_en', 'prod.name_hi', 'ps.label')
             ->selectRaw("
                 pp.id as pack_id,
-                coalesce(prod.name_en, prod.name_hi) || ' ' || ps.label as name,
+                -- concat(), not ||. In MySQL `||` is logical OR, so the
+                -- Postgres spelling returned the string '1' for every product
+                -- rather than erroring -- the dashboard listed a column of 1s.
+                concat(coalesce(prod.name_en, prod.name_hi), ' ', ps.label) as name,
                 CAST(sum(sl.qty) AS SIGNED) as qty,
                 CAST(sum(sl.line_total) AS CHAR) as sales
             ")

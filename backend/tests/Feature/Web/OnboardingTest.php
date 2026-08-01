@@ -92,8 +92,7 @@ describe('create business', function () {
 
         // Owner membership …
         expect(
-            Membership
-                ->where('user_id', $user->id)->where('business_id', $business->id)->where('role', 'owner')->exists()
+            Membership::where('user_id', $user->id)->where('business_id', $business->id)->where('role', 'owner')->exists()
         )->toBeTrue();
 
         // … and a trial subscription, same as the API path (shared provisioner).

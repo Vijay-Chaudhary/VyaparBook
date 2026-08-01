@@ -5,8 +5,7 @@ use App\Import\TenantImporter;
 use App\Models\Business;
 use App\Models\Customer;
 
-$countFor = fn (Business $b) => Customer
-    ->withoutGlobalScopes()
+$countFor = fn (Business $b) => Customer::withoutGlobalScopes()
     ->where('business_id', $b->id)
     ->count();
 
