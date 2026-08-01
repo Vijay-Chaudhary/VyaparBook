@@ -3,7 +3,6 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -23,14 +22,18 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->create('beats', function (Blueprint $table) {
+        Schema::create('beats', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('business_id')->constrained('businesses')->cascadeOnDelete();
             $table->string('name', 80);
             // ISO weekdays (1 = Monday … 7 = Sunday) the beat is worked on.
-            // jsonb rather than a bitmask: the client filters "is today in here",
-            // and an array reads the same in Postgres, JSON and JavaScript.
-            $table->jsonb('weekdays')->default('[]');
+            // JSON rather than a bitmask: the client filters "is today in here",
+            // and an array reads the same in the database and in JavaScript.
+            //
+            // No DB-level default: MySQL forbids one on a JSON column. The empty
+            // array comes from Beat::$attributes instead, so the column stays
+            // NOT NULL and an insert that omits weekdays still gets `[]`.
+            $table->jsonb('weekdays');
             // The salesman who works it. Nullable: a beat can be planned before
             // anyone is assigned, and a user may be removed from the business.
             $table->foreignId('assigned_user_id')->nullable()->constrained('users')->nullOnDelete();
@@ -43,7 +46,7 @@ return new class extends Migration
             $table->index(['business_id', 'sync_seq']);   // delta pull
         });
 
-        Schema::connection('pgsql_migrate')->create('beat_customers', function (Blueprint $table) {
+        Schema::create('beat_customers', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('business_id')->constrained('businesses')->cascadeOnDelete();
             $table->foreignUuid('beat_id')->constrained('beats')->cascadeOnDelete();
@@ -60,21 +63,11 @@ return new class extends Migration
             $table->unique(['beat_id', 'customer_id']);
             $table->index(['business_id', 'sync_seq']);
         });
-
-        foreach (['beats', 'beat_customers'] as $table) {
-            DB::connection('pgsql_migrate')->statement("ALTER TABLE {$table} ENABLE ROW LEVEL SECURITY");
-            DB::connection('pgsql_migrate')->statement("ALTER TABLE {$table} FORCE ROW LEVEL SECURITY");
-            DB::connection('pgsql_migrate')->statement(
-                "CREATE POLICY {$table}_isolation ON {$table}
-                 USING (business_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
-                 WITH CHECK (business_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)"
-            );
-        }
     }
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->dropIfExists('beat_customers');
-        Schema::connection('pgsql_migrate')->dropIfExists('beats');
+        Schema::dropIfExists('beat_customers');
+        Schema::dropIfExists('beats');
     }
 };

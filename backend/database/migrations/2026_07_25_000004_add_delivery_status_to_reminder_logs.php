@@ -18,7 +18,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->table('reminder_logs', function (Blueprint $table) {
+        Schema::table('reminder_logs', function (Blueprint $table) {
             $table->string('status', 12)->default('queued');
             $table->timestamp('status_at')->nullable();
             // The webhook's only handle on a row — Meta quotes this id back.
@@ -32,14 +32,14 @@ return new class extends Migration
         // Phase 4a rows were handed to the owner's own WhatsApp: 'sent' is as
         // much as that channel can ever report, and leaving them 'queued' would
         // misrepresent them as still in flight.
-        DB::connection('pgsql_migrate')->table('reminder_logs')
+        DB::table('reminder_logs')
             ->where('channel', 'wa_link')
             ->update(['status' => 'sent']);
     }
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->table('reminder_logs', function (Blueprint $table) {
+        Schema::table('reminder_logs', function (Blueprint $table) {
             $table->dropIndex(['provider_message_id']);
             $table->dropColumn(['status', 'status_at', 'provider_message_id', 'error_code', 'error_message']);
         });

@@ -41,19 +41,79 @@ return new class extends Migration
      */
     public function restream(): void
     {
-        $conn = DB::connection('pgsql_migrate');
+        // Postgres did this in two set-based UPDATEs off nextval('sync_seq_global').
+        // MySQL has no sequence, and the counter that replaced it is per-tenant,
+        // so there is no platform-wide value left to draw from: walk the shops
+        // that still have something actionable and reserve a block from each.
+        //
+        // A shop with no open orders is never visited, which is also why a fresh
+        // MySQL build survives this running before sync_sequences exists — there
+        // are no rows to restream, so the counter is never asked for a value.
+        $businessIds = DB::table('orders')
+            ->whereIn('status', self::OPEN)
+            ->distinct()
+            ->pluck('business_id');
 
-        // Ordered so a line never outranks its own order in the delta.
-        $conn->statement(
-            "UPDATE orders SET sync_seq = nextval('sync_seq_global') WHERE status IN (?, ?, ?)",
-            self::OPEN
+        foreach ($businessIds as $businessId) {
+            $orderIds = DB::table('orders')
+                ->where('business_id', $businessId)
+                ->whereIn('status', self::OPEN)
+                ->orderBy('id')
+                ->pluck('id');
+
+            $lineIds = DB::table('order_lines')
+                ->where('business_id', $businessId)
+                ->whereIn('order_id', $orderIds)
+                ->orderBy('id')
+                ->pluck('id');
+
+            // Orders are numbered before their lines, so a line never outranks
+            // its own order in the delta.
+            $next = $this->reserve($businessId, $orderIds->count() + $lineIds->count());
+
+            foreach ($orderIds as $id) {
+                DB::table('orders')->where('id', $id)->update(['sync_seq' => $next++]);
+            }
+
+            foreach ($lineIds as $id) {
+                DB::table('order_lines')->where('id', $id)->update(['sync_seq' => $next++]);
+            }
+        }
+    }
+
+    /**
+     * Hand back the first of `$count` consecutive sync_seq values for one tenant.
+     *
+     * Values are handed out one per row rather than one per table: a device pages
+     * the delta by `sync_seq > cursor`, so two rows sharing a value can straddle a
+     * page boundary and one of them is never seen again.
+     *
+     * The counter is dragged up to the tenant's existing high-water mark first.
+     * `sync_sequences` starts every shop at 0 while its rows do not, and a value
+     * below a cursor a device already holds is a value that never arrives.
+     */
+    private function reserve(string $businessId, int $count): int
+    {
+        $highWater = max(
+            (int) DB::table('orders')->where('business_id', $businessId)->max('sync_seq'),
+            (int) DB::table('order_lines')->where('business_id', $businessId)->max('sync_seq'),
         );
 
-        $conn->statement(
-            "UPDATE order_lines SET sync_seq = nextval('sync_seq_global')
-             WHERE order_id IN (SELECT id FROM orders WHERE status IN (?, ?, ?))",
-            self::OPEN
-        );
+        DB::table('sync_sequences')->insertOrIgnore([
+            'business_id' => $businessId,
+            'value' => $highWater,
+        ]);
+
+        DB::table('sync_sequences')
+            ->where('business_id', $businessId)
+            ->where('value', '<', $highWater)
+            ->update(['value' => $highWater]);
+
+        DB::table('sync_sequences')->where('business_id', $businessId)->increment('value', $count);
+
+        $end = (int) DB::table('sync_sequences')->where('business_id', $businessId)->value('value');
+
+        return $end - $count + 1;
     }
 
     public function down(): void

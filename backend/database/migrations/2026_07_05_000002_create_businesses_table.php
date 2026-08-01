@@ -9,7 +9,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->create('businesses', function (Blueprint $table) {
+        Schema::create('businesses', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('name', 120);
             $table->string('city', 80)->nullable();
@@ -22,6 +22,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->dropIfExists('businesses');
+        Schema::dropIfExists('businesses');
     }
 };

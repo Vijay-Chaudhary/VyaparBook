@@ -8,7 +8,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->create('invites', function (Blueprint $table) {
+        Schema::create('invites', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('business_id')->constrained('businesses')->cascadeOnDelete();
             $table->enum('role', ['owner', 'admin', 'salesman', 'accountant'])->default('salesman');
@@ -23,6 +23,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->dropIfExists('invites');
+        Schema::dropIfExists('invites');
     }
 };

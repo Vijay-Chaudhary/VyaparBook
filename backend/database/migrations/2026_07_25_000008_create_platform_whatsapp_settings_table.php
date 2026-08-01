@@ -20,7 +20,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->create('platform_whatsapp_settings', function (Blueprint $table) {
+        Schema::create('platform_whatsapp_settings', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->string('driver', 12)->default('log');
             $table->string('api_version', 12)->nullable();
@@ -36,6 +36,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->dropIfExists('platform_whatsapp_settings');
+        Schema::dropIfExists('platform_whatsapp_settings');
     }
 };

@@ -13,7 +13,7 @@ return new class extends Migration
     // foundation (created first); Production layers this trace link on top.
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->table('stock_movements', function (Blueprint $table) {
+        Schema::table('stock_movements', function (Blueprint $table) {
             $table->foreignUuid('production_batch_id')->nullable()->after('note')
                 ->constrained('production_batches');
             $table->index(['business_id', 'production_batch_id']);
@@ -22,7 +22,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->table('stock_movements', function (Blueprint $table) {
+        Schema::table('stock_movements', function (Blueprint $table) {
             $table->dropForeign(['production_batch_id']);
             $table->dropIndex(['business_id', 'production_batch_id']);
             $table->dropColumn('production_batch_id');

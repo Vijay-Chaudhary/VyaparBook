@@ -20,22 +20,22 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::connection('pgsql_migrate')->statement(
+        DB::statement(
             'ALTER TABLE businesses ALTER COLUMN reminder_min_days SET DEFAULT 7'
         );
 
-        DB::connection('pgsql_migrate')->table('businesses')
+        DB::table('businesses')
             ->where('reminder_min_days', 30)
             ->update(['reminder_min_days' => 7]);
     }
 
     public function down(): void
     {
-        DB::connection('pgsql_migrate')->statement(
+        DB::statement(
             'ALTER TABLE businesses ALTER COLUMN reminder_min_days SET DEFAULT 30'
         );
 
-        DB::connection('pgsql_migrate')->table('businesses')
+        DB::table('businesses')
             ->where('reminder_min_days', 7)
             ->update(['reminder_min_days' => 30]);
     }

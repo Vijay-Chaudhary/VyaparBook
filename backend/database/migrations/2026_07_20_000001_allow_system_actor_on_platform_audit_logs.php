@@ -19,14 +19,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->table('platform_audit_logs', function (Blueprint $table) {
+        Schema::table('platform_audit_logs', function (Blueprint $table) {
             $table->foreignId('admin_user_id')->nullable()->change();
         });
     }
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->table('platform_audit_logs', function (Blueprint $table) {
+        Schema::table('platform_audit_logs', function (Blueprint $table) {
             $table->foreignId('admin_user_id')->nullable(false)->change();
         });
     }

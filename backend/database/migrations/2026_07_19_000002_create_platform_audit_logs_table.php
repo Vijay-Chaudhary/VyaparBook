@@ -14,7 +14,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->create('platform_audit_logs', function (Blueprint $table) {
+        Schema::create('platform_audit_logs', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignId('admin_user_id')->constrained('users');
             $table->string('action', 40);
@@ -28,6 +28,6 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->dropIfExists('platform_audit_logs');
+        Schema::dropIfExists('platform_audit_logs');
     }
 };

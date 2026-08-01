@@ -26,7 +26,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->table('order_lines', function (Blueprint $table) {
+        Schema::table('order_lines', function (Blueprint $table) {
             $table->integer('ordered_qty')->nullable()->after('qty');
             $table->decimal('ordered_rate', 10, 2)->nullable()->after('rate');
         });
@@ -47,7 +47,7 @@ return new class extends Migration
      */
     public function backfill(): void
     {
-        DB::connection('pgsql_migrate')->statement(
+        DB::statement(
             'UPDATE order_lines SET ordered_qty = qty, ordered_rate = rate
              WHERE ordered_qty IS NULL
                AND order_id IN (SELECT id FROM orders WHERE status = ?)',
@@ -57,7 +57,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->table('order_lines', function (Blueprint $table) {
+        Schema::table('order_lines', function (Blueprint $table) {
             $table->dropColumn(['ordered_qty', 'ordered_rate']);
         });
     }

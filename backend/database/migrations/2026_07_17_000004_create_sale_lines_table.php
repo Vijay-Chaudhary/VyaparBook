@@ -3,14 +3,13 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->create('sale_lines', function (Blueprint $table) {
+        Schema::create('sale_lines', function (Blueprint $table) {
             $table->uuid('id')->primary();
             // business_id is carried directly (not reached through sale_id) so the
             // RLS predicate stays flat and needs no join. No `uuid`: a line is
@@ -34,19 +33,10 @@ return new class extends Migration
             $table->index(['business_id', 'sale_id']);
             $table->index(['business_id', 'sync_seq']); // delta pull streams lines too
         });
-
-        DB::connection('pgsql_migrate')->statement('ALTER TABLE sale_lines ENABLE ROW LEVEL SECURITY');
-        DB::connection('pgsql_migrate')->statement('ALTER TABLE sale_lines FORCE ROW LEVEL SECURITY');
-
-        DB::connection('pgsql_migrate')->statement(<<<'SQL'
-            CREATE POLICY sale_lines_isolation ON sale_lines
-            USING (business_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
-            WITH CHECK (business_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
-        SQL);
     }
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->dropIfExists('sale_lines');
+        Schema::dropIfExists('sale_lines');
     }
 };

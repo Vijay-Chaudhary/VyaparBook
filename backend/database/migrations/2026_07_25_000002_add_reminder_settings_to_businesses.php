@@ -15,7 +15,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->table('businesses', function (Blueprint $table) {
+        Schema::table('businesses', function (Blueprint $table) {
             // Don't chase trivial balances. Money is decimal(12,2) app-wide.
             $table->decimal('reminder_min_outstanding', 12, 2)->default('500.00');
             // Days since the last payment before a reminder is reasonable.
@@ -25,7 +25,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->table('businesses', function (Blueprint $table) {
+        Schema::table('businesses', function (Blueprint $table) {
             $table->dropColumn(['reminder_min_outstanding', 'reminder_min_days']);
         });
     }

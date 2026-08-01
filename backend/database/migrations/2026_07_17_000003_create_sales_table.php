@@ -3,14 +3,13 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->create('sales', function (Blueprint $table) {
+        Schema::create('sales', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('business_id')->constrained('businesses')->cascadeOnDelete();
             // Client-generated idempotency key: a sale retried over a flaky link
@@ -42,22 +41,13 @@ return new class extends Migration
         });
 
         // Self-referencing FK added now that sales(id) exists as a PK.
-        Schema::connection('pgsql_migrate')->table('sales', function (Blueprint $table) {
+        Schema::table('sales', function (Blueprint $table) {
             $table->foreign('reverses_id')->references('id')->on('sales');
         });
-
-        DB::connection('pgsql_migrate')->statement('ALTER TABLE sales ENABLE ROW LEVEL SECURITY');
-        DB::connection('pgsql_migrate')->statement('ALTER TABLE sales FORCE ROW LEVEL SECURITY');
-
-        DB::connection('pgsql_migrate')->statement(<<<'SQL'
-            CREATE POLICY sales_isolation ON sales
-            USING (business_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
-            WITH CHECK (business_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
-        SQL);
     }
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->dropIfExists('sales');
+        Schema::dropIfExists('sales');
     }
 };

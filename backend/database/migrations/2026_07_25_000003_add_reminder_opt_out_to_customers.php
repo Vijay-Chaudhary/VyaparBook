@@ -22,14 +22,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->table('customers', function (Blueprint $table) {
+        Schema::table('customers', function (Blueprint $table) {
             $table->timestamp('reminder_opt_out_at')->nullable();
         });
     }
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->table('customers', function (Blueprint $table) {
+        Schema::table('customers', function (Blueprint $table) {
             $table->dropColumn('reminder_opt_out_at');
         });
     }
