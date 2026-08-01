@@ -23,7 +23,7 @@ class ProductPackController extends Controller
         }
 
         $data = $request->validate([
-            // exists checks run under RLS, so an id from another business simply
+            // exists checks run under the tenant scope, so an id from another business simply
             // does not exist here and fails validation with a 422 — it can never
             // pair one tenant's product with another tenant's pack.
             'product_id' => ['required', 'uuid', 'exists:products,id'],

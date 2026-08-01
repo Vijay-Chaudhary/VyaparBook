@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
  * How much of each product is actually on hand (PRD §18 Phase 3).
  *
  * Read-only and tenant-pinned, like the other report services: it assumes an
- * already-pinned transaction (RLS FORCE'd), and the explicit
+ * already-pinned transaction (the tenant scope bound), and the explicit
  * ->where('business_id', ...) is the app-level layer on top — never one alone.
  *
  * Stock here is WEIGHT, derived from what is already recorded: production adds

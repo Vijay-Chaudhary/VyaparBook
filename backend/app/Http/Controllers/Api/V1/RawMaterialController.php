@@ -67,7 +67,7 @@ class RawMaterialController extends Controller
             return $blocked;
         }
 
-        // findOrFail under RLS: another tenant's material is invisible → 404,
+        // findOrFail under the tenant scope: another tenant's material is invisible → 404,
         // never a 403 that would leak its existence.
         $material = RawMaterial::findOrFail($id);
 

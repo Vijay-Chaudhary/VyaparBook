@@ -51,7 +51,7 @@ class StockController extends Controller
 
     /**
      * One material's stock: the movement ledger with a running on-hand, plus the
-     * final on-hand. findOrFail under RLS → a cross-tenant id 404s.
+     * final on-hand. findOrFail under the tenant scope → a cross-tenant id 404s.
      */
     public function show(string $id, StockService $stock)
     {

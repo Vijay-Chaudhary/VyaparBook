@@ -68,7 +68,7 @@ class ApiTokenController extends Controller
         $requested = $request->query('business');
 
         // Resolve the membership to scope the token to. Read inside forUser()
-        // because memberships are RLS-scoped and no tenant is set yet.
+        // because memberships are tenant-scoped and no tenant is set yet.
         $membership = TenantContext::forUser($user->id, function () use ($user, $requested) {
             // An explicit ?business=… (the business switcher) scopes to that
             // business — but only if the caller is genuinely a member, so a

@@ -40,7 +40,7 @@ class KhataController extends Controller
 
     /**
      * One customer's khata: the time-ordered statement with a running balance,
-     * plus the final outstanding. findOrFail under RLS → a cross-tenant id 404s.
+     * plus the final outstanding. findOrFail under the tenant scope → a cross-tenant id 404s.
      */
     public function show(string $id, KhataService $khata)
     {

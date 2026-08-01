@@ -13,7 +13,7 @@ use Illuminate\Support\Carbon;
  * Who should the owner chase today? (Phase 4a)
  *
  * Read-only and tenant-pinned, like DashboardReportService: every method
- * assumes an already-pinned transaction (RLS FORCE'd), and the explicit
+ * assumes an already-pinned transaction (the tenant scope bound), and the explicit
  * ->where('business_id', ...) is the app-level layer on top — never one alone.
  *
  * Outstanding is NOT recomputed here: it comes from KhataService, the one

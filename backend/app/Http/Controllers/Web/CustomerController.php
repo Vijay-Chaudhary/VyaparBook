@@ -82,7 +82,7 @@ class CustomerController extends Controller
         }
 
         $found = $this->runInTenant($businessId, function () use ($businessId, $customer) {
-            // Explicit owner scope on top of RLS — never trust the id alone.
+            // Explicit owner scope on top of the tenant scope — never trust the id alone.
             $row = Customer::where('business_id', $businessId)->find($customer);
             if ($row === null) {
                 return null;
@@ -282,7 +282,7 @@ class CustomerController extends Controller
         }
 
         $result = $this->runInTenant($businessId, function () use ($businessId, $customer, $work) {
-            // Explicit owner scope on top of RLS, as everywhere else here.
+            // Explicit owner scope on top of the tenant scope, as everywhere else here.
             if (Customer::where('business_id', $businessId)->find($customer) === null) {
                 throw new NotFoundHttpException;
             }

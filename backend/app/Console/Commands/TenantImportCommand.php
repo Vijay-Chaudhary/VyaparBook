@@ -84,7 +84,7 @@ class TenantImportCommand extends Command
     }
 
     /**
-     * The owner's user id, read under tenant context (memberships are RLS-scoped
+     * The owner's user id, read under tenant context (memberships are tenant-scoped
      * to the current tenant). Opening-stock movements are attributed to them.
      */
     private function ownerUserId(string $businessId): ?int

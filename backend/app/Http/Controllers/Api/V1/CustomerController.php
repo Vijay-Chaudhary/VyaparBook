@@ -46,7 +46,7 @@ class CustomerController extends Controller
             return $this->denied();
         }
 
-        // findOrFail under RLS: another tenant's customer is invisible, so this
+        // findOrFail under the tenant scope: another tenant's customer is invisible, so this
         // 404s rather than leaking existence with a 403.
         $customer = Customer::findOrFail($id);
 

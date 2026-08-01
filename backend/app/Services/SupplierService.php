@@ -12,7 +12,7 @@ use Illuminate\Support\Collection;
  * Supplier payables — the mirror of the customer khata, on the buy side.
  * Outstanding = opening_balance + Σ purchases − Σ supplier_payments (archived
  * rows excluded). Set-based, explicit business_id scope, bcmath decimal strings.
- * Assumes a tenant-pinned transaction (RLS + app scope, defense in depth).
+ * Assumes a tenant-pinned transaction (the tenant scope, plus the explicit business_id below).
  */
 class SupplierService
 {

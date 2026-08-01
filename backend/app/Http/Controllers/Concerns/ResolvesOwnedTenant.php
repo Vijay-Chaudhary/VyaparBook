@@ -27,7 +27,7 @@ trait ResolvesOwnedTenant
      * $roles there — so a guessed id cannot open someone else's data. With
      * none, the sole matching business is used. Null when nothing matches.
      *
-     * Read under the user's own context (memberships are RLS-scoped, and no
+     * Read under the user's own context (memberships are tenant-scoped, and no
      * tenant is pinned yet).
      *
      * @param  list<string>  $roles

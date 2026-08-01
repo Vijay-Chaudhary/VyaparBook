@@ -94,7 +94,7 @@ class PurchaseController extends Controller
         ]);
 
         $this->runInTenant($businessId, function () use ($data, $request) {
-            // A cross-tenant supplier/material is invisible under RLS, so the
+            // A cross-tenant supplier/material is invisible under the tenant scope, so the
             // writer's findOrFail turns a guessed id into a 404, not a write.
             $this->writer->record([
                 'uuid' => $request->input('uuid') ?: (string) Str::uuid(),

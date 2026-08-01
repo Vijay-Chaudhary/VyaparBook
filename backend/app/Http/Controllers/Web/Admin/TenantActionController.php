@@ -205,7 +205,7 @@ class TenantActionController extends Controller
     /* --- helpers --------------------------------------------------- */
 
     /**
-     * Load the tenant's subscription pinned under RLS, apply the transition, and
+     * Load the tenant's subscription pinned to that tenant, apply the transition, and
      * audit only a real status change — the shared shell for suspend/reactivate,
      * mirroring Admin\SubscriptionController::transition.
      *
