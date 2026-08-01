@@ -1,6 +1,7 @@
 <?php
 // database/migrations/2026_07_29_000002_restream_open_orders_to_every_device.php
 
+use App\Support\Tenancy;
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Support\Facades\DB;
 
@@ -41,44 +42,50 @@ return new class extends Migration
      */
     public function restream(): void
     {
-        // Postgres did this in two set-based UPDATEs off nextval('sync_seq_global').
-        // MySQL has no sequence, and the counter that replaced it is per-tenant,
-        // so there is no platform-wide value left to draw from: walk the shops
-        // that still have something actionable and reserve a block from each.
-        //
-        // A shop with no open orders is never visited, which is also why a fresh
-        // MySQL build survives this running before sync_sequences exists — there
-        // are no rows to restream, so the counter is never asked for a value.
-        $businessIds = DB::table('orders')
-            ->whereIn('status', self::OPEN)
-            ->distinct()
-            ->pluck('business_id');
-
-        foreach ($businessIds as $businessId) {
-            $orderIds = DB::table('orders')
-                ->where('business_id', $businessId)
+        // Deliberately cross-tenant, and a migration is the one context where
+        // that is unremarkable: it runs outside any request, with no tenant to
+        // bind, and its whole job is to walk every shop. Explicit so the query
+        // tripwire does not have to guess.
+        Tenancy::withoutTenant(function () {
+            // Postgres did this in two set-based UPDATEs off nextval('sync_seq_global').
+            // MySQL has no sequence, and the counter that replaced it is per-tenant,
+            // so there is no platform-wide value left to draw from: walk the shops
+            // that still have something actionable and reserve a block from each.
+            //
+            // A shop with no open orders is never visited, which is also why a fresh
+            // MySQL build survives this running before sync_sequences exists — there
+            // are no rows to restream, so the counter is never asked for a value.
+            $businessIds = DB::table('orders')
                 ->whereIn('status', self::OPEN)
-                ->orderBy('id')
-                ->pluck('id');
+                ->distinct()
+                ->pluck('business_id');
 
-            $lineIds = DB::table('order_lines')
-                ->where('business_id', $businessId)
-                ->whereIn('order_id', $orderIds)
-                ->orderBy('id')
-                ->pluck('id');
+            foreach ($businessIds as $businessId) {
+                $orderIds = DB::table('orders')
+                    ->where('business_id', $businessId)
+                    ->whereIn('status', self::OPEN)
+                    ->orderBy('id')
+                    ->pluck('id');
 
-            // Orders are numbered before their lines, so a line never outranks
-            // its own order in the delta.
-            $next = $this->reserve($businessId, $orderIds->count() + $lineIds->count());
+                $lineIds = DB::table('order_lines')
+                    ->where('business_id', $businessId)
+                    ->whereIn('order_id', $orderIds)
+                    ->orderBy('id')
+                    ->pluck('id');
 
-            foreach ($orderIds as $id) {
-                DB::table('orders')->where('id', $id)->update(['sync_seq' => $next++]);
+                // Orders are numbered before their lines, so a line never outranks
+                // its own order in the delta.
+                $next = $this->reserve($businessId, $orderIds->count() + $lineIds->count());
+
+                foreach ($orderIds as $id) {
+                    DB::table('orders')->where('id', $id)->update(['sync_seq' => $next++]);
+                }
+
+                foreach ($lineIds as $id) {
+                    DB::table('order_lines')->where('id', $id)->update(['sync_seq' => $next++]);
+                }
             }
-
-            foreach ($lineIds as $id) {
-                DB::table('order_lines')->where('id', $id)->update(['sync_seq' => $next++]);
-            }
-        }
+        });
     }
 
     /**

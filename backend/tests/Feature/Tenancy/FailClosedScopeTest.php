@@ -96,3 +96,14 @@ it('allows a raw query that does scope itself', function () {
 
     expect(DB::table('customers')->where('business_id', $b->id)->get())->toHaveCount(0);
 });
+
+it('is not fooled by a query that merely names business_id without filtering on it', function () {
+    // The tripwire's first cut asked only whether the SQL contained the string
+    // "business_id" anywhere. Selecting the column satisfied that while still
+    // reading every tenant — so it has to be business_id used as a PREDICATE.
+    $b = Business::factory()->create();
+    app()->bind('tenant.id', fn () => $b->id);
+
+    expect(fn () => DB::table('customers')->select('business_id')->get())
+        ->toThrow(RuntimeException::class, 'without a business_id predicate');
+});

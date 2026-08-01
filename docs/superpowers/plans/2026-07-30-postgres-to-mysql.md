@@ -1484,6 +1484,6 @@ The migration is done when all of these hold:
 - [x] `grep -rn "pgsql" app/ database/ config/ tests/ routes/` → nothing
 - [ ] `php artisan migrate:fresh --seed --force` → succeeds, no `--database` flag
 - [ ] `./vendor/bin/pest` → green
-- [x] `grep -rn "withoutTenant" app/ database/` → **only** the four sanctioned sites (the console controllers turned out not to need one: they use raw builders on the SELECT-only connection, which Eloquent scopes never reached)
+- [x] `grep -rn "withoutTenant" app/ database/` → **five** sites, not the four the plan predicted. The console controllers turned out not to need one (they use raw builders on the SELECT-only connection, which Eloquent scopes never reached), but the `2026_07_29_000002_restream_open_orders` migration does: it runs `select distinct business_id from orders` to enumerate every shop. **That site was invisible until the tripwire was tightened** — the plan specified the scoped-check as `str_contains($sql, 'business_id')`, which the query satisfied merely by naming the column in its SELECT list. Migrations are a fifth legitimate cross-tenant context, alongside seeders.
 - [x] `DecimalFidelityTest` passes — the money model is intact
 - [x] `CLAUDE.md` no longer claims two layers of isolation

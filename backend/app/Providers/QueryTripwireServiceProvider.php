@@ -68,11 +68,16 @@ class QueryTripwireServiceProvider extends ServiceProvider
                 return;
             }
 
+            // Must be business_id used as a PREDICATE, not merely mentioned.
+            // `select business_id from customers` names the column and reads
+            // every tenant, so a bare str_contains() would wave it through.
+            $scoped = preg_match('/business_id`?\s*(=|in\s*\(|is\s+not\s+null)/', $sql) === 1;
+
             foreach (self::TENANT_TABLES as $table) {
                 $touches = str_contains($sql, " from `{$table}`")
                     || str_contains($sql, " join `{$table}`");
 
-                if ($touches && ! str_contains($sql, 'business_id')) {
+                if ($touches && ! $scoped) {
                     throw new RuntimeException(
                         "Tenant leak: query touched `{$table}` without a business_id ".
                         "predicate.\nSQL: {$query->sql}\n".
