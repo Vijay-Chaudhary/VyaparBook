@@ -41,10 +41,11 @@ class BusinessController extends Controller
 
     public function mine(Request $request)
     {
-        // No tenant filter: this runs inside SetTenantContext, so
-        // app.current_user_id is set and the memberships RLS policy's user_id
-        // branch exposes the caller's memberships across every business —
-        // which is the whole point of this endpoint.
+        // No tenant filter, deliberately: this endpoint answers "which
+        // businesses am I in?", so it must span all of them. Membership carries
+        // no BelongsToTenant scope for exactly this reason — it is keyed by
+        // user as legitimately as by business — which is also why the query
+        // tripwire excludes the memberships table.
         $memberships = Membership::with('business')
             ->where('user_id', app('tenant.user_id'))
             ->get();

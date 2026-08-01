@@ -78,7 +78,7 @@ class TenantController extends Controller
 
     /**
      * Single-tenant drill-down: the business, its billing state, its members
-     * and recent subscription payments. All reads on the BYPASSRLS connection.
+     * and recent subscription payments. All reads on the SELECT-only connection.
      */
     public function show(string $id): JsonResponse
     {

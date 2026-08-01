@@ -116,7 +116,8 @@ function platformAdmin(): array
  * Run $fn with $businessId bound as the current tenant, restoring whatever was
  * bound before.
  *
- * Test setup used to write through `pgsql_migrate`, which bypassed RLS and left
+ * Test setup used to write through the old privileged migration connection,
+ * which bypassed row-level security and left
  * `app('tenant.id')` null. The fail-closed scope refuses an unbound query, so
  * every seeding helper below needs a tenant. Binding the one the fixture
  * obviously belongs to — rather than reaching for Tenancy::withoutTenant() —

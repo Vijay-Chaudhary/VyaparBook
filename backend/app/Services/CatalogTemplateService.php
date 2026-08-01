@@ -59,8 +59,8 @@ class CatalogTemplateService
      * Insert a template's rows for one business.
      *
      * Runs inside the caller's transaction — SetTenantContext has already opened
-     * one and set app.current_tenant, so BelongsToTenant stamps business_id and
-     * the RLS WITH CHECK passes. business_id is still passed explicitly here so
+     * one and bind the tenant, so BelongsToTenant stamps business_id.
+     * business_id is still passed explicitly here so
      * the service is callable from a console command or seeder that has no
      * request context.
      */

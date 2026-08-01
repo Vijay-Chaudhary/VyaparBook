@@ -24,7 +24,7 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * Payment reminders (Phase 4a/4b): Blade, online-only, owner-only. Same owner-tool
  * pattern as ExpenseController/SupplierController — the caller's OWNED business
  * is resolved from their membership (never the request), and work runs
- * tenant-pinned (RLS + app scope + owner). Not behind the write plan-gate: a
+ * tenant-pinned (the tenant scope + owner). Not behind the write plan-gate: a
  * lapsed owner may still chase their own money.
  *
  * `send` always records the owner's intent first, then routes it by the
@@ -92,7 +92,7 @@ class ReminderController extends Controller
 
         $result = $this->runInTenant($businessId, function () use ($businessId, $customer, $khata, $viaCloudApi) {
             // Resolved inside the pin, never via implicit binding — no tenant is
-            // pinned during route resolution, so binding would bypass RLS.
+            // pinned during route resolution, so binding would bypass the scope.
             $model = Customer::query()
                 ->where('business_id', $businessId)
                 ->whereNull('archived_at')

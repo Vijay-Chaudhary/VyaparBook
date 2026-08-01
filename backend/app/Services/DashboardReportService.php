@@ -28,10 +28,12 @@ use Illuminate\Support\Facades\DB;
  *
  * Every method assumes it runs inside an already tenant-pinned transaction
  * (the controller's runInTenant in production, or the test harness's
- * inTenant() helper). RLS is FORCE'd on the app connection, so the tenant GUC
- * must be set by the caller. The ->where('business_id', ...) each method also
- * applies is the app-level layer of defense in depth on top of that — never
- * one layer alone — but it is not a substitute for the caller's tenant pin.
+ * inTenant() helper). The tenant binding is what scopes these reads, so it
+ * must be set by the caller. The explicit ->where('business_id', ...) each
+ * method also applies matters more than it used to: these are raw builders, so
+ * the Eloquent scope does not reach them at all and that filter is the only
+ * thing confining the query. The test-environment query tripwire exists to
+ * catch one being dropped.
  *
  * All money is bcmath decimal strings, never floats, matching KhataService.
  */

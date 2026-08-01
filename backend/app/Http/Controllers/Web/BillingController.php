@@ -159,7 +159,7 @@ class BillingController extends Controller
     }
 
     /**
-     * Run $work with the tenant pinned — the RLS GUC and the app-level scope,
+     * Run $work with the tenant pinned — the tenant binding the scope reads,
      * plus the owner role for BillingPolicy parity — inside one transaction.
      * Mirrors OnboardingController::tenantHas and the importer's runInTenant.
      *

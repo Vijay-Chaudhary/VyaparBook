@@ -12,10 +12,11 @@ use Throwable;
  * Produces a complete, portable copy of one tenant's data (PRD §13 — DPDP
  * portability and offboarding).
  *
- * Reads run under the tenant's own RLS context rather than on the BYPASSRLS
- * platform connection: the export is confined by the same policy that confines
- * the tenant's own requests, so a mistake here cannot pull another shop's books
- * into a customer's export file. That is the point of doing it the slow way.
+ * Reads run with the tenant bound, on the normal application connection, rather
+ * than on the SELECT-only platform connection: the export is confined by the
+ * same scope that confines the tenant's own requests, so a mistake here cannot
+ * pull another shop's books into a customer's export file. That is the point of
+ * doing it the slow way.
  *
  * The whole export runs inside ONE transaction so the snapshot is consistent —
  * a sale written midway cannot land in sale_lines but miss sales.
@@ -70,11 +71,9 @@ class TenantExporter
 
         try {
             TenantContext::switchTo($businessId);
-            app()->bind('tenant.id', fn () => $businessId);
 
-            // Read the business row through RLS too. If the id does not exist —
-            // or RLS hides it — we must fail rather than emit an empty export
-            // that looks like a legitimately empty tenant.
+            // If the id does not exist we must fail rather than emit an empty
+            // export that looks like a legitimately empty tenant.
             $business = DB::table('businesses')->where('id', $businessId)->first();
 
             if ($business === null) {

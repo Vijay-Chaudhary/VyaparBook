@@ -89,7 +89,7 @@ sudo apt update && sudo apt install php8.3-mysql
 Run: `php -r "var_export(PDO::getAvailableDrivers());"`
 Expected: an array containing `'mysql'`. If it shows only `'pgsql'`, stop — nothing later will work.
 
-- [ ] **Step 3: Create the database and both users**
+- [x] **Step 3: Create the database and both users**
 
 ```bash
 sudo mysql <<'SQL'
@@ -115,7 +115,7 @@ FLUSH PRIVILEGES;
 SQL
 ```
 
-- [ ] **Step 4: Verify the app can connect and that decimals arrive as strings**
+- [x] **Step 4: Verify the app can connect and that decimals arrive as strings**
 
 Run:
 ```bash
@@ -132,7 +132,7 @@ decimal php type: string
 
 If it prints `double`, `PDO::ATTR_EMULATE_PREPARES` is not taking effect. **Stop and fix it** — every rupee in this system is a decimal string through bcmath, and floats will silently corrupt khatas. Task 9 pins this with a test.
 
-- [ ] **Step 5: Confirm the read-only user really is read-only**
+- [x] **Step 5: Confirm the read-only user really is read-only**
 
 Run: `mysql -u vyapar_platform_ro -pplatform_ro_pw vyaparbook -e "CREATE TABLE t(x int);"`
 Expected: `ERROR 1142 (42000): CREATE command denied`
@@ -239,12 +239,12 @@ return new class extends Migration
 };
 ```
 
-- [ ] **Step 7: Build the schema on MySQL**
+- [x] **Step 7: Build the schema on MySQL**
 
 Run: `php artisan migrate:fresh --force`
 Expected: every migration `DONE`, no `--database` flag needed. If it errors on a Postgres idiom, fix that migration and re-run.
 
-- [ ] **Step 8: Confirm UUID keys landed as CHAR(36)**
+- [x] **Step 8: Confirm UUID keys landed as CHAR(36)**
 
 Spec Decision 4 needs no code — `foreignUuid()` already emits `CHAR(36)` on
 MySQL — but verify rather than assume:
@@ -252,7 +252,7 @@ MySQL — but verify rather than assume:
 Run: `php artisan tinker --execute="print_r(DB::select('DESCRIBE customers')[0]);"`
 Expected: the `id` column shows `Type => char(36)`.
 
-- [ ] **Step 9: Commit**
+- [x] **Step 9: Commit**
 
 ```bash
 git add -A database/migrations
@@ -433,12 +433,12 @@ trait HasSyncSequence
 }
 ```
 
-- [ ] **Step 4: Run the test**
+- [x] **Step 4: Run the test**
 
 Run: `./vendor/bin/pest tests/Feature/Sync/SyncSequenceTest.php`
 Expected: 4 passed.
 
-- [ ] **Step 5: Commit**
+- [x] **Step 5: Commit**
 
 ```bash
 git add app/Traits/HasSyncSequence.php tests/Feature/Sync/SyncSequenceTest.php
@@ -540,7 +540,7 @@ Expected: `CLEAN`. Anything left is a shape the `sed` missed — fix by hand.
 >
 > `pgsql_platform` call sites are deliberately left — they are Task 7.
 
-- [ ] **Step 4: Run the suite to see where you actually are**
+- [x] **Step 4: Run the suite to see where you actually are**
 
 Run: `./vendor/bin/pest 2>&1 | tail -20`
 Expected: it now **runs**. Many failures are expected — the tenant GUC calls (Task 5) and RLS tests (Task 11) are still there. Record the number; it is the baseline for the rest of the plan.
@@ -655,7 +655,7 @@ Expected: `CLEAN`
 > "goes THROUGH row-level security … (defense in depth)" — rewritten, since the
 > app scope is the single layer now.
 
-- [ ] **Step 4: Run the tenancy middleware tests**
+- [x] **Step 4: Run the tenancy middleware tests**
 
 Run: `./vendor/bin/pest tests/Feature/Tenancy/TenantContextMiddlewareTest.php`
 Expected: PASS.
@@ -770,7 +770,7 @@ it('still stamps business_id on create from the bound tenant', function () {
 Run: `./vendor/bin/pest tests/Feature/Tenancy/FailClosedScopeTest.php`
 Expected: FAIL — `TenantContextMissing` and `Tenancy` do not exist.
 
-- [ ] **Step 3: Create the exception**
+- [x] **Step 3: Create the exception**
 
 ```php
 <?php
@@ -801,7 +801,7 @@ class TenantContextMissing extends RuntimeException
 }
 ```
 
-- [ ] **Step 4: Create the escape hatch**
+- [x] **Step 4: Create the escape hatch**
 
 ```php
 <?php
@@ -853,7 +853,7 @@ class Tenancy
 }
 ```
 
-- [ ] **Step 5: Invert the scope**
+- [x] **Step 5: Invert the scope**
 
 Replace `app/Traits/BelongsToTenant.php`:
 
@@ -907,12 +907,12 @@ trait BelongsToTenant
 }
 ```
 
-- [ ] **Step 6: Run the test**
+- [x] **Step 6: Run the test**
 
 Run: `./vendor/bin/pest tests/Feature/Tenancy/FailClosedScopeTest.php`
 Expected: 5 passed.
 
-- [ ] **Step 7: Wrap the four legitimate call sites**
+- [x] **Step 7: Wrap the four legitimate call sites**
 
 Run the suite and fix the `TenantContextMissing` failures by wrapping only these:
 
@@ -968,14 +968,14 @@ that replaced 23 RLS policies."
 - Modify: `app/Http/Controllers/Api/V1/Admin/ImpersonationController.php:42`
 - Modify: `app/Platform/PlatformTenantContext.php:12` (comment)
 
-- [ ] **Step 1: Rename the connection at every call site**
+- [x] **Step 1: Rename the connection at every call site**
 
 ```bash
 cd backend
 grep -rl "pgsql_platform" app/ | xargs sed -i "s/pgsql_platform/mysql_platform/g"
 ```
 
-- [ ] **Step 2: Correct the now-false comments**
+- [x] **Step 2: Correct the now-false comments**
 
 Three files describe the connection as "SELECT-only BYPASSRLS". There is no RLS to bypass. Replace that phrase with:
 
@@ -1022,11 +1022,11 @@ READ scoping becomes the app's job, via Tenancy::withoutTenant()."
 **Files:**
 - Modify: the 35 `selectRaw` blocks, chiefly in `app/Services/DashboardReportService.php`, `app/Services/CogsService.php`, `app/Services/FinishedGoodsService.php`, `app/Services/CashFlowService.php`
 
-- [ ] **Step 1: Find every Postgres idiom**
+- [x] **Step 1: Find every Postgres idiom**
 
 Run: `grep -rn "::text\|::int\|::uuid\|ILIKE\|jsonb" app/ --include=*.php`
 
-- [ ] **Step 2: Apply the substitutions**
+- [x] **Step 2: Apply the substitutions**
 
 | Postgres | MySQL |
 |---|---|
@@ -1047,7 +1047,7 @@ Worked example — `app/Services/FinishedGoodsService.php:39`:
 
 The `::text` casts exist so bcmath receives strings rather than floats. `CAST(... AS CHAR)` preserves that; **do not simply delete the cast.**
 
-- [ ] **Step 3: Verify none remain**
+- [x] **Step 3: Verify none remain**
 
 Run: `grep -rn "::text\|::int\|::uuid" app/ --include=*.php || echo CLEAN`
 Expected: `CLEAN`
@@ -1075,7 +1075,7 @@ InnoDB supports it, so gapless invoice numbering survives intact."
 **Files:**
 - Create: `tests/Feature/Database/DecimalFidelityTest.php`
 
-- [ ] **Step 1: Write the test**
+- [x] **Step 1: Write the test**
 
 ```php
 <?php
@@ -1127,7 +1127,7 @@ it('has emulated prepares disabled on the app connection', function () {
 });
 ```
 
-- [ ] **Step 2: Run it**
+- [x] **Step 2: Run it**
 
 Run: `./vendor/bin/pest tests/Feature/Database/DecimalFidelityTest.php`
 Expected: 3 passed. If the first fails, revisit Task 1 Step 4 before going further — everything downstream of this is money.
@@ -1180,7 +1180,7 @@ it('allows a raw query that does scope itself', function () {
 Run: `./vendor/bin/pest tests/Feature/Tenancy/FailClosedScopeTest.php --filter=trips`
 Expected: FAIL — no exception thrown.
 
-- [ ] **Step 3: Build the tripwire**
+- [x] **Step 3: Build the tripwire**
 
 ```php
 <?php
@@ -1269,7 +1269,7 @@ class QueryTripwireServiceProvider extends ServiceProvider
 }
 ```
 
-- [ ] **Step 4: Register it**
+- [x] **Step 4: Register it**
 
 In `bootstrap/providers.php`, add to the returned array:
 
@@ -1277,7 +1277,7 @@ In `bootstrap/providers.php`, add to the returned array:
     App\Providers\QueryTripwireServiceProvider::class,
 ```
 
-- [ ] **Step 5: Run the test**
+- [x] **Step 5: Run the test**
 
 Run: `./vendor/bin/pest tests/Feature/Tenancy/FailClosedScopeTest.php`
 Expected: 7 passed.
@@ -1314,13 +1314,13 @@ too blunt to gate production traffic on."
 - Delete: `tests/Feature/Tenancy/PgBouncerPooledConnectionTest.php` (1)
 - Modify: `tests/Feature/Tenancy/CrossTenantLeakTest.php` (comments only)
 
-- [ ] **Step 1: Understand why these cannot be ported before deleting them**
+- [x] **Step 1: Understand why these cannot be ported before deleting them**
 
 `StockRlsTest`'s header states its own purpose: *"Proves the stock & production RLS policies themselves, with the app layer bypassed — the global scope cannot mask whether RLS is doing the work."* One test is literally *"hides another business stock rows even with the app layer bypassed."*
 
 On MySQL there is nothing behind the app layer. These tests have no subject. Rewriting them to pass would produce tests that assert nothing — worse than deleting them, because the file name would still claim isolation is proven.
 
-- [ ] **Step 2: Delete them in one commit**
+- [x] **Step 2: Delete them in one commit**
 
 ```bash
 cd backend
@@ -1332,7 +1332,7 @@ git rm tests/Feature/Tenancy/BillingRlsTest.php \
        tests/Feature/Tenancy/PgBouncerPooledConnectionTest.php
 ```
 
-- [ ] **Step 3: Correct the two misleading comments in `CrossTenantLeakTest`**
+- [x] **Step 3: Correct the two misleading comments in `CrossTenantLeakTest`**
 
 These ~20 tests survive — they drive the HTTP API with both layers live, so they assert behaviour, not mechanism. But two comments name the wrong mechanism:
 
@@ -1377,12 +1377,12 @@ than RLS as the mechanism."
 - Modify: `CLAUDE.md`, `docs/PRD.md` §4.1–4.3
 - Modify: `docs/ui-backlog.md`
 
-- [ ] **Step 1: Find every stale claim**
+- [x] **Step 1: Find every stale claim**
 
 Run: `grep -rn "RLS\|row level security\|Postgres" app/ --include=*.php -i`
 Expected: ~43 files.
 
-- [ ] **Step 2: Fix the actively misleading ones first**
+- [x] **Step 2: Fix the actively misleading ones first**
 
 These describe a protection that no longer exists. Two worked examples:
 
@@ -1409,7 +1409,7 @@ These describe a protection that no longer exists. Two worked examples:
 
 A wrong comment about security is worse than no comment. Do not skip this because the tests stay green either way.
 
-- [ ] **Step 3: Correct `CLAUDE.md`**
+- [x] **Step 3: Correct `CLAUDE.md`**
 
 Two lines are now false:
 
@@ -1431,15 +1431,15 @@ becomes
 - Multi-tenant isolation: enforced by `App\Traits\BelongsToTenant`, which FAILS CLOSED — it throws rather than returning every tenant's rows when no tenant is bound. Cross-tenant work must go through `Tenancy::withoutTenant()` (four sanctioned sites). A test-environment query tripwire catches raw builders that bypass the scope. There is no database-level layer behind this: MySQL has no RLS.
 ```
 
-- [ ] **Step 4: Mark PRD §4 superseded**
+- [x] **Step 4: Mark PRD §4 superseded**
 
 Strike through §4.1 (RLS implementation), §4.2 (the PgBouncer gotcha — PgBouncer leaves the stack) and §4.3 (tenant context propagation), each pointing at the migration spec, in the style the order-workflow spec used for its superseded decisions.
 
-- [ ] **Step 5: Add the backlog entry**
+- [x] **Step 5: Add the backlog entry**
 
 Add an `F-20` row to `docs/ui-backlog.md` recording the migration, what was given up (engine-enforced isolation, 19 tests, lock-free sequence allocation) and what replaced it.
 
-- [ ] **Step 6: Close the acceptance gate**
+- [x] **Step 6: Close the acceptance gate**
 
 Run: `grep -rn "pgsql" app/ database/ config/ tests/ routes/ || echo CLEAN`
 Expected: `CLEAN`. **If this returns anything, the migration is not finished.**
@@ -1481,9 +1481,9 @@ Marks PRD 4.1-4.3 superseded."
 
 The migration is done when all of these hold:
 
-- [ ] `grep -rn "pgsql" app/ database/ config/ tests/ routes/` → nothing
+- [x] `grep -rn "pgsql" app/ database/ config/ tests/ routes/` → nothing
 - [ ] `php artisan migrate:fresh --seed --force` → succeeds, no `--database` flag
 - [ ] `./vendor/bin/pest` → green
-- [ ] `grep -rn "withoutTenant" app/ database/` → **only** the four sanctioned sites plus the console controllers
-- [ ] `DecimalFidelityTest` passes — the money model is intact
-- [ ] `CLAUDE.md` no longer claims two layers of isolation
+- [x] `grep -rn "withoutTenant" app/ database/` → **only** the four sanctioned sites (the console controllers turned out not to need one: they use raw builders on the SELECT-only connection, which Eloquent scopes never reached)
+- [x] `DecimalFidelityTest` passes — the money model is intact
+- [x] `CLAUDE.md` no longer claims two layers of isolation

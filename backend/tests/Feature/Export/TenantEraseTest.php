@@ -40,10 +40,9 @@ function seedFullTenant(): array
         'role' => 'owner',
     ]);
 
-    // Factories run on the default (RLS) connection and their FK defaults would
-    // spawn a second business, so build unsaved and persist on pgsql_migrate
-    // with every foreign key pinned to this tenant — the idiom the rest of the
-    // suite uses.
+    // A factory's FK defaults would spawn a second business, so build unsaved
+    // and persist with every foreign key pinned to this tenant — the idiom the
+    // rest of the suite uses.
     $mk = function (string $class, array $attributes) use ($business) {
         $model = $class::factory()->make($attributes + ['business_id' => $business->id]);
         $model->save();
@@ -187,8 +186,8 @@ it('never touches another tenant', function () {
 });
 
 /**
- * The memberships RLS policy also matches on app.current_user_id, so a delete
- * issued with a user GUC set would reach that user's memberships in OTHER
+ * Memberships are reachable by user as legitimately as by business, so a delete
+ * scoped by the wrong one would reach that user's memberships in OTHER
  * businesses. This is the test that would catch that regression.
  */
 it('keeps a shared user\'s membership in their other business', function () {

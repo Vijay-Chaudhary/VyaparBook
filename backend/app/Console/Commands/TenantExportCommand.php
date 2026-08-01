@@ -15,7 +15,7 @@ use Throwable;
  * deliverable, and the thing to run before tenant:erase.
  *
  * Writes one JSON file containing every tenant-owned row, read under the
- * tenant's own RLS context. The export is audited — handing a shop's complete
+ * tenant's own bound context. The export is audited — handing a shop's complete
  * books to someone is exactly the kind of action the trail exists for.
  */
 class TenantExportCommand extends Command

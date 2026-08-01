@@ -10,7 +10,7 @@ use Illuminate\Support\Facades\DB;
 /**
  * Owner-only web controllers share this: resolve the caller's OWNED business
  * (never one supplied by the request), then run work with that tenant pinned
- * (RLS GUC + app-level scope + owner role) in a transaction. Mirrors the
+ * (the tenant binding plus the owner role) in a transaction. Mirrors the
  * BillingController/OnboardingController pattern exactly.
  */
 trait ResolvesOwnedTenant
@@ -46,7 +46,7 @@ trait ResolvesOwnedTenant
     }
 
     /**
-     * Run $work with the tenant pinned — the RLS GUC, the app-level scope, and
+     * Run $work with the tenant pinned — the tenant binding the scope reads, and
      * the caller's real role in this business — inside one transaction.
      *
      * The role is looked up rather than hardcoded to 'owner': this trait now

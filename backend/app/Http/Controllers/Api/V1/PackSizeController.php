@@ -20,8 +20,8 @@ class PackSizeController extends Controller
 
         $data = $request->validate([
             // No tenant clause on the unique rule, and none is needed: this query
-            // runs inside SetTenantContext's transaction with app.current_tenant
-            // set, so RLS has already narrowed pack_sizes to this business. It
+            // runs inside SetTenantContext, which binds the tenant, so the
+            // scope has already narrowed pack_sizes to this business. It
             // looks like a missing scope; it is not.
             'label' => ['required', 'string', 'max:40', Rule::unique('pack_sizes', 'label')],
             'weight_kg' => ['required', 'numeric', 'gt:0'],

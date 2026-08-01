@@ -12,7 +12,7 @@ use Illuminate\Support\Collection;
  * Read-only cash-flow aggregation behind the owner dashboard (Phase 3).
  *
  * Like DashboardReportService, every method assumes it runs inside an
- * already-tenant-pinned transaction (RLS FORCE'd on the app connection). The
+ * already-tenant-pinned transaction (the tenant scope bound). The
  * explicit ->where('business_id', ...) is the app-level layer of defense in
  * depth on top of that — never one layer alone.
  *

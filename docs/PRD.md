@@ -82,9 +82,11 @@ Three standard options, judged for **this** product (many small tenants, high te
 
 **Recommendation: shared schema, `tenant_id` on every domain row, isolation enforced by PostgreSQL Row-Level Security.**
 
+> **Superseded (§4.1–§4.3):** the product moved to **MySQL 8**, which has no row-level security. The shared-schema + `tenant_id` shape below is unchanged and still correct; what changed is *what enforces it*. Isolation is now a single application layer — `App\Traits\BelongsToTenant`, which **fails closed** and throws when no tenant is bound — plus a test-environment query tripwire for raw builders. PgBouncer leaves the stack entirely. See `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`. The three subsections below are retained for the reasoning behind the shared-schema choice, not as a description of the running system.
+
 > **Note vs RepairOS:** RepairOS used *database-per-tenant* — correct there, because repair shops are fewer, heavier, and value hard isolation. VyaparBook targets a **high count of very small tenants**, where per-tenant DBs become an operational tax. Shared-schema + RLS is the right trade for this shape, and it matches the RLS direction of your CRM spec.
 
-### 4.1 RLS implementation
+### 4.1 RLS implementation ~~(superseded — no RLS on MySQL)~~
 - Every tenant-owned table has `tenant_id UUID NOT NULL` (indexed; most queries filter on it).
 - A per-connection setting carries the active tenant:
   ```sql
@@ -97,7 +99,7 @@ Three standard options, judged for **this** product (many small tenants, high te
   ```
 - The app connects as a **non-superuser** role (superusers bypass RLS). Migrations run as a privileged role.
 
-### 4.2 The PgBouncer gotcha (important)
+### 4.2 The PgBouncer gotcha (important) ~~(superseded — PgBouncer removed)~~
 With **PgBouncer in transaction-pooling mode**, server connections are shared between clients *between transactions*, so a session-level `SET app.current_tenant` will leak or reset. The clean fix:
 
 - Set the tenant with **`SET LOCAL` inside each transaction** (scoped to that transaction, auto-cleared on commit/rollback):
@@ -110,10 +112,10 @@ With **PgBouncer in transaction-pooling mode**, server connections are shared be
 - In Django: wrap every request in an atomic block and set the GUC at its start (middleware + `connection.cursor().execute("SET LOCAL ...")`, or `ATOMIC_REQUESTS = True` plus a connection hook). This is compatible with transaction pooling and keeps pooling efficient.
 - **Never** rely on session-level state behind a transaction pooler.
 
-### 4.3 Tenant context propagation
+### 4.3 Tenant context propagation ~~(superseded — no GUCs; the tenant lives in the container)~~
 - **HTTP:** middleware resolves the active business from the **JWT claim** (`tenant_id` + `membership_role`), verifies the membership, then `SET LOCAL app.current_tenant` for the request transaction.
 - **Celery:** tasks receive `tenant_id` in their payload; a task base class opens a transaction and sets `SET LOCAL app.current_tenant` before running the body. No implicit/global tenant.
-- **Defense in depth:** RLS is the backstop, but the ORM layer *also* filters by tenant (a `TenantManager` default queryset) so bugs fail closed at two layers.
+- ~~**Defense in depth:** RLS is the backstop, but the ORM layer *also* filters by tenant (a `TenantManager` default queryset) so bugs fail closed at two layers.~~ **There is no second layer now.** The ORM scope IS the isolation, which is why it was inverted to fail closed rather than fail open.
 
 ---
 

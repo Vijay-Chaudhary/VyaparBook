@@ -16,7 +16,7 @@ use Illuminate\Http\Request;
  * subscription. Suspending drops the tenant into read_only (dunning) — domain
  * writes soft-block with a 402 while reads flow; reactivating lifts it.
  *
- * Both writes pin the target tenant (PlatformTenantContext) so RLS confines the
+ * Both writes pin the target tenant (PlatformTenantContext) so the scope confines the
  * mutation, and both are recorded in the platform audit trail.
  */
 class SubscriptionController extends Controller

@@ -19,7 +19,7 @@ use Illuminate\View\View;
  * Costed raw-material purchases (Phase 2a): Blade, online-only, owner-only.
  * Same owner-tool pattern as ExpenseController — the caller's OWNED business is
  * resolved from their membership (never the request), and work runs tenant-pinned
- * (RLS + app scope + owner). Not behind the write plan-gate: a lapsed owner still
+ * (the tenant scope + owner). Not behind the write plan-gate: a lapsed owner still
  * records their own bookkeeping.
  *
  * The purchase and its costed stock-in are written by PurchaseWriter, so this

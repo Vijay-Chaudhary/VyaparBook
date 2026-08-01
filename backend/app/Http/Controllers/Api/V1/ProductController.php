@@ -36,7 +36,7 @@ class ProductController extends Controller
             return $this->denied();
         }
 
-        // findOrFail, not a manual tenant check: RLS has already hidden other
+        // findOrFail, not a manual tenant check: the tenant scope has already hidden other
         // tenants' rows, so this raises a genuine 404 rather than a 403 that
         // would confirm the row exists. See the catalog spec §6.
         $product = Product::findOrFail($id);
