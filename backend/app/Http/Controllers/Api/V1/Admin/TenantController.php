@@ -11,9 +11,9 @@ use Illuminate\Support\Facades\DB;
 /**
  * Platform (Superadmin) console: cross-tenant tenant directory.
  *
- * Reads run on the SELECT-only BYPASSRLS connection (pgsql_platform), so the
- * listing spans every tenant with no tenant GUC set — and cannot mutate. There
- * is no tenant scope here by design: the console is cross-tenant.
+ * Reads run on the SELECT-only connection (mysql_platform), so the listing spans
+ * every tenant and cannot mutate — its user is granted SELECT and nothing else.
+ * There is no tenant scope here by design: the console is cross-tenant.
  */
 class TenantController extends Controller
 {
@@ -31,7 +31,7 @@ class TenantController extends Controller
         $q = $data['q'] ?? null;
         $perPage = $data['per_page'] ?? 25;
 
-        $page = DB::connection('pgsql_platform')
+        $page = DB::connection('mysql_platform')
             ->table('businesses as b')
             ->leftJoin('subscriptions as s', 's.business_id', '=', 'b.id')
             ->select([
@@ -45,7 +45,7 @@ class TenantController extends Controller
                 's.trial_ends_at',
                 's.current_period_end',
             ])
-            ->when($q !== null, fn ($query) => $query->where('b.name', 'ilike', '%'.$q.'%'))
+            ->when($q !== null, fn ($query) => $query->where('b.name', 'like', '%'.$q.'%'))
             ->orderByDesc('b.created_at')
             ->paginate($perPage);
 
@@ -78,11 +78,11 @@ class TenantController extends Controller
 
     /**
      * Single-tenant drill-down: the business, its billing state, its members
-     * and recent subscription payments. All reads on the BYPASSRLS connection.
+     * and recent subscription payments. All reads on the SELECT-only connection.
      */
     public function show(string $id): JsonResponse
     {
-        $platform = DB::connection('pgsql_platform');
+        $platform = DB::connection('mysql_platform');
 
         $business = $platform->table('businesses')
             ->where('id', $id)

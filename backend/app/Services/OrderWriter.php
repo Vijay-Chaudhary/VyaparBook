@@ -47,7 +47,7 @@ class OrderWriter
             return [$existing->load('lines'), false];
         }
 
-        // findOrFail under RLS: another tenant's customer is invisible → 404.
+        // findOrFail under the tenant scope: another tenant's customer is invisible → 404.
         $customer = Customer::findOrFail($data['customer_id']);
 
         $packIds = array_column($data['lines'], 'product_pack_id');

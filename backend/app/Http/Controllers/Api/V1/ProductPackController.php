@@ -11,6 +11,7 @@ use App\Policies\CatalogPolicy;
 use App\Services\CatalogService;
 use Carbon\Carbon;
 use Illuminate\Http\Request;
+use Illuminate\Validation\Rule;
 
 class ProductPackController extends Controller
 {
@@ -23,11 +24,20 @@ class ProductPackController extends Controller
         }
 
         $data = $request->validate([
-            // exists checks run under RLS, so an id from another business simply
-            // does not exist here and fails validation with a 422 — it can never
-            // pair one tenant's product with another tenant's pack.
-            'product_id' => ['required', 'uuid', 'exists:products,id'],
-            'pack_size_id' => ['required', 'uuid', 'exists:pack_sizes,id'],
+            // The business_id clause is what makes an id from another business
+            // "not exist" here, failing with a 422 rather than pairing across
+            // tenants. It is NOT redundant with the tenant scope: exists rules
+            // resolve through the presence verifier, which builds a raw query
+            // builder that Eloquent's global scope never reaches. Postgres RLS
+            // used to narrow it regardless; MySQL does not.
+            'product_id' => [
+                'required', 'uuid',
+                Rule::exists('products', 'id')->where('business_id', app('tenant.id')),
+            ],
+            'pack_size_id' => [
+                'required', 'uuid',
+                Rule::exists('pack_sizes', 'id')->where('business_id', app('tenant.id')),
+            ],
             'default_sell_price' => ['required', 'numeric', 'min:0'],
             'default_cost_price' => ['nullable', 'numeric', 'min:0'],
         ]);
@@ -63,7 +73,7 @@ class ProductPackController extends Controller
 
         $productPack->update($data);
 
-        return response()->json($productPack->fresh());
+        return response()->json($productPack->freshScoped());
     }
 
     public function destroy(string $id)
@@ -89,7 +99,7 @@ class ProductPackController extends Controller
         $productPack->archived_at = null;
         $productPack->save();
 
-        return response()->json($productPack->fresh());
+        return response()->json($productPack->freshScoped());
     }
 
     private function denied()

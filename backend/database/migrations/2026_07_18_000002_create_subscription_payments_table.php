@@ -3,14 +3,13 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->create('subscription_payments', function (Blueprint $table) {
+        Schema::create('subscription_payments', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('business_id')->constrained('businesses')->cascadeOnDelete();
             // Client-supplied idempotency key — a retried record resolves to the
@@ -33,19 +32,10 @@ return new class extends Migration
 
             $table->unique(['business_id', 'uuid']);
         });
-
-        DB::connection('pgsql_migrate')->statement('ALTER TABLE subscription_payments ENABLE ROW LEVEL SECURITY');
-        DB::connection('pgsql_migrate')->statement('ALTER TABLE subscription_payments FORCE ROW LEVEL SECURITY');
-
-        DB::connection('pgsql_migrate')->statement(<<<'SQL'
-            CREATE POLICY subscription_payments_isolation ON subscription_payments
-            USING (business_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
-            WITH CHECK (business_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
-        SQL);
     }
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->dropIfExists('subscription_payments');
+        Schema::dropIfExists('subscription_payments');
     }
 };

@@ -32,7 +32,7 @@ function gstShop(string $defaultRate = '5.00', ?string $gstin = '09ABCDE1234F1Z5
     $business = Business::factory()->create();
     $owner = User::factory()->create();
 
-    DB::connection('pgsql_migrate')->table('businesses')->where('id', $business->id)->update([
+    DB::table('businesses')->where('id', $business->id)->update([
         'gstin' => $gstin, 'default_gst_rate_percent' => $defaultRate, 'state_code' => '09',
     ]);
 
@@ -41,7 +41,8 @@ function gstShop(string $defaultRate = '5.00', ?string $gstin = '09ABCDE1234F1Z5
 
 function gstSale(Business $b, User $u, string $lineTotal = '105.00', int $qty = 1, ?string $rate = null, ?string $hsn = '21069099'): Sale
 {
-    $product = Product::on('pgsql_migrate')->create([
+    return asTenant($b->id, function () use ($b, $u, $lineTotal, $qty, $rate, $hsn) {
+    $product = Product::create([
         'business_id' => $b->id, 'name_hi' => 'Bhujia', 'name_en' => 'Bhujia',
     ]);
     // Assigned explicitly, not mass-filled: the GST columns are deliberately
@@ -51,15 +52,15 @@ function gstSale(Business $b, User $u, string $lineTotal = '105.00', int $qty = 
     $product->save();
     // firstOrCreate: pack_sizes is unique per (business, label), and several
     // tests invoice more than one sale for the same shop.
-    $size = PackSize::on('pgsql_migrate')->firstOrCreate(
+    $size = PackSize::firstOrCreate(
         ['business_id' => $b->id, 'label' => '1kg'],
         ['weight_kg' => '1.000'],
     );
-    $pack = ProductPack::on('pgsql_migrate')->create([
+    $pack = ProductPack::create([
         'business_id' => $b->id, 'product_id' => $product->id,
         'pack_size_id' => $size->id, 'default_sell_price' => $lineTotal,
     ]);
-    $customer = Customer::on('pgsql_migrate')->firstOrCreate(
+    $customer = Customer::firstOrCreate(
         ['business_id' => $b->id, 'name' => 'Ramesh'],
         ['uuid' => (string) Str::uuid(), 'village' => 'Rampur', 'opening_balance' => '0.00'],
     );
@@ -68,7 +69,6 @@ function gstSale(Business $b, User $u, string $lineTotal = '105.00', int $qty = 
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $customer->id, 'sale_date' => now()->toDateString(),
     ]);
-    $sale->setConnection('pgsql_migrate');
     $sale->total = bcmul($lineTotal, (string) $qty, 2);
     $sale->created_by = $u->id;
     $sale->save();
@@ -77,11 +77,11 @@ function gstSale(Business $b, User $u, string $lineTotal = '105.00', int $qty = 
         'business_id' => $b->id, 'sale_id' => $sale->id,
         'product_pack_id' => $pack->id, 'qty' => $qty, 'rate' => $lineTotal,
     ]);
-    $line->setConnection('pgsql_migrate');
     $line->line_total = bcmul($lineTotal, (string) $qty, 2);
     $line->save();
 
     return $sale;
+    });
 }
 
 function issue(Business $b, User $u, Sale $sale, ?string $buyerGstin = null): Invoice
@@ -90,12 +90,14 @@ function issue(Business $b, User $u, Sale $sale, ?string $buyerGstin = null): In
 }
 
 /**
- * The sole line of an invoice, read past the tenant scope — these assertions
- * run outside the pin, where BelongsToTenant would hide every row.
+ * The sole line of an invoice. A raw builder, so the Eloquent scope never
+ * applied to it either way — but it must carry business_id explicitly, which
+ * is what the query tripwire checks for.
  */
 function soleLine(Invoice $invoice): object
 {
-    return DB::connection('pgsql_migrate')->table('invoice_lines')
+    return DB::table('invoice_lines')
+        ->where('business_id', $invoice->business_id)
         ->where('invoice_id', $invoice->id)->sole();
 }
 
@@ -150,7 +152,11 @@ it('totals to exactly the sale total, so the invoice cannot contradict the khata
 
     $invoice = issue($b, $u, $sale);
 
-    expect((string) $invoice->grand_total)->toBe((string) $sale->fresh()->total);
+    // Sale::find, not $sale->fresh(): Eloquent's fresh() builds its query with
+    // newQueryWithoutScopes(), so it walks straight past BelongsToTenant and
+    // reads unscoped. The query tripwire catches it.
+    $freshTotal = asTenant($b->id, fn () => Sale::findOrFail($sale->id)->total);
+    expect((string) $invoice->grand_total)->toBe((string) $freshTotal);
     $sum = bcadd(bcadd((string) $invoice->taxable_total, (string) $invoice->cgst_total, 2), (string) $invoice->sgst_total, 2);
     expect($sum)->toBe((string) $invoice->grand_total);
 });
@@ -166,7 +172,7 @@ it('snapshots the line so a later product change cannot alter a filed invoice', 
     expect($line->hsn_code)->toBe('21069099');
 
     // Change the product afterwards; the filed document must not move.
-    DB::connection('pgsql_migrate')->table('products')->where('business_id', $b->id)
+    DB::table('products')->where('business_id', $b->id)
         ->update(['gst_rate_percent' => '28.00', 'hsn_code' => '99999999']);
 
     $reloaded = soleLine($invoice);
@@ -207,7 +213,6 @@ it('refuses to invoice a reversal', function () {
         'customer_id' => $original->customer_id, 'sale_date' => now()->toDateString(),
         'reverses_id' => $original->id,
     ]);
-    $reversal->setConnection('pgsql_migrate');
     $reversal->total = '-105.00';
     $reversal->created_by = $u->id;
     $reversal->save();

@@ -10,7 +10,7 @@ use App\Services\TokenService;
 function ownerToken(Business $business): string
 {
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => 'owner',
@@ -32,14 +32,14 @@ it('creates a product stamped with the caller tenant', function () {
         ->assertStatus(201)
         ->assertJson(['name_hi' => 'सेव', 'name_en' => 'Sev']);
 
-    $created = Product::on('pgsql_migrate')->find($response->json('id'));
+    $created = Product::find($response->json('id'));
     expect($created->business_id)->toBe($business->id);
 });
 
 it('updates a product and bumps its version', function () {
     $business = Business::factory()->create();
     $token = ownerToken($business);
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव',
     ]);
 
@@ -48,7 +48,7 @@ it('updates a product and bumps its version', function () {
         ->assertOk()
         ->assertJson(['name_en' => 'Sev Special']);
 
-    expect(Product::on('pgsql_migrate')->find($product->id)->version)->toBe(2);
+    expect(Product::find($product->id)->version)->toBe(2);
 });
 
 it('rejects a product with no hindi name', function () {
@@ -65,7 +65,7 @@ it('returns 404 for a product in another business', function () {
     $theirs = Business::factory()->create();
     $token = ownerToken($mine);
 
-    $foreign = Product::on('pgsql_migrate')->create([
+    $foreign = Product::create([
         'business_id' => $theirs->id, 'name_hi' => 'हल्दी',
     ]);
 

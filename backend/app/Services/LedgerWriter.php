@@ -102,7 +102,7 @@ class LedgerWriter
             return [$existing->load('lines'), false];
         }
 
-        // findOrFail under RLS: a cross-tenant customer/pack is invisible → 404.
+        // findOrFail under the tenant scope: a cross-tenant customer/pack is invisible → 404.
         $customer = Customer::findOrFail($data['customer_id']);
 
         $sale = DB::transaction(function () use ($data, $customer) {
@@ -110,7 +110,7 @@ class LedgerWriter
             // PriceFloor::for()'s docblock) in ONE query before the loop, instead
             // of one findOrFail per line — a 6-line sale would otherwise be ~18
             // queries (findOrFail + product + packSize per line) instead of 1.
-            // RLS makes a cross-tenant pack invisible to whereIn() exactly as it
+            // the tenant scope makes a cross-tenant pack invisible to whereIn() exactly as it
             // was to findOrFail(), so the 404-on-foreign-pack behaviour is unchanged.
             $packIds = array_column($data['lines'], 'product_pack_id');
             $packs = ProductPack::with(['product', 'packSize'])->whereIn('id', $packIds)->get()->keyBy('id');

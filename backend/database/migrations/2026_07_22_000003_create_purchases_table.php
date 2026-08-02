@@ -3,14 +3,13 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->create('purchases', function (Blueprint $table) {
+        Schema::create('purchases', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('business_id')->constrained('businesses')->cascadeOnDelete();
             $table->uuid('uuid'); // client/idempotency key
@@ -30,19 +29,10 @@ return new class extends Migration
             $table->index(['business_id', 'raw_material_id']); // Cost/Kg per material
             $table->index(['business_id', 'supplier_id']); // supplier ledger
         });
-
-        DB::connection('pgsql_migrate')->statement('ALTER TABLE purchases ENABLE ROW LEVEL SECURITY');
-        DB::connection('pgsql_migrate')->statement('ALTER TABLE purchases FORCE ROW LEVEL SECURITY');
-
-        DB::connection('pgsql_migrate')->statement(<<<'SQL'
-            CREATE POLICY purchases_isolation ON purchases
-            USING (business_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
-            WITH CHECK (business_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
-        SQL);
     }
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->dropIfExists('purchases');
+        Schema::dropIfExists('purchases');
     }
 };

@@ -2,7 +2,9 @@
 // database/migrations/2026_07_25_000007_make_reminder_log_author_nullable.php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 /**
  * Phase 4c: a scheduled reminder has no human author.
@@ -18,14 +20,21 @@ return new class extends Migration
 {
     public function up(): void
     {
-        DB::connection('pgsql_migrate')->statement('ALTER TABLE reminder_logs ALTER COLUMN created_by DROP NOT NULL');
+        // ->change() rather than a raw ALTER: MySQL's MODIFY needs the whole
+        // column restated, and Laravel already knows how to spell it.
+        Schema::table('reminder_logs', function (Blueprint $table) {
+            $table->foreignId('created_by')->nullable()->change();
+        });
     }
 
     public function down(): void
     {
         // Scheduler-authored rows have no user to attribute, so they must go
         // before the column can be NOT NULL again.
-        DB::connection('pgsql_migrate')->table('reminder_logs')->whereNull('created_by')->delete();
-        DB::connection('pgsql_migrate')->statement('ALTER TABLE reminder_logs ALTER COLUMN created_by SET NOT NULL');
+        DB::table('reminder_logs')->whereNull('created_by')->delete();
+
+        Schema::table('reminder_logs', function (Blueprint $table) {
+            $table->foreignId('created_by')->nullable(false)->change();
+        });
     }
 };

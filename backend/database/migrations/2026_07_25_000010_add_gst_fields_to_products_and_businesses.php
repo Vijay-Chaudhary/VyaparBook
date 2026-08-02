@@ -17,7 +17,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->table('products', function (Blueprint $table) {
+        Schema::table('products', function (Blueprint $table) {
             // HSN is per product and appears on the invoice line.
             $table->string('hsn_code', 8)->nullable();
             // Nullable: falls back to the shop default, so a shop selling at one
@@ -25,7 +25,7 @@ return new class extends Migration
             $table->decimal('gst_rate_percent', 5, 2)->nullable();
         });
 
-        Schema::connection('pgsql_migrate')->table('businesses', function (Blueprint $table) {
+        Schema::table('businesses', function (Blueprint $table) {
             $table->decimal('default_gst_rate_percent', 5, 2)->nullable();
             // The two-digit GST state code, printed on the invoice.
             $table->string('state_code', 2)->nullable();
@@ -34,11 +34,11 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->table('products', function (Blueprint $table) {
+        Schema::table('products', function (Blueprint $table) {
             $table->dropColumn(['hsn_code', 'gst_rate_percent']);
         });
 
-        Schema::connection('pgsql_migrate')->table('businesses', function (Blueprint $table) {
+        Schema::table('businesses', function (Blueprint $table) {
             $table->dropColumn(['default_gst_rate_percent', 'state_code']);
         });
     }

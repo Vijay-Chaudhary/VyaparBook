@@ -19,7 +19,7 @@ use Illuminate\View\View;
  * Costed raw-material purchases (Phase 2a): Blade, online-only, owner-only.
  * Same owner-tool pattern as ExpenseController — the caller's OWNED business is
  * resolved from their membership (never the request), and work runs tenant-pinned
- * (RLS + app scope + owner). Not behind the write plan-gate: a lapsed owner still
+ * (the tenant scope + owner). Not behind the write plan-gate: a lapsed owner still
  * records their own bookkeeping.
  *
  * The purchase and its costed stock-in are written by PurchaseWriter, so this
@@ -94,7 +94,7 @@ class PurchaseController extends Controller
         ]);
 
         $this->runInTenant($businessId, function () use ($data, $request) {
-            // A cross-tenant supplier/material is invisible under RLS, so the
+            // A cross-tenant supplier/material is invisible under the tenant scope, so the
             // writer's findOrFail turns a guessed id into a 404, not a write.
             $this->writer->record([
                 'uuid' => $request->input('uuid') ?: (string) Str::uuid(),

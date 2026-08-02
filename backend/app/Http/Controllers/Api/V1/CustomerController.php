@@ -46,7 +46,7 @@ class CustomerController extends Controller
             return $this->denied();
         }
 
-        // findOrFail under RLS: another tenant's customer is invisible, so this
+        // findOrFail under the tenant scope: another tenant's customer is invisible, so this
         // 404s rather than leaking existence with a 403.
         $customer = Customer::findOrFail($id);
 
@@ -59,7 +59,7 @@ class CustomerController extends Controller
 
         $customer->update($data);
 
-        return response()->json($customer->fresh());
+        return response()->json($customer->freshScoped());
     }
 
     public function destroy(string $id)
@@ -87,7 +87,7 @@ class CustomerController extends Controller
         $customer->archived_at = null;
         $customer->save();
 
-        return response()->json($customer->fresh());
+        return response()->json($customer->freshScoped());
     }
 
     private function denied()

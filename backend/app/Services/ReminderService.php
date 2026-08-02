@@ -13,7 +13,7 @@ use Illuminate\Support\Carbon;
  * Who should the owner chase today? (Phase 4a)
  *
  * Read-only and tenant-pinned, like DashboardReportService: every method
- * assumes an already-pinned transaction (RLS FORCE'd), and the explicit
+ * assumes an already-pinned transaction (the tenant scope bound), and the explicit
  * ->where('business_id', ...) is the app-level layer on top — never one alone.
  *
  * Outstanding is NOT recomputed here: it comes from KhataService, the one
@@ -49,12 +49,12 @@ class ReminderService
             ->where('business_id', $businessId)
             ->whereNull('archived_at')
             ->selectRaw('customers.*')
-            ->selectRaw('(select max(payment_date) from payments p where p.customer_id = customers.id)::text as last_payment_on')
-            ->selectRaw('(select min(sale_date) from sales s where s.customer_id = customers.id)::text as first_sale_on')
+            ->selectRaw('CAST((select max(payment_date) from payments p where p.customer_id = customers.id) AS CHAR) as last_payment_on')
+            ->selectRaw('CAST((select min(sale_date) from sales s where s.customer_id = customers.id) AS CHAR) as first_sale_on')
             // Phase 4b: what happened to the most recent reminder, so the owner
             // can see "Sent"/"Failed" rather than re-tapping blindly.
             ->selectRaw('(select rl.status from reminder_logs rl where rl.customer_id = customers.id order by rl.created_at desc limit 1) as last_reminder_status')
-            ->selectRaw('(select rl.created_at from reminder_logs rl where rl.customer_id = customers.id order by rl.created_at desc limit 1)::text as last_reminded_at')
+            ->selectRaw('CAST((select rl.created_at from reminder_logs rl where rl.customer_id = customers.id order by rl.created_at desc limit 1) AS CHAR) as last_reminded_at')
             ->get();
 
         $rows = [];

@@ -153,7 +153,8 @@ class OnboardingController extends Controller
 
     /**
      * The business this user owns, read under their own user context.
-     * Memberships are RLS-scoped, so this runs inside TenantContext::forUser.
+     * Memberships are tenant-scoped, so this runs inside TenantContext::forUser,
+     * which suspends the scope for the pre-tenant-selection window.
      */
     private function ownedBusinessId(): ?string
     {
@@ -166,8 +167,8 @@ class OnboardingController extends Controller
     }
 
     /**
-     * Run a callback with the tenant pinned (both the RLS GUC and the app-level
-     * scope), inside one transaction. Mirrors the importer's runInTenant.
+     * Run a callback with the tenant bound — the binding BelongsToTenant reads
+     * — inside one transaction. Mirrors the importer's runInTenant.
      *
      * @template T
      * @param  callable(): T  $work

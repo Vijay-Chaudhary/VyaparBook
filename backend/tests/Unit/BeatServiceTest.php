@@ -23,7 +23,7 @@ function inBeatTenant(string $businessId, callable $fn): mixed
 
 function makeBeat(Business $b, string $name, array $weekdays, ?int $userId = null): Beat
 {
-    return Beat::on('pgsql_migrate')->create([
+    return Beat::create([
         'business_id' => $b->id, 'name' => $name,
         'weekdays' => $weekdays, 'assigned_user_id' => $userId,
     ]);
@@ -31,12 +31,12 @@ function makeBeat(Business $b, string $name, array $weekdays, ?int $userId = nul
 
 function addToBeat(Beat $beat, string $customerName, int $position): Customer
 {
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $beat->business_id, 'uuid' => (string) Str::uuid(),
         'name' => $customerName, 'village' => 'Rampur', 'opening_balance' => '0.00',
     ]);
 
-    BeatCustomer::on('pgsql_migrate')->create([
+    BeatCustomer::create([
         'business_id' => $beat->business_id, 'beat_id' => $beat->id,
         'customer_id' => $customer->id, 'position' => $position,
     ]);

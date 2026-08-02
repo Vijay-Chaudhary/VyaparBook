@@ -28,10 +28,12 @@ use Illuminate\Support\Facades\DB;
  *
  * Every method assumes it runs inside an already tenant-pinned transaction
  * (the controller's runInTenant in production, or the test harness's
- * inTenant() helper). RLS is FORCE'd on the app connection, so the tenant GUC
- * must be set by the caller. The ->where('business_id', ...) each method also
- * applies is the app-level layer of defense in depth on top of that — never
- * one layer alone — but it is not a substitute for the caller's tenant pin.
+ * inTenant() helper). The tenant binding is what scopes these reads, so it
+ * must be set by the caller. The explicit ->where('business_id', ...) each
+ * method also applies matters more than it used to: these are raw builders, so
+ * the Eloquent scope does not reach them at all and that filter is the only
+ * thing confining the query. The test-environment query tripwire exists to
+ * catch one being dropped.
  *
  * All money is bcmath decimal strings, never floats, matching KhataService.
  */
@@ -152,11 +154,11 @@ class DashboardReportService
         $rows = Customer::query()
             ->where('business_id', $businessId)
             ->whereNull('archived_at')
-            ->selectRaw('id, name, village, (
+            ->selectRaw('id, name, village, CAST((
                 opening_balance
                 + coalesce((select sum(s.total) from sales s where s.customer_id = customers.id), 0)
                 - coalesce((select sum(p.amount) from payments p where p.customer_id = customers.id), 0)
-            )::text as outstanding')
+            ) AS CHAR) as outstanding')
             ->get();
 
         $customers = $rows
@@ -179,7 +181,7 @@ class DashboardReportService
         $sum = (string) Sale::query()
             ->where('business_id', $businessId)
             ->whereDate('sale_date', Carbon::now()->toDateString())
-            ->selectRaw('coalesce(sum(total), 0)::text as agg')
+            ->selectRaw('CAST(coalesce(sum(total), 0) AS CHAR) as agg')
             ->value('agg');
 
         return bcadd($sum, '0', 2);
@@ -191,7 +193,7 @@ class DashboardReportService
             ->where('business_id', $businessId)
             ->whereRaw('extract(year from sale_date) = ?', [$year])
             ->whereRaw('extract(month from sale_date) = ?', [$month])
-            ->selectRaw('coalesce(sum(total), 0)::text as agg')
+            ->selectRaw('CAST(coalesce(sum(total), 0) AS CHAR) as agg')
             ->value('agg');
 
         return bcadd($sum, '0', 2);
@@ -203,7 +205,7 @@ class DashboardReportService
         $byMonth = Sale::query()
             ->where('business_id', $businessId)
             ->whereRaw('extract(year from sale_date) = ?', [$year])
-            ->selectRaw('extract(month from sale_date)::int as m, coalesce(sum(total), 0)::text as agg')
+            ->selectRaw('CAST(extract(month from sale_date) AS SIGNED) as m, CAST(coalesce(sum(total), 0) AS CHAR) as agg')
             ->groupBy('m')
             ->pluck('agg', 'm');
 
@@ -219,7 +221,7 @@ class DashboardReportService
             ->where('business_id', $businessId)
             ->whereRaw('extract(year from batch_date) = ?', [$year])
             ->whereRaw('extract(month from batch_date) = ?', [$month])
-            ->selectRaw('coalesce(sum(output_kg), 0)::text as agg')
+            ->selectRaw('CAST(coalesce(sum(output_kg), 0) AS CHAR) as agg')
             ->value('agg');
 
         return bcadd($sum, '0', 3);
@@ -231,7 +233,7 @@ class DashboardReportService
         $byMonth = ProductionBatch::query()
             ->where('business_id', $businessId)
             ->whereRaw('extract(year from batch_date) = ?', [$year])
-            ->selectRaw('extract(month from batch_date)::int as m, coalesce(sum(output_kg), 0)::text as agg')
+            ->selectRaw('CAST(extract(month from batch_date) AS SIGNED) as m, CAST(coalesce(sum(output_kg), 0) AS CHAR) as agg')
             ->groupBy('m')
             ->pluck('agg', 'm');
 
@@ -293,11 +295,16 @@ class DashboardReportService
             ->join('sales as s', 's.id', '=', 'sl.sale_id')
             ->where('sl.business_id', $businessId)
             ->whereRaw('extract(year from s.sale_date) = ?', [$year])
-            ->groupByRaw('extract(month from s.sale_date), sl.product_pack_id')
-            ->selectRaw('extract(month from s.sale_date)::int as m,
+            // Group by the SELECT aliases, not by repeating the expression.
+            // Postgres accepted `group by extract(...)` alongside the same
+            // expression in the select list; MySQL's ONLY_FULL_GROUP_BY does
+            // not recognise the two as the same thing and rejects the query
+            // (1055). Grouping by alias is what the sibling trends already do.
+            ->groupBy('m', 'pack_id')
+            ->selectRaw('CAST(extract(month from s.sale_date) AS SIGNED) as m,
                 sl.product_pack_id as pack_id,
-                sum(sl.qty)::int as qty,
-                coalesce(sum(sl.line_total), 0)::text as sales')
+                CAST(sum(sl.qty) AS SIGNED) as qty,
+                CAST(coalesce(sum(sl.line_total), 0) AS CHAR) as sales')
             ->get();
     }
 
@@ -319,7 +326,7 @@ class DashboardReportService
             ->whereNull('archived_at')
             ->whereRaw('extract(year from spent_on) = ?', [$year])
             ->whereRaw('extract(month from spent_on) = ?', [$month])
-            ->selectRaw('coalesce(sum(amount), 0)::text as agg')
+            ->selectRaw('CAST(coalesce(sum(amount), 0) AS CHAR) as agg')
             ->value('agg');
 
         return bcadd($sum, '0', 2);
@@ -339,7 +346,7 @@ class DashboardReportService
             ->whereRaw('extract(year from spent_on) = ?', [$year])
             ->whereRaw('extract(month from spent_on) = ?', [$month])
             ->groupBy('category')
-            ->selectRaw('category, sum(amount)::text as agg')
+            ->selectRaw('category, CAST(sum(amount) AS CHAR) as agg')
             ->pluck('agg', 'category');
 
         $out = [];
@@ -359,7 +366,7 @@ class DashboardReportService
             ->where('business_id', $businessId)
             ->whereNull('archived_at')
             ->whereRaw('extract(year from spent_on) = ?', [$year])
-            ->selectRaw('extract(month from spent_on)::int as m, coalesce(sum(amount), 0)::text as agg')
+            ->selectRaw('CAST(extract(month from spent_on) AS SIGNED) as m, CAST(coalesce(sum(amount), 0) AS CHAR) as agg')
             ->groupBy('m')
             ->pluck('agg', 'm');
 
@@ -415,9 +422,12 @@ class DashboardReportService
             ->groupBy('pp.id', 'prod.name_en', 'prod.name_hi', 'ps.label')
             ->selectRaw("
                 pp.id as pack_id,
-                coalesce(prod.name_en, prod.name_hi) || ' ' || ps.label as name,
-                sum(sl.qty)::int as qty,
-                sum(sl.line_total)::text as sales
+                -- concat(), not ||. In MySQL `||` is logical OR, so the
+                -- Postgres spelling returned the string '1' for every product
+                -- rather than erroring -- the dashboard listed a column of 1s.
+                concat(coalesce(prod.name_en, prod.name_hi), ' ', ps.label) as name,
+                CAST(sum(sl.qty) AS SIGNED) as qty,
+                CAST(sum(sl.line_total) AS CHAR) as sales
             ")
             ->get();
 

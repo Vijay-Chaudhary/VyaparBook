@@ -13,7 +13,7 @@ function pullSetup(): array
 {
     $business = Business::factory()->create();
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id, 'business_id' => $business->id, 'role' => 'owner',
     ]);
 
@@ -22,7 +22,7 @@ function pullSetup(): array
 
 function seedPullCustomer(Business $business, string $name): Customer
 {
-    return Customer::on('pgsql_migrate')->create([
+    return Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(), 'name' => $name,
     ]);
 }
@@ -33,7 +33,6 @@ function seedPullPayment(Customer $customer, User $user, string $amount): Paymen
         'business_id' => $customer->business_id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $customer->id, 'payment_date' => '2026-07-17', 'amount' => $amount, 'mode' => 'cash',
     ]);
-    $payment->setConnection('pgsql_migrate');
     $payment->created_by = $user->id;
     $payment->save();
 

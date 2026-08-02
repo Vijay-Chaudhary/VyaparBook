@@ -12,7 +12,7 @@ use App\Services\TokenService;
 function archiveToken(Business $business): string
 {
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => 'owner',
@@ -23,13 +23,13 @@ function archiveToken(Business $business): string
 
 function archiveFixture(Business $business): array
 {
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'base_cost_per_kg' => '120.00',
     ]);
-    $packSize = PackSize::on('pgsql_migrate')->create([
+    $packSize = PackSize::create([
         'business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
-    $productPack = ProductPack::on('pgsql_migrate')->create([
+    $productPack = ProductPack::create([
         'business_id' => $business->id,
         'product_id' => $product->id,
         'pack_size_id' => $packSize->id,
@@ -77,7 +77,7 @@ it('keeps an archived product resolvable by id so old sales still work', functio
     $this->withHeader('Authorization', "Bearer {$token}")
         ->deleteJson("/api/v1/products/{$product->id}");
 
-    expect(Product::on('pgsql_migrate')->find($product->id))->not->toBeNull();
+    expect(Product::find($product->id))->not->toBeNull();
 });
 
 it('restores an archived product', function () {
@@ -112,25 +112,25 @@ it('hides a product packs without writing archived_at on them', function () {
         ->assertJsonCount(0, 'products');
 
     // ...but its own row is untouched. This is what makes restore lossless.
-    expect(ProductPack::on('pgsql_migrate')->find($productPack->id)->archived_at)->toBeNull();
+    expect(ProductPack::find($productPack->id)->archived_at)->toBeNull();
 });
 
 it('restores only the packs that were not individually archived', function () {
     $business = Business::factory()->create();
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव',
     ]);
-    $keep = PackSize::on('pgsql_migrate')->create([
+    $keep = PackSize::create([
         'business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
-    $drop = PackSize::on('pgsql_migrate')->create([
+    $drop = PackSize::create([
         'business_id' => $business->id, 'label' => '1kg', 'weight_kg' => '1.000',
     ]);
-    $keptPack = ProductPack::on('pgsql_migrate')->create([
+    $keptPack = ProductPack::create([
         'business_id' => $business->id, 'product_id' => $product->id,
         'pack_size_id' => $keep->id, 'default_sell_price' => '80.00',
     ]);
-    $archivedPack = ProductPack::on('pgsql_migrate')->create([
+    $archivedPack = ProductPack::create([
         'business_id' => $business->id, 'product_id' => $product->id,
         'pack_size_id' => $drop->id, 'default_sell_price' => '150.00',
     ]);

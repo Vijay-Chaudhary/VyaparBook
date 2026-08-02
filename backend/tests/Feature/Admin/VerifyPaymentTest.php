@@ -5,6 +5,7 @@ use App\Models\PlatformAuditLog;
 use App\Models\Subscription;
 use App\Models\SubscriptionPayment;
 use Illuminate\Support\Str;
+use App\Support\Tenancy;
 
 // pendingPayment() and platformAdmin() are shared helpers defined in tests/Pest.php.
 
@@ -22,11 +23,11 @@ it('verifies a pending payment: activates the plan and stamps the admin', functi
         ->assertJsonPath('payment.verified_by', $admin->id);
 
     // Persisted state (read past RLS on the bypass connection).
-    $stored = SubscriptionPayment::on('pgsql_platform')->find($payment->id);
+    $stored = Tenancy::withoutTenant(fn () => SubscriptionPayment::on('mysql_platform')->find($payment->id));
     expect($stored->status)->toBe('verified')
         ->and($stored->verified_by)->toBe($admin->id);
 
-    $sub = Subscription::on('pgsql_platform')->where('business_id', $business->id)->first();
+    $sub = Tenancy::withoutTenant(fn () => Subscription::on('mysql_platform')->where('business_id', $business->id)->first());
     expect($sub->status)->toBe('active')->and($sub->plan)->toBe('pro');
 });
 
@@ -39,8 +40,7 @@ it('writes a single audit-trail entry naming the admin, action and target', func
         ->postJson("/api/v1/admin/tenants/{$business->id}/payments/{$payment->id}/verify")
         ->assertOk();
 
-    $logs = PlatformAuditLog::on('pgsql_migrate')
-        ->where('action', 'verify_payment')
+    $logs = PlatformAuditLog::where('action', 'verify_payment')
         ->where('target_business_id', $business->id)
         ->get();
 
@@ -67,7 +67,7 @@ it('is idempotent: a second verify is a no-op with no second audit entry', funct
 
     // Period did not stack a second month, and only one trail entry exists.
     expect($second)->toBe($first);
-    expect(PlatformAuditLog::on('pgsql_migrate')->where('action', 'verify_payment')->count())->toBe(1);
+    expect(PlatformAuditLog::where('action', 'verify_payment')->count())->toBe(1);
 });
 
 it('refuses to verify a rejected payment (422)', function () {
@@ -80,7 +80,7 @@ it('refuses to verify a rejected payment (422)', function () {
         ->postJson("/api/v1/admin/tenants/{$business->id}/payments/{$payment->id}/verify")
         ->assertStatus(422);
 
-    expect(PlatformAuditLog::on('pgsql_migrate')->count())->toBe(0);
+    expect(PlatformAuditLog::count())->toBe(0);
 });
 
 it('404s for an unknown payment id', function () {
@@ -104,8 +104,8 @@ it('cannot verify one tenant\'s payment under another tenant\'s id (RLS-confined
         ->assertStatus(404);
 
     // B's payment and subscription are untouched.
-    expect(SubscriptionPayment::on('pgsql_platform')->find($paymentB->id)->status)->toBe('pending');
-    expect(Subscription::on('pgsql_platform')->where('business_id', $tenantB->id)->first()->status)->toBe('trialing');
+    expect(Tenancy::withoutTenant(fn () => SubscriptionPayment::on('mysql_platform')->find($paymentB->id))->status)->toBe('pending');
+    expect(Tenancy::withoutTenant(fn () => Subscription::on('mysql_platform')->where('business_id', $tenantB->id)->first())->status)->toBe('trialing');
 });
 
 it('is gated by the platform guard', function () {

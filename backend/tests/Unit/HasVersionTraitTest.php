@@ -19,7 +19,7 @@ class VersionFixtureItem extends Model
 }
 
 beforeEach(function () {
-    Schema::connection('pgsql_migrate')->create('version_fixture_items', function (Blueprint $table) {
+    Schema::create('version_fixture_items', function (Blueprint $table) {
         $table->uuid('id')->primary();
         $table->string('name');
         $table->unsignedInteger('version')->default(1);
@@ -27,7 +27,7 @@ beforeEach(function () {
 });
 
 afterEach(function () {
-    Schema::connection('pgsql_migrate')->dropIfExists('version_fixture_items');
+    Schema::dropIfExists('version_fixture_items');
 });
 
 it('starts at version 1', function () {

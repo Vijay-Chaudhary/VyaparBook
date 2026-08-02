@@ -14,7 +14,7 @@ use Illuminate\Support\Str;
 /** A customer with an unpaid sale old enough to be overdue at the defaults. */
 function remOverdueCustomer(Business $b, User $u, string $name, string $total = '2000.00', ?string $phone = '9876543210'): Customer
 {
-    $c = Customer::on('pgsql_migrate')->create([
+    $c = Customer::create([
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'name' => $name, 'village' => 'Rampur', 'phone' => $phone, 'opening_balance' => '0.00',
     ]);
@@ -23,7 +23,6 @@ function remOverdueCustomer(Business $b, User $u, string $name, string $total = 
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'sale_date' => now()->subDays(60)->format('Y-m-d'),
     ]);
-    $s->setConnection('pgsql_migrate');
     $s->total = $total;          // not fillable — SaleWriter stamps it in prod
     $s->created_by = $u->id;
     $s->save();
@@ -110,7 +109,7 @@ describe('send', function () {
         expect(urldecode($target))->toContain($business->name);
         expect(urldecode($target))->toContain('₹2,500.00');
 
-        $logs = ReminderLog::on('pgsql_migrate')->where('business_id', $business->id)->get();
+        $logs = ReminderLog::where('business_id', $business->id)->get();
         expect($logs)->toHaveCount(1);
         expect($logs[0]->channel)->toBe('wa_link');
         expect((string) $logs[0]->amount_at_send)->toBe('2500.00');
@@ -128,7 +127,7 @@ describe('send', function () {
             ->post('/reminders/' . $customer->id, ['business' => $business->id])
             ->assertRedirect(route('reminders', ['business' => $business->id]));
 
-        expect(ReminderLog::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(0);
+        expect(ReminderLog::where('business_id', $business->id)->count())->toBe(0);
     });
 
     it('refuses a customer whose phone cannot be dialled', function () {
@@ -139,7 +138,7 @@ describe('send', function () {
             ->post('/reminders/' . $customer->id, ['business' => $business->id])
             ->assertRedirect(route('reminders', ['business' => $business->id]));
 
-        expect(ReminderLog::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(0);
+        expect(ReminderLog::where('business_id', $business->id)->count())->toBe(0);
     });
 
     it('does not accept another tenant\'s customer', function () {
@@ -151,7 +150,7 @@ describe('send', function () {
             ->post('/reminders/' . $theirs->id, ['business' => $business->id])
             ->assertNotFound();
 
-        expect(ReminderLog::on('pgsql_migrate')->count())->toBe(0);
+        expect(ReminderLog::count())->toBe(0);
     });
 });
 
@@ -164,7 +163,7 @@ describe('opt out', function () {
             ->post('/reminders/' . $customer->id . '/opt-out', ['business' => $business->id])
             ->assertRedirect(route('reminders', ['business' => $business->id]));
 
-        expect(Customer::on('pgsql_migrate')->find($customer->id)->reminder_opt_out_at)->not->toBeNull();
+        expect(Customer::find($customer->id)->reminder_opt_out_at)->not->toBeNull();
 
         $this->actingAs($owner)->get('/reminders?business=' . $business->id)
             ->assertOk()
@@ -173,7 +172,7 @@ describe('opt out', function () {
         $this->actingAs($owner)
             ->post('/reminders/' . $customer->id . '/opt-in', ['business' => $business->id]);
 
-        expect(Customer::on('pgsql_migrate')->find($customer->id)->reminder_opt_out_at)->toBeNull();
+        expect(Customer::find($customer->id)->reminder_opt_out_at)->toBeNull();
     });
 });
 
@@ -200,7 +199,7 @@ describe('cloud api transport (Phase 4b)', function () {
             ->post('/reminders/' . $customer->id, ['business' => $business->id])
             ->assertRedirect(route('reminders', ['business' => $business->id]));
 
-        $log = ReminderLog::on('pgsql_migrate')->where('business_id', $business->id)->sole();
+        $log = ReminderLog::where('business_id', $business->id)->sole();
         expect($log->channel)->toBe('cloud_api');
         expect($log->status)->toBe('queued');          // written BEFORE dispatch
         expect((string) $log->amount_at_send)->toBe('2500.00');
@@ -223,7 +222,7 @@ describe('cloud api transport (Phase 4b)', function () {
             ->post('/reminders/' . $customer->id, ['business' => $business->id])
             ->assertRedirect(route('reminders', ['business' => $business->id]));
 
-        expect(ReminderLog::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(0);
+        expect(ReminderLog::where('business_id', $business->id)->count())->toBe(0);
         Illuminate\Support\Facades\Queue::assertNothingPushed();
     });
 });
@@ -237,7 +236,6 @@ it('shows the outcome of the last reminder on the row', function () {
         'channel' => 'cloud_api', 'amount_at_send' => '2500.00',
         'locale' => 'en', 'phone_e164' => '919876543210',
     ]);
-    $log->setConnection('pgsql_migrate');
     $log->created_by = $owner->id;
     $log->status = 'failed';
     $log->save();
@@ -261,7 +259,7 @@ describe('scheduled reminders (Phase 4c)', function () {
             'reminder_daily_cap' => '40',
         ])->assertRedirect(route('reminders', ['business' => $business->id]));
 
-        $fresh = App\Models\Business::on('pgsql_migrate')->find($business->id);
+        $fresh = App\Models\Business::find($business->id);
         expect($fresh->reminder_min_days)->toBe(7);
         expect($fresh->reminder_auto_enabled)->toBeTrue();
         expect($fresh->reminder_cooldown_days)->toBe(10);
@@ -302,7 +300,7 @@ describe('scheduled reminders (Phase 4c)', function () {
         [$owner, $business] = pwOwner();
         $customer = remOverdueCustomer($business, $owner, 'Ramesh Kumar', '2500.00');
 
-        $batch = App\Models\ReminderBatch::on('pgsql_migrate')->create([
+        $batch = App\Models\ReminderBatch::create([
             'business_id' => $business->id, 'scheduled_for' => now()->toDateString(),
             'status' => 'planned', 'planned_count' => 1,
         ]);
@@ -311,7 +309,6 @@ describe('scheduled reminders (Phase 4c)', function () {
             'channel' => 'cloud_api', 'amount_at_send' => '2500.00',
             'locale' => 'en', 'phone_e164' => '919876543210', 'batch_id' => $batch->id,
         ]);
-        $log->setConnection('pgsql_migrate');
         $log->status = 'planned';
         $log->save();
 
@@ -324,7 +321,7 @@ describe('scheduled reminders (Phase 4c)', function () {
             'business' => $business->id,
         ])->assertRedirect(route('reminders', ['business' => $business->id]));
 
-        expect(ReminderLog::on('pgsql_migrate')->find($log->id)->status)->toBe('cancelled');
+        expect(ReminderLog::find($log->id)->status)->toBe('cancelled');
     });
 
     it('does not let one tenant cancel another tenant\'s planned reminder', function () {
@@ -332,7 +329,7 @@ describe('scheduled reminders (Phase 4c)', function () {
         [$otherOwner, $otherBusiness] = pwOwner();
         $customer = remOverdueCustomer($otherBusiness, $otherOwner, 'Not Yours');
 
-        $batch = App\Models\ReminderBatch::on('pgsql_migrate')->create([
+        $batch = App\Models\ReminderBatch::create([
             'business_id' => $otherBusiness->id, 'scheduled_for' => now()->toDateString(),
             'status' => 'planned', 'planned_count' => 1,
         ]);
@@ -341,7 +338,6 @@ describe('scheduled reminders (Phase 4c)', function () {
             'channel' => 'cloud_api', 'amount_at_send' => '2500.00',
             'locale' => 'en', 'phone_e164' => '919876543210', 'batch_id' => $batch->id,
         ]);
-        $log->setConnection('pgsql_migrate');
         $log->status = 'planned';
         $log->save();
 
@@ -349,10 +345,12 @@ describe('scheduled reminders (Phase 4c)', function () {
             'business' => $business->id,
         ])->assertNotFound();
 
-        // Read past the tenant scope: the row belongs to the OTHER tenant, which
-        // is precisely why the request 404'd.
-        $row = Illuminate\Support\Facades\DB::connection('pgsql_migrate')
-            ->table('reminder_logs')->where('id', $log->id)->first();
+        // The row belongs to the OTHER tenant, which is precisely why the request
+        // 404'd -- so read it scoped to THEM. A raw builder gets no Eloquent
+        // scope, so that predicate is written out.
+        $row = Illuminate\Support\Facades\DB::table('reminder_logs')
+            ->where('business_id', $otherBusiness->id)
+            ->where('id', $log->id)->first();
         expect($row->status)->toBe('planned');
     });
 
@@ -362,7 +360,7 @@ describe('scheduled reminders (Phase 4c)', function () {
         [$owner, $business] = pwOwner();
         $customer = remOverdueCustomer($business, $owner, 'Recently Auto-Reminded');
 
-        $batch = App\Models\ReminderBatch::on('pgsql_migrate')->create([
+        $batch = App\Models\ReminderBatch::create([
             'business_id' => $business->id, 'scheduled_for' => now()->subDay()->toDateString(),
             'status' => 'sent', 'planned_count' => 1, 'sent_count' => 1,
         ]);
@@ -371,7 +369,6 @@ describe('scheduled reminders (Phase 4c)', function () {
             'channel' => 'cloud_api', 'amount_at_send' => '2500.00',
             'locale' => 'en', 'phone_e164' => '919876543210', 'batch_id' => $batch->id,
         ]);
-        $log->setConnection('pgsql_migrate');
         $log->status = 'sent';
         $log->save();
 
@@ -394,7 +391,7 @@ it('lets the shop change what counts as overdue', function () {
         'reminder_daily_cap' => '25',
     ])->assertRedirect(route('reminders', ['business' => $business->id]));
 
-    $fresh = App\Models\Business::on('pgsql_migrate')->find($business->id);
+    $fresh = App\Models\Business::find($business->id);
     expect($fresh->reminder_min_days)->toBe(3);
     expect((string) $fresh->reminder_min_outstanding)->toBe('250.50');
 });

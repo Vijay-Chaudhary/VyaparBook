@@ -7,6 +7,7 @@ use App\Models\Product;
 use App\Models\ProductPack;
 use App\Models\User;
 use App\Orders\OrderStatus;
+use App\Support\Tenancy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
 
@@ -15,30 +16,38 @@ function pendingOrder(string $rate = '85.00'): array
 {
     [$owner, $business] = pwOwner();
 
-    $customer = Customer::on('pgsql_migrate')->create([
+    return asTenant($business->id, function () use ($owner, $business, $rate) {
+        return pendingOrderRows($owner, $business, $rate);
+    });
+}
+
+/** The rows themselves, written with $business bound as the tenant. */
+function pendingOrderRows(User $owner, \App\Models\Business $business, string $rate): array
+{
+    $customer = Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Ram Traders', 'opening_balance' => '0.00',
     ]);
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
-    $size = PackSize::on('pgsql_migrate')->create([
+    $size = PackSize::create([
         'business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
-    $pack = ProductPack::on('pgsql_migrate')->create([
+    $pack = ProductPack::create([
         'business_id' => $business->id, 'product_id' => $product->id,
         'pack_size_id' => $size->id, 'default_sell_price' => '90.00',
         'default_cost_price' => '70.00',
     ]);
 
     $orderId = (string) Str::uuid();
-    DB::connection('pgsql_migrate')->table('orders')->insert([
+    DB::table('orders')->insert([
         'id' => $orderId, 'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $customer->id, 'order_date' => '2026-07-26',
         'status' => OrderStatus::PENDING, 'total' => bcmul($rate, '2', 2),
         'created_by' => $owner->id, 'sync_seq' => 1, 'created_at' => now(), 'updated_at' => now(),
     ]);
-    DB::connection('pgsql_migrate')->table('order_lines')->insert([
+    DB::table('order_lines')->insert([
         'id' => (string) Str::uuid(), 'business_id' => $business->id, 'order_id' => $orderId,
         'product_pack_id' => $pack->id, 'qty' => 2, 'rate' => $rate,
         // Stamped at creation by OrderWriter, so a realistic pending line has
@@ -64,7 +73,9 @@ describe('access', function () {
 describe('accepting', function () {
     it('links the customer on an order through to their khata', function () {
         [$owner, $business] = pendingOrder();
-        $customer = Customer::on('pgsql_migrate')->where('business_id', $business->id)->firstOrFail();
+        // asTenant, not a bare where(): the scope refuses an unbound query
+        // before it ever looks at the predicate.
+        $customer = asTenant($business->id, fn () => Customer::firstOrFail());
 
         // Deciding whether to accept an order means knowing what this customer
         // already owes, which this screen could not show.
@@ -91,7 +102,7 @@ describe('accepting', function () {
             'business' => $business->id,
         ])->assertRedirect(route('orders', ['business' => $business->id]));
 
-        $order = DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)->first();
+        $order = DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)->first();
         expect($order->status)->toBe(OrderStatus::ACCEPTED);
         expect($order->accepted_by)->toBe($owner->id);
         expect($order->accepted_at)->not->toBeNull();
@@ -99,7 +110,7 @@ describe('accepting', function () {
 
     it('accepts with adjusted quantities and prices, and retotals the order', function () {
         [$owner, $business, $orderId, $pack] = pendingOrder();
-        $lineId = DB::connection('pgsql_migrate')->table('order_lines')
+        $lineId = DB::table('order_lines')->where('business_id', $business->id)
             ->where('order_id', $orderId)->value('id');
 
         $this->actingAs($owner)->post('/orders/' . $orderId . '/accept', [
@@ -107,17 +118,16 @@ describe('accepting', function () {
             'lines' => [$lineId => ['qty' => '3', 'rate' => '95.00']],
         ])->assertRedirect();
 
-        $line = DB::connection('pgsql_migrate')->table('order_lines')->where('id', $lineId)->first();
+        $line = DB::table('order_lines')->where('business_id', $business->id)->where('id', $lineId)->first();
         expect($line->qty)->toBe(3);
         expect((string) $line->rate)->toBe('95.00');
         expect((string) $line->line_total)->toBe('285.00');
-        expect((string) DB::connection('pgsql_migrate')->table('orders')
-            ->where('id', $orderId)->value('total'))->toBe('285.00');
+        expect((string) DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)->value('total'))->toBe('285.00');
     });
 
     it('accepts an adjusted price below cost rather than refusing it', function () {
         [$owner, $business, $orderId] = pendingOrder();
-        $lineId = DB::connection('pgsql_migrate')->table('order_lines')
+        $lineId = DB::table('order_lines')->where('business_id', $business->id)
             ->where('order_id', $orderId)->value('id');
 
         // 69.99 is under the 70.00 cost pendingOrder() builds. This used to
@@ -127,10 +137,9 @@ describe('accepting', function () {
             'lines' => [$lineId => ['qty' => '2', 'rate' => '69.99']],
         ])->assertRedirect();
 
-        $order = DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)->first();
+        $order = DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)->first();
         expect($order->status)->toBe(OrderStatus::ACCEPTED);
-        expect((string) DB::connection('pgsql_migrate')->table('order_lines')
-            ->where('id', $lineId)->value('rate'))->toBe('69.99');
+        expect((string) DB::table('order_lines')->where('business_id', $business->id)->where('id', $lineId)->value('rate'))->toBe('69.99');
     });
 
     it('warns on the screen when a line sits under cost', function () {
@@ -158,7 +167,7 @@ describe('accepting', function () {
             'business' => $business->id, 'status_note' => 'No stock this week',
         ])->assertRedirect();
 
-        $order = DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)->first();
+        $order = DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)->first();
         expect($order->status)->toBe(OrderStatus::REJECTED);
         expect($order->status_note)->toBe('No stock this week');
     });
@@ -171,14 +180,17 @@ describe('accepting', function () {
             'business' => $business->id,
         ])->assertNotFound();
 
-        expect(DB::connection('pgsql_migrate')->table('orders')->where('id', $theirOrderId)->value('status'))
-            ->toBe(OrderStatus::PENDING);
+        // Deliberately cross-tenant: the whole point is that the OTHER shop's
+        // order is untouched, so it cannot be read under this tenant.
+        expect(Tenancy::withoutTenant(
+            fn () => DB::table('orders')->where('id', $theirOrderId)->value('status')
+        ))->toBe(OrderStatus::PENDING);
     });
 
     it('lets an admin accept, not only the owner', function () {
         [$owner, $business, $orderId] = pendingOrder();
         $admin = User::factory()->create();
-        App\Models\Membership::on('pgsql_migrate')->create([
+        App\Models\Membership::create([
             'user_id' => $admin->id, 'business_id' => $business->id, 'role' => 'admin',
         ]);
 
@@ -186,20 +198,20 @@ describe('accepting', function () {
             'business' => $business->id,
         ])->assertRedirect();
 
-        expect(DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)->value('status'))
+        expect(DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)->value('status'))
             ->toBe(OrderStatus::ACCEPTED);
     });
 
     it('refuses to accept an order that is no longer pending', function () {
         [$owner, $business, $orderId] = pendingOrder();
-        DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)
+        DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)
             ->update(['status' => OrderStatus::CANCELLED]);
 
         $this->actingAs($owner)->post('/orders/' . $orderId . '/accept', [
             'business' => $business->id,
         ])->assertRedirect();
 
-        expect(DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)->value('status'))
+        expect(DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)->value('status'))
             ->toBe(OrderStatus::CANCELLED);
     });
 });
@@ -207,7 +219,7 @@ describe('accepting', function () {
 describe('what acceptance changed', function () {
     it('keeps what the salesman ordered when the owner edits the line', function () {
         [$owner, $business, $orderId] = pendingOrder();
-        $lineId = DB::connection('pgsql_migrate')->table('order_lines')
+        $lineId = DB::table('order_lines')->where('business_id', $business->id)
             ->where('order_id', $orderId)->value('id');
 
         $this->actingAs($owner)->post('/orders/' . $orderId . '/accept', [
@@ -215,7 +227,7 @@ describe('what acceptance changed', function () {
             'lines' => [$lineId => ['qty' => '3', 'rate' => '95.00']],
         ])->assertRedirect();
 
-        $line = DB::connection('pgsql_migrate')->table('order_lines')->where('id', $lineId)->first();
+        $line = DB::table('order_lines')->where('business_id', $business->id)->where('id', $lineId)->first();
         // Live values are the owner's; the originals are untouched, which is
         // the whole point — a shop promised 2 at ₹85 and given 3 at ₹95 now
         // leaves a trace.
@@ -226,21 +238,21 @@ describe('what acceptance changed', function () {
 
     it('leaves the originals equal when acceptance changes nothing', function () {
         [$owner, $business, $orderId] = pendingOrder();
-        $lineId = DB::connection('pgsql_migrate')->table('order_lines')
+        $lineId = DB::table('order_lines')->where('business_id', $business->id)
             ->where('order_id', $orderId)->value('id');
 
         $this->actingAs($owner)->post('/orders/' . $orderId . '/accept', [
             'business' => $business->id,
         ])->assertRedirect();
 
-        $line = DB::connection('pgsql_migrate')->table('order_lines')->where('id', $lineId)->first();
+        $line = DB::table('order_lines')->where('business_id', $business->id)->where('id', $lineId)->first();
         expect($line->ordered_qty)->toBe($line->qty);
         expect((string) $line->ordered_rate)->toBe((string) $line->rate);
     });
 
     it('shows the owner what an edited order was ordered as', function () {
         [$owner, $business, $orderId] = pendingOrder();
-        $lineId = DB::connection('pgsql_migrate')->table('order_lines')
+        $lineId = DB::table('order_lines')->where('business_id', $business->id)
             ->where('order_id', $orderId)->value('id');
 
         $this->actingAs($owner)->post('/orders/' . $orderId . '/accept', [
@@ -273,9 +285,9 @@ describe('what acceptance changed', function () {
         // here would invent a renegotiation; showing a "was" the data cannot
         // support would be worse.
         [$owner, $business, $orderId] = pendingOrder();
-        $lineId = DB::connection('pgsql_migrate')->table('order_lines')
+        $lineId = DB::table('order_lines')->where('business_id', $business->id)
             ->where('order_id', $orderId)->value('id');
-        DB::connection('pgsql_migrate')->table('order_lines')->where('id', $lineId)
+        DB::table('order_lines')->where('business_id', $business->id)->where('id', $lineId)
             ->update(['ordered_qty' => null, 'ordered_rate' => null]);
 
         $this->actingAs($owner)->post('/orders/' . $orderId . '/accept', [
@@ -293,7 +305,7 @@ it('shows what was in a decided order, not just its total', function () {
     // A decided order showing only a total cannot answer "what did we agree to
     // send them?" — the question the owner opens this list to settle.
     [$owner, $business, $orderId] = pendingOrder();
-    DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)
+    DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)
         ->update(['status' => OrderStatus::DELIVERED]);
 
     $this->actingAs($owner)->get('/orders?business=' . $business->id)
@@ -309,21 +321,21 @@ describe('cancelling', function () {
         // A salesman could already cancel from the phone; the owner could not,
         // and was left watching an order they had decided against.
         [$owner, $business, $orderId] = pendingOrder();
-        DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)
+        DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)
             ->update(['status' => OrderStatus::ACCEPTED]);
 
         $this->actingAs($owner)->post('/orders/' . $orderId . '/cancel', [
             'business' => $business->id, 'status_note' => 'Shop closed down',
         ])->assertRedirect(route('orders', ['business' => $business->id]));
 
-        $order = DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)->first();
+        $order = DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)->first();
         expect($order->status)->toBe(OrderStatus::CANCELLED);
         expect($order->status_note)->toBe('Shop closed down');
     });
 
     it('writes no sale — an order before delivery was never money', function () {
         [$owner, $business, $orderId] = pendingOrder();
-        DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)
+        DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)
             ->update(['status' => OrderStatus::PACKED]);
 
         $this->actingAs($owner)->post('/orders/' . $orderId . '/cancel', [
@@ -332,26 +344,26 @@ describe('cancelling', function () {
 
         // Nothing to reverse, so nothing is written: cancelling is a real
         // cancel here, unlike a sale, which can only ever be mirrored.
-        expect(DB::connection('pgsql_migrate')->table('sales')
+        expect(DB::table('sales')
             ->where('business_id', $business->id)->count())->toBe(0);
     });
 
     it('refuses to cancel a delivered order, which is already money', function () {
         [$owner, $business, $orderId] = pendingOrder();
-        DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)
+        DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)
             ->update(['status' => OrderStatus::DELIVERED]);
 
         $this->actingAs($owner)->post('/orders/' . $orderId . '/cancel', [
             'business' => $business->id,
         ])->assertSessionHas('error', __('orders.cannot_cancel'));
 
-        expect(DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)->value('status'))
+        expect(DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)->value('status'))
             ->toBe(OrderStatus::DELIVERED);
     });
 
     it('offers cancel on the screen for an order still open', function () {
         [$owner, $business, $orderId] = pendingOrder();
-        DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)
+        DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)
             ->update(['status' => OrderStatus::ACCEPTED]);
 
         $this->actingAs($owner)->get('/orders?business=' . $business->id)
@@ -361,7 +373,7 @@ describe('cancelling', function () {
 
     it('does not offer cancel on a finished order', function () {
         [$owner, $business, $orderId] = pendingOrder();
-        DB::connection('pgsql_migrate')->table('orders')->where('id', $orderId)
+        DB::table('orders')->where('business_id', $business->id)->where('id', $orderId)
             ->update(['status' => OrderStatus::DELIVERED]);
 
         $this->actingAs($owner)->get('/orders?business=' . $business->id)
@@ -377,7 +389,10 @@ describe('cancelling', function () {
             'business' => $business->id,
         ])->assertNotFound();
 
-        expect(DB::connection('pgsql_migrate')->table('orders')->where('id', $theirOrderId)->value('status'))
-            ->toBe(OrderStatus::PENDING);
+        // Deliberately cross-tenant: the whole point is that the OTHER shop's
+        // order is untouched, so it cannot be read under this tenant.
+        expect(Tenancy::withoutTenant(
+            fn () => DB::table('orders')->where('id', $theirOrderId)->value('status')
+        ))->toBe(OrderStatus::PENDING);
     });
 });

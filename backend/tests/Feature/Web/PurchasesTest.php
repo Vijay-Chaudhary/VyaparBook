@@ -6,6 +6,7 @@
 use App\Models\Purchase;
 use App\Models\StockMovement;
 use App\Models\User;
+use App\Support\Tenancy;
 use Illuminate\Support\Str;
 
 describe('access', function () {
@@ -37,8 +38,7 @@ describe('crud', function () {
             ->assertSee('₹1,000.00');   // 25 × 40, computed server-side
 
         // The costed stock-in the purchase implies.
-        expect(StockMovement::on('pgsql_migrate')->withoutGlobalScopes()
-            ->where('business_id', $business->id)->where('kind', 'in')->count())->toBe(1);
+        expect(StockMovement::where('kind', 'in')->count())->toBe(1);
     });
 
     it('rejects a non-positive quantity or rate', function () {
@@ -54,7 +54,9 @@ describe('crud', function () {
         $this->actingAs($owner)->post('/purchases', $base + ['qty' => '10', 'unit_cost' => '0'])
             ->assertSessionHasErrors('unit_cost');
 
-        expect(Purchase::on('pgsql_migrate')->withoutGlobalScopes()->where('business_id', $business->id)->count())->toBe(0);
+        // Validation rejected the request before a tenant was bound, so say
+        // which shop this counts.
+        expect(asTenant($business->id, fn () => Purchase::count()))->toBe(0);
     });
 
     it('is idempotent on a replayed uuid', function () {
@@ -69,9 +71,9 @@ describe('crud', function () {
         $this->actingAs($owner)->post('/purchases', $payload);
         $this->actingAs($owner)->post('/purchases', $payload);   // replay
 
-        expect(Purchase::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(1);
+        expect(Purchase::where('business_id', $business->id)->count())->toBe(1);
         // and no second stock-in, which would silently double on-hand
-        expect(StockMovement::on('pgsql_migrate')->withoutGlobalScopes()->where('business_id', $business->id)->count())->toBe(1);
+        expect(StockMovement::count())->toBe(1);
     });
 
     it('deleting a purchase archives it and reverses the stock-in', function () {
@@ -83,13 +85,13 @@ describe('crud', function () {
             'business' => $business->id, 'supplier_id' => $s->id, 'raw_material_id' => $m->id,
             'purchase_date' => '2026-07-04', 'qty' => '25', 'unit_cost' => '40',
         ]);
-        $p = Purchase::on('pgsql_migrate')->where('business_id', $business->id)->firstOrFail();
+        $p = Purchase::where('business_id', $business->id)->firstOrFail();
 
         $this->actingAs($owner)->delete('/purchases/' . $p->id, ['business' => $business->id])
             ->assertRedirect();
 
-        expect(Purchase::on('pgsql_migrate')->withoutGlobalScopes()->find($p->id)->archived_at)->not->toBeNull();
-        expect(StockMovement::on('pgsql_migrate')->withoutGlobalScopes()->where('purchase_id', $p->id)->count())->toBe(0);
+        expect(Purchase::find($p->id)->archived_at)->not->toBeNull();
+        expect(StockMovement::where('purchase_id', $p->id)->count())->toBe(0);
     });
 
     it('refuses a supplier belonging to another tenant', function () {
@@ -98,14 +100,17 @@ describe('crud', function () {
         $foreignSupplier = pwSupplier($other, 'Someone Else');
         $m = pwMaterial($business);
 
-        // Invisible under RLS → the writer's findOrFail 404s rather than writing.
+        // Invisible under the tenant scope → the writer's findOrFail 404s
+        // rather than writing.
         $this->actingAs($owner)->post('/purchases', [
             'business' => $business->id, 'supplier_id' => $foreignSupplier->id,
             'raw_material_id' => $m->id, 'purchase_date' => '2026-07-04',
             'qty' => '25', 'unit_cost' => '40',
         ])->assertNotFound();
 
-        expect(Purchase::on('pgsql_migrate')->withoutGlobalScopes()->count())->toBe(0);
+        // Cross-tenant on purpose: the claim is that the rejected write landed
+        // in NO shop's books, which a scoped count could not establish.
+        expect(Tenancy::withoutTenant(fn () => Purchase::count()))->toBe(0);
     });
 
     it('refuses to delete another tenant\'s purchase', function () {
@@ -118,13 +123,15 @@ describe('crud', function () {
             'business' => $other->id, 'supplier_id' => $s->id, 'raw_material_id' => $m->id,
             'purchase_date' => '2026-07-04', 'qty' => '25', 'unit_cost' => '40',
         ]);
-        $foreign = Purchase::on('pgsql_migrate')->where('business_id', $other->id)->firstOrFail();
+        $foreign = Purchase::where('business_id', $other->id)->firstOrFail();
 
         $this->actingAs($owner)->delete('/purchases/' . $foreign->id, ['business' => $business->id])
             ->assertRedirect();
 
-        expect(Purchase::on('pgsql_migrate')->withoutGlobalScopes()->find($foreign->id)->archived_at)->toBeNull();
+        // The assertion is about the OTHER shop's rows, which this tenant cannot
+        // see, so withoutTenant -- greppable, and the tripwire knows it was meant.
+        expect(Tenancy::withoutTenant(fn () => Purchase::find($foreign->id)->archived_at))->toBeNull();
         // its stock-in survives too
-        expect(StockMovement::on('pgsql_migrate')->withoutGlobalScopes()->where('purchase_id', $foreign->id)->count())->toBe(1);
+        expect(Tenancy::withoutTenant(fn () => StockMovement::where('purchase_id', $foreign->id)->count()))->toBe(1);
     });
 });

@@ -11,7 +11,7 @@ use Illuminate\Support\Str;
 function materialToken(Business $business, string $role = 'owner'): string
 {
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => $role,
@@ -33,7 +33,7 @@ it('creates a raw material stamped with the caller tenant', function () {
         ->assertStatus(201)
         ->assertJson(['name' => 'Besan', 'unit' => 'kg', 'reorder_level' => '25.000']);
 
-    $created = RawMaterial::on('pgsql_migrate')->find($response->json('id'));
+    $created = RawMaterial::find($response->json('id'));
     expect($created->business_id)->toBe($business->id);
 });
 
@@ -71,7 +71,7 @@ it('replays the same row when the same uuid is posted twice', function () {
         ->assertStatus(200); // replay, not a new create
 
     expect($second->json('id'))->toBe($first->json('id'));
-    expect(RawMaterial::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(1);
+    expect(RawMaterial::where('business_id', $business->id)->count())->toBe(1);
 });
 
 it('rejects a material with no name or a bad unit', function () {
@@ -90,7 +90,7 @@ it('rejects a material with no name or a bad unit', function () {
 it('updates a material and bumps its version', function () {
     $business = Business::factory()->create();
     $token = materialToken($business);
-    $material = RawMaterial::on('pgsql_migrate')->create([
+    $material = RawMaterial::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Besan', 'unit' => 'kg',
     ]);
@@ -100,13 +100,13 @@ it('updates a material and bumps its version', function () {
         ->assertOk()
         ->assertJson(['reorder_level' => '50.000']);
 
-    expect(RawMaterial::on('pgsql_migrate')->find($material->id)->version)->toBe(2);
+    expect(RawMaterial::find($material->id)->version)->toBe(2);
 });
 
 it('archives and restores a material', function () {
     $business = Business::factory()->create();
     $token = materialToken($business);
-    $material = RawMaterial::on('pgsql_migrate')->create([
+    $material = RawMaterial::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Besan', 'unit' => 'kg',
     ]);
@@ -114,12 +114,12 @@ it('archives and restores a material', function () {
     $this->withHeader('Authorization', "Bearer {$token}")
         ->deleteJson("/api/v1/raw-materials/{$material->id}")
         ->assertOk();
-    expect(RawMaterial::on('pgsql_migrate')->find($material->id)->archived_at)->not->toBeNull();
+    expect(RawMaterial::find($material->id)->archived_at)->not->toBeNull();
 
     $this->withHeader('Authorization', "Bearer {$token}")
         ->postJson("/api/v1/raw-materials/{$material->id}/restore")
         ->assertOk();
-    expect(RawMaterial::on('pgsql_migrate')->find($material->id)->archived_at)->toBeNull();
+    expect(RawMaterial::find($material->id)->archived_at)->toBeNull();
 });
 
 it('returns 404 for a material in another business', function () {
@@ -127,7 +127,7 @@ it('returns 404 for a material in another business', function () {
     $theirs = Business::factory()->create();
     $token = materialToken($mine);
 
-    $foreign = RawMaterial::on('pgsql_migrate')->create([
+    $foreign = RawMaterial::create([
         'business_id' => $theirs->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Theirs', 'unit' => 'kg',
     ]);

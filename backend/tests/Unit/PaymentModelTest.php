@@ -9,7 +9,7 @@ use Illuminate\Support\Str;
 
 function paymentCustomerFor(Business $business): Customer
 {
-    return Customer::on('pgsql_migrate')->create([
+    return Customer::create([
         'business_id' => $business->id,
         'uuid' => (string) Str::uuid(),
         'name' => 'Ram Traders',
@@ -27,7 +27,6 @@ function paymentFor(Business $business, Customer $customer, User $user, string $
         'mode' => 'cash',
         'reverses_id' => $reversesId,
     ]);
-    $payment->setConnection('pgsql_migrate');
     $payment->created_by = $user->id;
     $payment->save();
 
@@ -35,13 +34,13 @@ function paymentFor(Business $business, Customer $customer, User $user, string $
 }
 
 it('casts amount to a 2-decimal string and stamps version and sync_seq', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $customer = paymentCustomerFor($business);
     $user = User::factory()->create();
 
     $payment = paymentFor($business, $customer, $user, '1000.5');
 
-    $fresh = $payment->fresh();
+    $fresh = reread($payment);
     expect($fresh->amount)->toBe('1000.50');
     expect($fresh->created_by)->toBe($user->id);
     expect($fresh->version)->toBe(1);
@@ -49,14 +48,14 @@ it('casts amount to a 2-decimal string and stamps version and sync_seq', functio
 });
 
 it('resolves a reversal back to the original payment it corrects', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $customer = paymentCustomerFor($business);
     $user = User::factory()->create();
 
     $original = paymentFor($business, $customer, $user, '500.00');
     $reversal = paymentFor($business, $customer, $user, '-500.00', $original->id);
 
-    $fresh = Payment::on('pgsql_migrate')->with('reverses')->find($reversal->id);
+    $fresh = Payment::with('reverses')->find($reversal->id);
     expect($fresh->reverses->id)->toBe($original->id);
     expect($fresh->amount)->toBe('-500.00');
 });

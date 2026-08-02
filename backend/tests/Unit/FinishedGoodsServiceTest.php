@@ -26,19 +26,19 @@ function inFgTenant(string $businessId, callable $fn): mixed
 
 function fgProduct(Business $b, string $name = 'Aloo Bhujia'): Product
 {
-    return Product::on('pgsql_migrate')->create([
+    return Product::create([
         'business_id' => $b->id, 'name_hi' => $name, 'name_en' => $name,
     ]);
 }
 
 function fgPack(Business $b, Product $p, string $label, string $weightKg): ProductPack
 {
-    $size = PackSize::on('pgsql_migrate')->firstOrCreate(
+    $size = PackSize::firstOrCreate(
         ['business_id' => $b->id, 'label' => $label],
         ['weight_kg' => $weightKg],
     );
 
-    return ProductPack::on('pgsql_migrate')->create([
+    return ProductPack::create([
         'business_id' => $b->id, 'product_id' => $p->id,
         'pack_size_id' => $size->id, 'default_sell_price' => '50.00',
     ]);
@@ -50,7 +50,6 @@ function fgProduce(Product $p, User $u, string $outputKg, string $date = '2026-0
         'business_id' => $p->business_id, 'uuid' => (string) Str::uuid(),
         'product_id' => $p->id, 'batch_date' => $date, 'output_kg' => $outputKg,
     ]);
-    $batch->setConnection('pgsql_migrate');
     $batch->created_by = $u->id;
     $batch->save();
 }
@@ -58,7 +57,7 @@ function fgProduce(Product $p, User $u, string $outputKg, string $date = '2026-0
 /** A sale of $qty packs; negative qty is a return, as the domain allows. */
 function fgSell(ProductPack $pack, User $u, int $qty, string $date = '2026-07-05'): Sale
 {
-    $customer = Customer::on('pgsql_migrate')->firstOrCreate(
+    $customer = Customer::firstOrCreate(
         ['business_id' => $pack->business_id, 'name' => 'Cust'],
         ['uuid' => (string) Str::uuid(), 'village' => 'V', 'opening_balance' => '0.00'],
     );
@@ -67,7 +66,6 @@ function fgSell(ProductPack $pack, User $u, int $qty, string $date = '2026-07-05
         'business_id' => $pack->business_id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $customer->id, 'sale_date' => $date,
     ]);
-    $sale->setConnection('pgsql_migrate');
     $sale->total = '100.00';
     $sale->created_by = $u->id;
     $sale->save();
@@ -76,7 +74,6 @@ function fgSell(ProductPack $pack, User $u, int $qty, string $date = '2026-07-05
         'business_id' => $pack->business_id, 'sale_id' => $sale->id,
         'product_pack_id' => $pack->id, 'qty' => $qty, 'rate' => '50.00',
     ]);
-    $line->setConnection('pgsql_migrate');
     $line->line_total = '100.00';
     $line->save();
 
@@ -90,7 +87,7 @@ function onHandFor(Business $b): array
 }
 
 it('reports what was produced when nothing has been sold', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     $u = User::factory()->create();
     fgProduce(fgProduct($b), $u, '20.000');
 
@@ -103,7 +100,7 @@ it('reports what was produced when nothing has been sold', function () {
 });
 
 it('converts sold packs to kg by their own pack weight', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     $u = User::factory()->create();
     $product = fgProduct($b);
     fgProduce($product, $u, '20.000');
@@ -118,7 +115,7 @@ it('converts sold packs to kg by their own pack weight', function () {
 });
 
 it('sums several pack sizes of the same product', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     $u = User::factory()->create();
     $product = fgProduct($b);
     fgProduce($product, $u, '20.000');
@@ -131,7 +128,7 @@ it('sums several pack sizes of the same product', function () {
 });
 
 it('self-nets a return, because a return is a negative-qty line', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     $u = User::factory()->create();
     $product = fgProduct($b);
     fgProduce($product, $u, '20.000');
@@ -145,7 +142,7 @@ it('self-nets a return, because a return is a negative-qty line', function () {
 });
 
 it('self-nets a full reversal without excluding any row', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     $u = User::factory()->create();
     $product = fgProduct($b);
     fgProduce($product, $u, '20.000');
@@ -159,7 +156,6 @@ it('self-nets a full reversal without excluding any row', function () {
         'customer_id' => $sale->customer_id, 'sale_date' => '2026-07-06',
         'reverses_id' => $sale->id,
     ]);
-    $reversal->setConnection('pgsql_migrate');
     $reversal->total = '-100.00';
     $reversal->created_by = $u->id;
     $reversal->save();
@@ -168,7 +164,6 @@ it('self-nets a full reversal without excluding any row', function () {
         'business_id' => $b->id, 'sale_id' => $reversal->id,
         'product_pack_id' => $pack->id, 'qty' => -4, 'rate' => '50.00',
     ]);
-    $line->setConnection('pgsql_migrate');
     $line->line_total = '-100.00';
     $line->save();
 
@@ -177,7 +172,7 @@ it('self-nets a full reversal without excluding any row', function () {
 });
 
 it('shows a negative on-hand rather than hiding a data error', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     $u = User::factory()->create();
     $product = fgProduct($b);
     // Sold without ever recording production — the owner needs to see this.
@@ -190,14 +185,14 @@ it('shows a negative on-hand rather than hiding a data error', function () {
 });
 
 it('omits a product that was never produced or sold', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     fgProduct($b, 'Never Touched');
 
     expect(onHandFor($b))->toBeEmpty();
 });
 
 it('excludes archived products', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     $u = User::factory()->create();
     $product = fgProduct($b);
     fgProduce($product, $u, '20.000');
@@ -208,8 +203,8 @@ it('excludes archived products', function () {
 });
 
 it('never counts another tenant\'s production or sales', function () {
-    $mine = Business::factory()->create();
-    $theirs = Business::factory()->create();
+    $mine = tenantBusiness();
+    $theirs = tenantBusiness();
     $u = User::factory()->create();
 
     fgProduce(fgProduct($mine, 'Mine'), $u, '20.000');

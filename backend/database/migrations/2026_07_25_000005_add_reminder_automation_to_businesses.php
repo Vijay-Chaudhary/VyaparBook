@@ -16,7 +16,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->table('businesses', function (Blueprint $table) {
+        Schema::table('businesses', function (Blueprint $table) {
             $table->boolean('reminder_auto_enabled')->default(false);
             // When inside the global 09:00–20:00 quiet-hours window to send.
             $table->time('reminder_send_at')->default('10:00:00');
@@ -31,7 +31,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->table('businesses', function (Blueprint $table) {
+        Schema::table('businesses', function (Blueprint $table) {
             $table->dropColumn([
                 'reminder_auto_enabled', 'reminder_send_at',
                 'reminder_cooldown_days', 'reminder_daily_cap',

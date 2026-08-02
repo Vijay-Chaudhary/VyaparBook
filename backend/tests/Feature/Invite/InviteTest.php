@@ -9,7 +9,7 @@ use App\Services\TokenService;
 it('lets an owner create an invite', function () {
     $owner = User::factory()->create();
     $business = Business::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create(['user_id' => $owner->id, 'business_id' => $business->id, 'role' => 'owner']);
+    $membership = Membership::create(['user_id' => $owner->id, 'business_id' => $business->id, 'role' => 'owner']);
     $token = (new TokenService())->issue($owner, $membership);
 
     $this->withHeader('Authorization', "Bearer {$token}")
@@ -21,7 +21,7 @@ it('lets an owner create an invite', function () {
 it('blocks a salesman from creating an invite', function () {
     $salesman = User::factory()->create();
     $business = Business::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create(['user_id' => $salesman->id, 'business_id' => $business->id, 'role' => 'salesman']);
+    $membership = Membership::create(['user_id' => $salesman->id, 'business_id' => $business->id, 'role' => 'salesman']);
     $token = (new TokenService())->issue($salesman, $membership);
 
     $this->withHeader('Authorization', "Bearer {$token}")
@@ -35,7 +35,7 @@ it('rejects accepting an invite for a business the user already belongs to', fun
     // request 500s with a raw SQL error.
     $owner = User::factory()->create();
     $business = Business::factory()->create();
-    $ownerMembership = Membership::on('pgsql_migrate')->create(['user_id' => $owner->id, 'business_id' => $business->id, 'role' => 'owner']);
+    $ownerMembership = Membership::create(['user_id' => $owner->id, 'business_id' => $business->id, 'role' => 'owner']);
     $ownerToken = (new TokenService())->issue($owner, $ownerMembership);
 
     $inviteResponse = $this->withHeader('Authorization', "Bearer {$ownerToken}")
@@ -49,13 +49,13 @@ it('rejects accepting an invite for a business the user already belongs to', fun
         ->assertStatus(409);
 
     // The invite must survive unredeemed so the person it was meant for can use it.
-    expect(Invite::on('pgsql_migrate')->where('token', $inviteToken)->first()->redeemed_at)->toBeNull();
+    expect(Invite::where('token', $inviteToken)->first()->redeemed_at)->toBeNull();
 });
 
 it('lets a new user accept an invite and become a member', function () {
     $owner = User::factory()->create();
     $business = Business::factory()->create();
-    $ownerMembership = Membership::on('pgsql_migrate')->create(['user_id' => $owner->id, 'business_id' => $business->id, 'role' => 'owner']);
+    $ownerMembership = Membership::create(['user_id' => $owner->id, 'business_id' => $business->id, 'role' => 'owner']);
     $ownerToken = (new TokenService())->issue($owner, $ownerMembership);
 
     $inviteResponse = $this->withHeader('Authorization', "Bearer {$ownerToken}")
@@ -79,7 +79,7 @@ it('lets a new user accept an invite and become a member', function () {
 it('marks an invite redeemed so a second person cannot reuse the link', function () {
     $owner = User::factory()->create();
     $business = Business::factory()->create();
-    $ownerMembership = Membership::on('pgsql_migrate')->create(['user_id' => $owner->id, 'business_id' => $business->id, 'role' => 'owner']);
+    $ownerMembership = Membership::create(['user_id' => $owner->id, 'business_id' => $business->id, 'role' => 'owner']);
     $ownerToken = (new TokenService())->issue($owner, $ownerMembership);
 
     $inviteResponse = $this->withHeader('Authorization', "Bearer {$ownerToken}")
@@ -93,7 +93,7 @@ it('marks an invite redeemed so a second person cannot reuse the link', function
         ->postJson('/api/v1/invites/accept', ['token' => $inviteToken])
         ->assertOk();
 
-    $invite = Invite::on('pgsql_migrate')->where('token', $inviteToken)->first();
+    $invite = Invite::where('token', $inviteToken)->first();
     expect($invite->redeemed_at)->not->toBeNull();
     expect($invite->redeemed_by)->toBe($firstUser->id);
 
@@ -104,5 +104,5 @@ it('marks an invite redeemed so a second person cannot reuse the link', function
         ->postJson('/api/v1/invites/accept', ['token' => $inviteToken])
         ->assertStatus(422);
 
-    expect(Membership::on('pgsql_migrate')->where('user_id', $secondUser->id)->exists())->toBeFalse();
+    expect(Membership::where('user_id', $secondUser->id)->exists())->toBeFalse();
 });

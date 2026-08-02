@@ -18,16 +18,11 @@ return new class extends Migration
 {
     public function up(): void
     {
-        // pgsql_migrate runs as the schema-owning role. The default `pgsql`
-        // connection is the least-privilege app role (vyaparbook_app), which is
-        // deliberately NOT the owner of `businesses`, so an ALTER TABLE there
-        // fails with "must be owner of table businesses". Every other schema
-        // migration in this repo uses pgsql_migrate for exactly this reason.
-        DB::connection('pgsql_migrate')->statement("ALTER TABLE businesses ALTER COLUMN default_language SET DEFAULT 'en'");
+        DB::statement("ALTER TABLE businesses ALTER COLUMN default_language SET DEFAULT 'en'");
     }
 
     public function down(): void
     {
-        DB::connection('pgsql_migrate')->statement("ALTER TABLE businesses ALTER COLUMN default_language SET DEFAULT 'hi'");
+        DB::statement("ALTER TABLE businesses ALTER COLUMN default_language SET DEFAULT 'hi'");
     }
 };

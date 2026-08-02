@@ -9,7 +9,7 @@ use Illuminate\Database\Eloquent\Model;
 
 /**
  * Append-only record of a platform admin acting on a tenant. Not a tenant table:
- * no BelongsToTenant scope, no RLS — the platform owns it. Only created_at is
+ * no BelongsToTenant scope — the platform owns it. Only created_at is
  * kept (set explicitly), so timestamps are disabled.
  */
 class PlatformAuditLog extends Model

@@ -19,7 +19,7 @@ $sub = fn (Business $b, array $attrs) => new Subscription(array_merge(['business
 
 $seedCustomers = function (Business $b, int $n): void {
     for ($i = 0; $i < $n; $i++) {
-        Customer::on('pgsql_migrate')->create([
+        Customer::create([
             'business_id' => $b->id,
             'uuid' => (string) Str::uuid(),
             'name' => "C{$i}",
@@ -85,7 +85,7 @@ it('flags users over the free limit once the single seat is taken', function () 
     $overEmpty = $inTenant($business, fn () => $svc->isOverLimit($freeSub(), 'users'));
     expect($overEmpty)->toBeFalse();
 
-    Membership::on('pgsql_migrate')->create([
+    Membership::create([
         'user_id' => User::factory()->create()->id,
         'business_id' => $business->id,
         'role' => 'owner',

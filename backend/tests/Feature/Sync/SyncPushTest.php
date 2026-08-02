@@ -14,12 +14,12 @@ function syncSetup(string $role = 'owner'): array
 {
     $business = Business::factory()->create();
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id, 'business_id' => $business->id, 'role' => $role,
     ]);
     $token = (new TokenService())->issue($user, $membership);
 
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Ram Traders', 'opening_balance' => '0.00',
     ]);
@@ -56,7 +56,7 @@ it('applies a fresh mutation and returns the server id', function () {
 
     expect($response->json('results.0.status'))->toBe('applied');
     expect($response->json('results.0.id'))->not->toBeNull();
-    expect(Payment::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(1);
+    expect(Payment::where('business_id', $business->id)->count())->toBe(1);
 });
 
 it('reports a replayed mutation as duplicate and creates nothing', function () {
@@ -67,7 +67,7 @@ it('reports a replayed mutation as duplicate and creates nothing', function () {
     $second = push($token, [$mutation])->assertOk();
 
     expect($second->json('results.0.status'))->toBe('duplicate');
-    expect(Payment::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(1);
+    expect(Payment::where('business_id', $business->id)->count())->toBe(1);
 });
 
 it('rejects a mutation whose tenant_id is not the session tenant and writes nothing', function () {
@@ -78,7 +78,7 @@ it('rejects a mutation whose tenant_id is not the session tenant and writes noth
 
     expect($response->json('results.0.status'))->toBe('rejected');
     expect($response->json('results.0.reason'))->toBe('tenant_mismatch');
-    expect(Payment::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(0);
+    expect(Payment::where('business_id', $business->id)->count())->toBe(0);
 });
 
 it('applies allowed items and rejects forbidden ones in the same batch', function () {
@@ -104,7 +104,7 @@ it('applies allowed items and rejects forbidden ones in the same batch', functio
 it('rejects a mutation referencing a customer the caller cannot see', function () {
     [$business, $token, $customer] = syncSetup();
     $theirs = Business::factory()->create();
-    $foreign = Customer::on('pgsql_migrate')->create([
+    $foreign = Customer::create([
         'business_id' => $theirs->id, 'uuid' => (string) Str::uuid(), 'name' => 'Theirs',
     ]);
 
@@ -122,13 +122,13 @@ it('rejects only the bad mutation and still applies the rest of the batch', func
     // neighbours in the same batch still apply.
     [$business, $token, $customer] = syncSetup();
 
-    $product = App\Models\Product::on('pgsql_migrate')->create([
+    $product = App\Models\Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
-    $size = App\Models\PackSize::on('pgsql_migrate')->create([
+    $size = App\Models\PackSize::create([
         'business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
-    $pack = App\Models\ProductPack::on('pgsql_migrate')->create([
+    $pack = App\Models\ProductPack::create([
         'business_id' => $business->id, 'product_id' => $product->id,
         'pack_size_id' => $size->id, 'default_sell_price' => '90.00',
         'default_cost_price' => '70.00',
@@ -158,9 +158,9 @@ it('rejects only the bad mutation and still applies the rest of the batch', func
     expect($byUuid[$bad]['reason'])->toBe('not_found');
 
     // The legitimate sale survives its neighbour's rejection.
-    expect(DB::connection('pgsql_migrate')->table('sales')
+    expect(DB::table('sales')
         ->where('business_id', $business->id)->where('uuid', $good)->count())->toBe(1);
-    expect(DB::connection('pgsql_migrate')->table('sales')
+    expect(DB::table('sales')
         ->where('business_id', $business->id)->where('uuid', $bad)->count())->toBe(0);
 });
 
@@ -169,13 +169,13 @@ it('applies a below-cost sale from the field instead of parking it', function ()
     // arrival — that would strand the salesman's work after the shop was told.
     [$business, $token, $customer] = syncSetup();
 
-    $product = App\Models\Product::on('pgsql_migrate')->create([
+    $product = App\Models\Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
-    $size = App\Models\PackSize::on('pgsql_migrate')->create([
+    $size = App\Models\PackSize::create([
         'business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
-    $pack = App\Models\ProductPack::on('pgsql_migrate')->create([
+    $pack = App\Models\ProductPack::create([
         'business_id' => $business->id, 'product_id' => $product->id,
         'pack_size_id' => $size->id, 'default_sell_price' => '90.00',
         'default_cost_price' => '70.00',
@@ -192,6 +192,6 @@ it('applies a below-cost sale from the field instead of parking it', function ()
     ]])->assertOk();
 
     expect($response->json('results.0.status'))->toBe('applied');
-    expect((string) DB::connection('pgsql_migrate')->table('sale_lines')
+    expect((string) DB::table('sale_lines')
         ->where('business_id', $business->id)->value('cost_at_sale'))->toBe('70.00');
 });

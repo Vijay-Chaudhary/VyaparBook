@@ -19,11 +19,18 @@ class PackSizeController extends Controller
         }
 
         $data = $request->validate([
-            // No tenant clause on the unique rule, and none is needed: this query
-            // runs inside SetTenantContext's transaction with app.current_tenant
-            // set, so RLS has already narrowed pack_sizes to this business. It
-            // looks like a missing scope; it is not.
-            'label' => ['required', 'string', 'max:40', Rule::unique('pack_sizes', 'label')],
+            // The tenant clause IS needed. Rule::unique resolves through the
+            // presence verifier, which builds a raw query builder -- Eloquent's
+            // global scope never reaches it, so a bare rule asks "does any shop
+            // on the platform use this label?". Under Postgres the RLS policy
+            // narrowed it anyway; on MySQL nothing does, and without this clause
+            // one shop registering '500g' would block every other shop from it
+            // and leak, through the error, that someone else holds the label.
+            'label' => [
+                'required', 'string', 'max:40',
+                Rule::unique('pack_sizes', 'label')
+                    ->where('business_id', app('tenant.id')),
+            ],
             'weight_kg' => ['required', 'numeric', 'gt:0'],
             'in_dropdown' => ['nullable', 'boolean'],
         ], [
@@ -34,10 +41,10 @@ class PackSizeController extends Controller
 
         $packSize = PackSize::create($data);
 
-        // fresh(): in_dropdown defaults to true at the DB level, and a create that
+        // freshScoped(): in_dropdown defaults to true at the DB level, and a create that
         // omitted it leaves the in-memory instance without the applied default.
         // Reload so the response carries the row's real persisted state.
-        return response()->json($packSize->fresh(), 201);
+        return response()->json($packSize->freshScoped(), 201);
     }
 
     public function update(Request $request, string $id)
@@ -51,7 +58,10 @@ class PackSizeController extends Controller
         $data = $request->validate([
             'label' => [
                 'sometimes', 'required', 'string', 'max:40',
-                Rule::unique('pack_sizes', 'label')->ignore($packSize->id),
+                // Tenant-scoped for the same reason as store() above.
+                Rule::unique('pack_sizes', 'label')
+                    ->ignore($packSize->id)
+                    ->where('business_id', app('tenant.id')),
             ],
             'weight_kg' => ['sometimes', 'required', 'numeric', 'gt:0'],
             'in_dropdown' => ['nullable', 'boolean'],
@@ -59,7 +69,7 @@ class PackSizeController extends Controller
 
         $packSize->update($data);
 
-        return response()->json($packSize->fresh());
+        return response()->json($packSize->freshScoped());
     }
 
     public function destroy(string $id)
@@ -85,7 +95,7 @@ class PackSizeController extends Controller
         $packSize->archived_at = null;
         $packSize->save();
 
-        return response()->json($packSize->fresh());
+        return response()->json($packSize->freshScoped());
     }
 
     private function denied()

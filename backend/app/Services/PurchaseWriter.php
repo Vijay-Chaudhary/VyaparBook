@@ -34,7 +34,7 @@ class PurchaseWriter
             return [$existing, false];
         }
 
-        // findOrFail under RLS: a cross-tenant supplier/material is invisible → 404.
+        // findOrFail under the tenant scope: a cross-tenant supplier/material is invisible → 404.
         $supplier = Supplier::findOrFail($data['supplier_id']);
         $material = RawMaterial::findOrFail($data['raw_material_id']);
 

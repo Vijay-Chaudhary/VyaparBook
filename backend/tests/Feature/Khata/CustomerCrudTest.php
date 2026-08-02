@@ -11,7 +11,7 @@ use Illuminate\Support\Str;
 function customerToken(Business $business, string $role = 'owner'): string
 {
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => $role,
@@ -33,7 +33,7 @@ it('creates a customer stamped with the caller tenant', function () {
         ->assertStatus(201)
         ->assertJson(['name' => 'Ram Traders', 'opening_balance' => '250.00']);
 
-    $created = Customer::on('pgsql_migrate')->find($response->json('id'));
+    $created = Customer::find($response->json('id'));
     expect($created->business_id)->toBe($business->id);
 });
 
@@ -63,7 +63,7 @@ it('replays the same row when the same uuid is posted twice', function () {
         ->assertStatus(200); // replay, not a new create
 
     expect($second->json('id'))->toBe($first->json('id'));
-    expect(Customer::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(1);
+    expect(Customer::where('business_id', $business->id)->count())->toBe(1);
 });
 
 it('rejects a customer with no name', function () {
@@ -77,7 +77,7 @@ it('rejects a customer with no name', function () {
 it('updates a customer and bumps its version', function () {
     $business = Business::factory()->create();
     $token = customerToken($business);
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(), 'name' => 'Ram',
     ]);
 
@@ -86,7 +86,7 @@ it('updates a customer and bumps its version', function () {
         ->assertOk()
         ->assertJson(['name' => 'Ram Traders']);
 
-    expect(Customer::on('pgsql_migrate')->find($customer->id)->version)->toBe(2);
+    expect(Customer::find($customer->id)->version)->toBe(2);
 });
 
 it('returns 404 for a customer in another business', function () {
@@ -94,7 +94,7 @@ it('returns 404 for a customer in another business', function () {
     $theirs = Business::factory()->create();
     $token = customerToken($mine);
 
-    $foreign = Customer::on('pgsql_migrate')->create([
+    $foreign = Customer::create([
         'business_id' => $theirs->id, 'uuid' => (string) Str::uuid(), 'name' => 'Theirs',
     ]);
 

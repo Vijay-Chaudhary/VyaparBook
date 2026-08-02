@@ -10,7 +10,7 @@ use Illuminate\Support\Str;
 
 function beatCustomer(string $businessId, string $name): Customer
 {
-    return Customer::on('pgsql_migrate')->create([
+    return Customer::create([
         'business_id' => $businessId, 'uuid' => (string) Str::uuid(),
         'name' => $name, 'village' => 'Rampur', 'opening_balance' => '0.00',
     ]);
@@ -34,7 +34,7 @@ describe('planning', function () {
             'business' => $business->id, 'name' => 'Rampur', 'weekdays' => [1, 4],
         ])->assertRedirect(route('beats', ['business' => $business->id]));
 
-        $beat = Beat::on('pgsql_migrate')->where('business_id', $business->id)->sole();
+        $beat = Beat::where('business_id', $business->id)->sole();
         expect($beat->name)->toBe('Rampur');
         expect($beat->weekdays)->toBe([1, 4]);
     });
@@ -57,7 +57,7 @@ describe('planning', function () {
         ]);
 
         // Silently unassigned rather than accepted: membership is checked, not trusted.
-        expect(Beat::on('pgsql_migrate')->where('business_id', $business->id)->sole()->assigned_user_id)->toBeNull();
+        expect(Beat::where('business_id', $business->id)->sole()->assigned_user_id)->toBeNull();
     });
 
     it('sets the customer list in call order', function () {
@@ -68,13 +68,16 @@ describe('planning', function () {
         $this->actingAs($owner)->post('/beats', [
             'business' => $business->id, 'name' => 'Rampur', 'weekdays' => [1],
         ]);
-        $beat = Beat::on('pgsql_migrate')->where('business_id', $business->id)->sole();
+        $beat = Beat::where('business_id', $business->id)->sole();
 
         $this->actingAs($owner)->post('/beats/' . $beat->id . '/customers', [
             'business' => $business->id, 'customers' => [$second->id, $first->id],
         ])->assertRedirect();
 
-        $rows = DB::connection('pgsql_migrate')->table('beat_customers')
+        // Raw builder: no Eloquent scope reaches it, so the tenant predicate is
+        // written out. The tripwire insists on exactly that.
+        $rows = DB::table('beat_customers')
+            ->where('business_id', $business->id)
             ->where('beat_id', $beat->id)->orderBy('position')->get();
 
         expect($rows->pluck('customer_id')->all())->toBe([$second->id, $first->id]);
@@ -89,7 +92,7 @@ describe('planning', function () {
         $this->actingAs($owner)->post('/beats', [
             'business' => $business->id, 'name' => 'Rampur', 'weekdays' => [1],
         ]);
-        $beat = Beat::on('pgsql_migrate')->where('business_id', $business->id)->sole();
+        $beat = Beat::where('business_id', $business->id)->sole();
 
         $this->actingAs($owner)->post('/beats/' . $beat->id . '/customers', [
             'business' => $business->id, 'customers' => [$a->id, $b->id],
@@ -98,7 +101,8 @@ describe('planning', function () {
             'business' => $business->id, 'customers' => [$b->id],
         ]);
 
-        $rows = DB::connection('pgsql_migrate')->table('beat_customers')->where('beat_id', $beat->id)->get();
+        $rows = DB::table('beat_customers')
+            ->where('business_id', $business->id)->where('beat_id', $beat->id)->get();
         expect($rows)->toHaveCount(1);
         expect($rows->first()->customer_id)->toBe($b->id);
     });
@@ -111,13 +115,14 @@ describe('planning', function () {
         $this->actingAs($owner)->post('/beats', [
             'business' => $business->id, 'name' => 'Rampur', 'weekdays' => [1],
         ]);
-        $beat = Beat::on('pgsql_migrate')->where('business_id', $business->id)->sole();
+        $beat = Beat::where('business_id', $business->id)->sole();
 
         $this->actingAs($owner)->post('/beats/' . $beat->id . '/customers', [
             'business' => $business->id, 'customers' => [$theirCustomer->id],
         ]);
 
-        expect(DB::connection('pgsql_migrate')->table('beat_customers')->where('beat_id', $beat->id)->count())->toBe(0);
+        expect(DB::table('beat_customers')
+            ->where('business_id', $business->id)->where('beat_id', $beat->id)->count())->toBe(0);
     });
 
     it('does not touch another tenant\'s beat', function () {
@@ -126,12 +131,15 @@ describe('planning', function () {
         $this->actingAs($otherOwner)->post('/beats', [
             'business' => $other->id, 'name' => 'Theirs', 'weekdays' => [1],
         ]);
-        $theirs = Beat::on('pgsql_migrate')->where('business_id', $other->id)->sole();
+        $theirs = Beat::where('business_id', $other->id)->sole();
 
         $this->actingAs($owner)->post('/beats/' . $theirs->id . '/archive', ['business' => $business->id])
             ->assertNotFound();
 
-        expect(DB::connection('pgsql_migrate')->table('beats')->where('id', $theirs->id)->value('archived_at'))->toBeNull();
+        // The other shop's row: scoped to THEM, which is what makes this an
+        // assertion about their data surviving rather than an unscoped peek.
+        expect(DB::table('beats')->where('business_id', $other->id)
+            ->where('id', $theirs->id)->value('archived_at'))->toBeNull();
     });
 
     it('archives a beat instead of deleting it, so devices learn to drop it', function () {
@@ -139,11 +147,12 @@ describe('planning', function () {
         $this->actingAs($owner)->post('/beats', [
             'business' => $business->id, 'name' => 'Rampur', 'weekdays' => [1],
         ]);
-        $beat = Beat::on('pgsql_migrate')->where('business_id', $business->id)->sole();
+        $beat = Beat::where('business_id', $business->id)->sole();
 
         $this->actingAs($owner)->post('/beats/' . $beat->id . '/archive', ['business' => $business->id]);
 
-        $row = DB::connection('pgsql_migrate')->table('beats')->where('id', $beat->id)->first();
+        $row = DB::table('beats')
+            ->where('business_id', $business->id)->where('id', $beat->id)->first();
         expect($row)->not->toBeNull();              // still there to sync
         expect($row->archived_at)->not->toBeNull();
     });

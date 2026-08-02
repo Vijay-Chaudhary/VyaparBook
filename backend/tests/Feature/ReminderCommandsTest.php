@@ -15,10 +15,10 @@ function commandTenant(bool $autoEnabled): array
 {
     $business = Business::factory()->create();
     $owner = User::factory()->create();
-    DB::connection('pgsql_migrate')->table('businesses')->where('id', $business->id)
+    DB::table('businesses')->where('id', $business->id)
         ->update(['reminder_auto_enabled' => $autoEnabled]);
 
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Ramesh Kumar', 'village' => 'Rampur',
         'phone' => '9876543210', 'opening_balance' => '0.00',
@@ -28,7 +28,6 @@ function commandTenant(bool $autoEnabled): array
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $customer->id, 'sale_date' => now()->subDays(60)->format('Y-m-d'),
     ]);
-    $sale->setConnection('pgsql_migrate');
     $sale->total = '2500.00';
     $sale->created_by = $owner->id;
     $sale->save();
@@ -45,8 +44,8 @@ it('plans only for tenants that opted in', function () {
 
     $this->artisan('reminders:plan')->assertSuccessful();
 
-    expect(ReminderBatch::on('pgsql_migrate')->where('business_id', $optedIn->id)->count())->toBe(1);
-    expect(ReminderBatch::on('pgsql_migrate')->where('business_id', $optedOut->id)->count())->toBe(0);
+    expect(ReminderBatch::where('business_id', $optedIn->id)->count())->toBe(1);
+    expect(ReminderBatch::where('business_id', $optedOut->id)->count())->toBe(0);
 });
 
 it('succeeds and says so when nobody has enabled automation', function () {
@@ -63,7 +62,7 @@ it('is safe to run twice — the second pass plans nothing new', function () {
     $this->artisan('reminders:plan')->assertSuccessful();
     $this->artisan('reminders:plan')->assertSuccessful();
 
-    expect(ReminderBatch::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(1);
+    expect(ReminderBatch::where('business_id', $business->id)->count())->toBe(1);
 });
 
 it('dispatches nothing while the transport is still the log driver', function () {

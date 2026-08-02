@@ -12,12 +12,12 @@ function rbacBillingToken(string $role): string
 {
     $business = Business::factory()->create();
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => $role,
     ]);
-    Subscription::on('pgsql_migrate')->create([
+    Subscription::create([
         'business_id' => $business->id,
         'plan' => 'free',
         'status' => 'trialing',

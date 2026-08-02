@@ -18,8 +18,8 @@ it('lists the templates on disk plus blank', function () {
 it('seeds the namkeen template into one business', function () {
     $business = Business::factory()->create();
 
-    // Mirror what a request does: a transaction with the tenant GUC set, so the
-    // RLS WITH CHECK admits the inserts.
+    // Mirror what a request does: a transaction with the tenant bound, so the
+    // scope admits the inserts and stamps business_id on them.
     DB::transaction(function () use ($business) {
         TenantContext::switchTo($business->id);
         app()->bind('tenant.id', fn () => $business->id);
@@ -27,9 +27,9 @@ it('seeds the namkeen template into one business', function () {
         app(CatalogTemplateService::class)->apply('namkeen', $business->id);
     });
 
-    expect(Product::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(3);
-    expect(PackSize::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(8);
-    expect(ProductPack::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(12);
+    expect(Product::where('business_id', $business->id)->count())->toBe(3);
+    expect(PackSize::where('business_id', $business->id)->count())->toBe(8);
+    expect(ProductPack::where('business_id', $business->id)->count())->toBe(12);
 });
 
 it('fills each pack cost from the product base cost per kg', function () {
@@ -42,12 +42,9 @@ it('fills each pack cost from the product base cost per kg', function () {
         app(CatalogTemplateService::class)->apply('namkeen', $business->id);
     });
 
-    $sev = Product::on('pgsql_migrate')
-        ->where('business_id', $business->id)->where('name_en', 'Sev')->first();
-    $oneKg = PackSize::on('pgsql_migrate')
-        ->where('business_id', $business->id)->where('label', '1kg')->first();
-    $pack = ProductPack::on('pgsql_migrate')
-        ->where('product_id', $sev->id)->where('pack_size_id', $oneKg->id)->first();
+    $sev = Product::where('business_id', $business->id)->where('name_en', 'Sev')->first();
+    $oneKg = PackSize::where('business_id', $business->id)->where('label', '1kg')->first();
+    $pack = ProductPack::where('product_id', $sev->id)->where('pack_size_id', $oneKg->id)->first();
 
     // Sev base_cost_per_kg 130.00 × 1.000 kg
     expect($pack->default_cost_price)->toBe('130.00');
@@ -63,7 +60,7 @@ it('inserts nothing for the blank template', function () {
         app(CatalogTemplateService::class)->apply('blank', $business->id);
     });
 
-    expect(Product::on('pgsql_migrate')->where('business_id', $business->id)->count())->toBe(0);
+    expect(Product::where('business_id', $business->id)->count())->toBe(0);
 });
 
 it('rejects an unknown template', function () {

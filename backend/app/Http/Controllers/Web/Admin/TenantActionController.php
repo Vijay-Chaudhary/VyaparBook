@@ -21,7 +21,7 @@ use Illuminate\Validation\Rule;
  * Admin\SubscriptionController / Admin\PaymentController / Admin\ImpersonationController.
  *
  * Every mutation goes through the SAME seams as the API: PlatformTenantContext
- * pins the target tenant and writes on the RLS connection (so RLS's WITH CHECK
+ * pins the target tenant and writes on the application connection (so the scope
  * still confines the write — defense in depth, never around it), the shared
  * SubscriptionService owns the state transitions, and PlatformAudit records the
  * trail. The web layer only chooses the surface (redirect + flash vs JSON); the
@@ -135,7 +135,7 @@ class TenantActionController extends Controller
      * operator's session, and drop them into /app rendered as this tenant. The
      * token lives ONLY in the server-side session — never a URL, never the DOM —
      * and the session→JWT bridge (ApiTokenController) hands it to the React layer
-     * on boot. Role-existence is checked on the BYPASSRLS connection exactly as
+     * on boot. Role-existence is checked on the SELECT-only connection exactly as
      * the API does, and every launch is audited.
      */
     public function impersonate(Request $request, string $id): RedirectResponse
@@ -145,7 +145,7 @@ class TenantActionController extends Controller
             'reason' => ['nullable', 'string', 'max:255'],
         ]);
 
-        $platform = DB::connection('pgsql_platform');
+        $platform = DB::connection('mysql_platform');
 
         $business = $platform->table('businesses')->where('id', $id)->first(['id', 'name']);
         if ($business === null) {
@@ -205,7 +205,7 @@ class TenantActionController extends Controller
     /* --- helpers --------------------------------------------------- */
 
     /**
-     * Load the tenant's subscription pinned under RLS, apply the transition, and
+     * Load the tenant's subscription pinned to that tenant, apply the transition, and
      * audit only a real status change — the shared shell for suspend/reactivate,
      * mirroring Admin\SubscriptionController::transition.
      *

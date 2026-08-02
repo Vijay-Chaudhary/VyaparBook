@@ -9,7 +9,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->table('stock_movements', function (Blueprint $table) {
+        Schema::table('stock_movements', function (Blueprint $table) {
             // Links a costed stock-in to the Purchase that created it (mirrors
             // production_batch_id). Null for movements recorded by hand.
             $table->foreignUuid('purchase_id')->nullable()->after('production_batch_id')
@@ -20,7 +20,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->table('stock_movements', function (Blueprint $table) {
+        Schema::table('stock_movements', function (Blueprint $table) {
             $table->dropForeign(['purchase_id']);
             $table->dropIndex(['business_id', 'purchase_id']);
             $table->dropColumn('purchase_id');

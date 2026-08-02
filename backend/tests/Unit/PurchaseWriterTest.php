@@ -14,7 +14,7 @@ use App\Services\StockService;
 use Illuminate\Support\Str;
 
 it('records a purchase with a linked costed stock-in, and is idempotent', function () {
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
     $s = pwSupplier($a);
     $m = pwMaterial($a);
@@ -35,17 +35,17 @@ it('records a purchase with a linked costed stock-in, and is idempotent', functi
 
         // Read on-hand on the DEFAULT connection (same transaction the writer used),
         // so the just-written movement is visible — mirrors the controller flow.
-        return [$p->fresh(), (new StockService())->onHandFor(RawMaterial::find($m->id))];
+        return [reread($p), (new StockService())->onHandFor(RawMaterial::find($m->id))];
     });
 
     expect($purchase->total)->toBe('400.00');   // 10 × 40
     expect($onHand)->toBe('10.000');            // one costed stock-in
-    expect(Purchase::on('pgsql_migrate')->where('business_id', $a->id)->count())->toBe(1);
-    expect(StockMovement::on('pgsql_migrate')->where('purchase_id', $purchase->id)->where('kind', 'in')->count())->toBe(1);
+    expect(Purchase::where('business_id', $a->id)->count())->toBe(1);
+    expect(StockMovement::where('purchase_id', $purchase->id)->where('kind', 'in')->count())->toBe(1);
 });
 
 it('reverses the stock-in when a purchase is removed', function () {
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
     $s = pwSupplier($a);
     $m = pwMaterial($a);
@@ -61,6 +61,6 @@ it('reverses the stock-in when a purchase is removed', function () {
     });
 
     expect($onHandAfter)->toBe('0.000');   // stock-in removed → on-hand restored
-    expect(Purchase::on('pgsql_migrate')->whereNotNull('archived_at')->count())->toBe(1);   // purchase archived
-    expect(StockMovement::on('pgsql_migrate')->whereNotNull('purchase_id')->count())->toBe(0); // movement gone
+    expect(Purchase::whereNotNull('archived_at')->count())->toBe(1);   // purchase archived
+    expect(StockMovement::whereNotNull('purchase_id')->count())->toBe(0); // movement gone
 });

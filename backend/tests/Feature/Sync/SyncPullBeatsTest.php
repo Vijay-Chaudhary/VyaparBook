@@ -15,7 +15,7 @@ function beatPullSetup(string $role = 'owner'): array
 {
     $business = Business::factory()->create();
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id, 'business_id' => $business->id, 'role' => $role,
     ]);
 
@@ -26,7 +26,7 @@ function beatPullSetup(string $role = 'owner'): array
 function beatMember(Business $business, string $role): array
 {
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id, 'business_id' => $business->id, 'role' => $role,
     ]);
 
@@ -35,17 +35,17 @@ function beatMember(Business $business, string $role): array
 
 function seedBeat(Business $business, string $name, array $weekdays, ?int $userId): Beat
 {
-    $beat = Beat::on('pgsql_migrate')->create([
+    $beat = Beat::create([
         'business_id' => $business->id, 'name' => $name,
         'weekdays' => $weekdays, 'assigned_user_id' => $userId,
     ]);
 
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => $name.' Customer', 'village' => 'Rampur', 'opening_balance' => '0.00',
     ]);
 
-    BeatCustomer::on('pgsql_migrate')->create([
+    BeatCustomer::create([
         'business_id' => $business->id, 'beat_id' => $beat->id,
         'customer_id' => $customer->id, 'position' => 1,
     ]);

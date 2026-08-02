@@ -18,14 +18,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->table('businesses', function (Blueprint $table) {
+        Schema::table('businesses', function (Blueprint $table) {
             $table->timestamp('erased_at')->nullable()->index();
         });
     }
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->table('businesses', function (Blueprint $table) {
+        Schema::table('businesses', function (Blueprint $table) {
             $table->dropColumn('erased_at');
         });
     }

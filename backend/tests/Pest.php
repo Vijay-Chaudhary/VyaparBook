@@ -73,18 +73,23 @@ function seedTenantWithOwner(string $status = 'trialing', string $plan = 'free')
 {
     $business = \App\Models\Business::factory()->create();
     $user = \App\Models\User::factory()->create();
-    $membership = \App\Models\Membership::on('pgsql_migrate')->create([
-        'user_id' => $user->id,
-        'business_id' => $business->id,
-        'role' => 'owner',
-    ]);
-    \App\Models\Subscription::on('pgsql_migrate')->create([
-        'business_id' => $business->id,
-        'plan' => $plan,
-        'status' => $status,
-        'trial_ends_at' => $status === 'trialing' ? now()->addDays(14) : now()->subDay(),
-        'current_period_end' => in_array($status, ['active', 'read_only'], true) ? now()->addMonth() : null,
-    ]);
+
+    $membership = asTenant($business->id, function () use ($business, $user, $plan, $status) {
+        $membership = \App\Models\Membership::create([
+            'user_id' => $user->id,
+            'business_id' => $business->id,
+            'role' => 'owner',
+        ]);
+        \App\Models\Subscription::create([
+            'business_id' => $business->id,
+            'plan' => $plan,
+            'status' => $status,
+            'trial_ends_at' => $status === 'trialing' ? now()->addDays(14) : now()->subDay(),
+            'current_period_end' => in_array($status, ['active', 'read_only'], true) ? now()->addMonth() : null,
+        ]);
+
+        return $membership;
+    });
 
     return [$business, (new \App\Services\TokenService())->issue($user, $membership)];
 }
@@ -107,15 +112,73 @@ function platformAdmin(): array
 | .php`) still has them — a test file that isn't selected is never loaded.
 */
 
-/** Run $fn inside a tenant-pinned transaction (RLS session var + app-level scope). */
+/**
+ * Run $fn with $businessId bound as the current tenant, restoring whatever was
+ * bound before.
+ *
+ * Test setup used to write through the old privileged migration connection,
+ * which bypassed row-level security and left
+ * `app('tenant.id')` null. The fail-closed scope refuses an unbound query, so
+ * every seeding helper below needs a tenant. Binding the one the fixture
+ * obviously belongs to — rather than reaching for Tenancy::withoutTenant() —
+ * keeps isolation switched ON throughout setup, so a helper that writes to the
+ * wrong tenant still gets caught.
+ */
+function asTenant(string $businessId, callable $fn): mixed
+{
+    $previous = app('tenant.id');
+    app()->bind('tenant.id', fn () => $businessId);
+
+    try {
+        return $fn();
+    } finally {
+        app()->bind('tenant.id', fn () => $previous);
+    }
+}
+
+/**
+ * A fresh business, left bound as the current tenant for the rest of the test.
+ *
+ * The workhorse for tests that operate as ONE shop throughout. Services and
+ * models always run tenant-pinned in production (the controller's runInTenant,
+ * or a TenantAwareJob), and BelongsToTenant now fails closed -- so a test that
+ * skipped the binding would not be testing the subject, it would be testing the
+ * scope's refusal.
+ *
+ * Use asTenant() instead where a test deliberately acts as more than one shop.
+ */
+function tenantBusiness(): \App\Models\Business
+{
+    $business = \App\Models\Business::factory()->create();
+    app()->bind('tenant.id', fn () => $business->id);
+
+    return $business;
+}
+
+/**
+ * Re-read a model from the database WITH the tenant scope applied.
+ *
+ * The replacement for $model->fresh() and $model->refresh(), both of which build
+ * their query with newQueryWithoutScopes() and so re-read the row with no tenant
+ * predicate at all (see the note in BelongsToTenant). newQuery() applies global
+ * scopes, so this reads as the tenant a request would -- and a row that somehow
+ * belonged to another shop fails here instead of being handed back.
+ *
+ * @template T of \Illuminate\Database\Eloquent\Model
+ * @param  T  $model
+ * @return T
+ */
+function reread(\Illuminate\Database\Eloquent\Model $model): \Illuminate\Database\Eloquent\Model
+{
+    return $model->newQuery()->findOrFail($model->getKey());
+}
+
+/** Run $fn inside a tenant-pinned transaction. */
 function pwInTenant(string $businessId, callable $fn): mixed
 {
-    return \Illuminate\Support\Facades\DB::transaction(function () use ($businessId, $fn) {
-        \App\Support\TenantContext::switchTo($businessId);
-        app()->bind('tenant.id', fn () => $businessId);
-
-        return $fn();
-    });
+    return \Illuminate\Support\Facades\DB::transaction(
+        fn () => asTenant($businessId, $fn)
+    );
 }
 
 /**
@@ -127,42 +190,42 @@ function pwOwner(): array
 {
     $business = \App\Models\Business::factory()->create();
     $user = \App\Models\User::factory()->create();
-    \App\Models\Membership::on('pgsql_migrate')->create([
+    asTenant($business->id, fn () => \App\Models\Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => 'owner',
-    ]);
+    ]));
 
     return [$user, $business];
 }
 
-/** A supplier seeded on the migration connection (bypasses RLS, like the other seed helpers). */
+/** A supplier belonging to $b. */
 function pwSupplier(\App\Models\Business $b, string $name = 'Besan Traders', string $opening = '0.00'): \App\Models\Supplier
 {
-    return \App\Models\Supplier::on('pgsql_migrate')->create([
+    return asTenant($b->id, fn () => \App\Models\Supplier::create([
         'business_id' => $b->id,
         'uuid' => (string) \Illuminate\Support\Str::uuid(),
         'name' => $name,
         'opening_balance' => $opening,
-    ]);
+    ]));
 }
 
-/** A kg-denominated raw material seeded on the migration connection. */
+/** A kg-denominated raw material belonging to $b. */
 function pwMaterial(\App\Models\Business $b, string $name = 'Besan'): \App\Models\RawMaterial
 {
-    return \App\Models\RawMaterial::on('pgsql_migrate')->create([
+    return asTenant($b->id, fn () => \App\Models\RawMaterial::create([
         'business_id' => $b->id,
         'uuid' => (string) \Illuminate\Support\Str::uuid(),
         'name' => $name,
         'unit' => 'kg',
         'reorder_level' => '0.000',
-    ]);
+    ]));
 }
 
 /** A pending manual/UPI payment lodged (out-of-band) for a business. */
 function pendingPayment(string $businessId, string $plan = 'pro'): \App\Models\SubscriptionPayment
 {
-    return \App\Models\SubscriptionPayment::on('pgsql_migrate')->create([
+    return asTenant($businessId, fn () => \App\Models\SubscriptionPayment::create([
         'business_id' => $businessId,
         'uuid' => (string) \Illuminate\Support\Str::uuid(),
         'plan' => $plan,
@@ -171,7 +234,7 @@ function pendingPayment(string $businessId, string $plan = 'pro'): \App\Models\S
         'mode' => 'upi',
         'period_months' => 1,
         'status' => 'pending',
-    ]);
+    ]));
 }
 
 /*
@@ -186,42 +249,44 @@ function pendingPayment(string $businessId, string $plan = 'pro'): \App\Models\S
 /** A product with one pack of $weightKg, carrying the owner's estimate. */
 function cogsProduct(\App\Models\Business $b, string $name, string $weightKg, ?string $estimate): array
 {
-    $product = \App\Models\Product::on('pgsql_migrate')->create([
-        'business_id' => $b->id, 'name_hi' => $name, 'name_en' => $name,
-    ]);
-    // Pack sizes are shared across a tenant's products (unique on business+label),
-    // so reuse rather than mint a duplicate when two products share a weight.
-    $size = \App\Models\PackSize::on('pgsql_migrate')->firstOrCreate(
-        ['business_id' => $b->id, 'label' => $weightKg . 'kg'],
-        ['weight_kg' => $weightKg],
-    );
-    $pack = \App\Models\ProductPack::on('pgsql_migrate')->create([
-        'business_id' => $b->id, 'product_id' => $product->id, 'pack_size_id' => $size->id,
-        'default_sell_price' => '100.00', 'default_cost_price' => $estimate,
-    ]);
+    return asTenant($b->id, function () use ($b, $name, $weightKg, $estimate) {
+        $product = \App\Models\Product::create([
+            'business_id' => $b->id, 'name_hi' => $name, 'name_en' => $name,
+        ]);
+        // Pack sizes are shared across a tenant's products (unique on business+label),
+        // so reuse rather than mint a duplicate when two products share a weight.
+        $size = \App\Models\PackSize::firstOrCreate(
+            ['business_id' => $b->id, 'label' => $weightKg . 'kg'],
+            ['weight_kg' => $weightKg],
+        );
+        $pack = \App\Models\ProductPack::create([
+            'business_id' => $b->id, 'product_id' => $product->id, 'pack_size_id' => $size->id,
+            'default_sell_price' => '100.00', 'default_cost_price' => $estimate,
+        ]);
 
-    return [$product, $pack];
+        return [$product, $pack];
+    });
 }
 
 /** A completed batch: $outputKg produced from [materialId => qty consumed]. */
 function cogsBatch(\App\Models\Business $b, \App\Models\User $u, \App\Models\Product $p, string $outputKg, array $consumed): void
 {
-    $batch = new \App\Models\ProductionBatch([
-        'business_id' => $b->id, 'uuid' => (string) \Illuminate\Support\Str::uuid(),
-        'product_id' => $p->id, 'batch_date' => '2026-07-04', 'output_kg' => $outputKg,
-    ]);
-    $batch->setConnection('pgsql_migrate');
-    $batch->created_by = $u->id;
-    $batch->save();
-
-    foreach ($consumed as $materialId => $qty) {
-        $mc = new \App\Models\MaterialConsumption([
-            'business_id' => $b->id, 'production_batch_id' => $batch->id,
-            'raw_material_id' => $materialId, 'qty' => $qty,
+    asTenant($b->id, function () use ($b, $u, $p, $outputKg, $consumed) {
+        $batch = new \App\Models\ProductionBatch([
+            'business_id' => $b->id, 'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'product_id' => $p->id, 'batch_date' => '2026-07-04', 'output_kg' => $outputKg,
         ]);
-        $mc->setConnection('pgsql_migrate');
-        $mc->save();
-    }
+        $batch->created_by = $u->id;
+        $batch->save();
+
+        foreach ($consumed as $materialId => $qty) {
+            $mc = new \App\Models\MaterialConsumption([
+                'business_id' => $b->id, 'production_batch_id' => $batch->id,
+                'raw_material_id' => $materialId, 'qty' => $qty,
+            ]);
+            $mc->save();
+        }
+    });
 }
 
 /** Buy $qty kg of $material at $rate, so Phase 2a can price it. */
@@ -247,36 +312,38 @@ function cogsBuy(\App\Models\Business $b, \App\Models\User $u, \App\Models\RawMa
 
 function dashCustomer(\App\Models\Business $b, string $name, string $opening = '0.00', ?string $village = null): \App\Models\Customer
 {
-    return \App\Models\Customer::on('pgsql_migrate')->create([
+    return asTenant($b->id, fn () => \App\Models\Customer::create([
         'business_id' => $b->id,
         'uuid' => (string) \Illuminate\Support\Str::uuid(),
         'name' => $name,
         'village' => $village,
         'opening_balance' => $opening,
-    ]);
+    ]));
 }
 
 function dashSale(\App\Models\Customer $c, \App\Models\User $u, string $total, string $date): \App\Models\Sale
 {
-    $s = new \App\Models\Sale([
-        'business_id' => $c->business_id, 'uuid' => (string) \Illuminate\Support\Str::uuid(),
-        'customer_id' => $c->id, 'sale_date' => $date,
-    ]);
-    $s->setConnection('pgsql_migrate');
-    $s->created_by = $u->id;
-    $s->total = $total;
-    $s->save();
+    return asTenant($c->business_id, function () use ($c, $u, $total, $date) {
+        $s = new \App\Models\Sale([
+            'business_id' => $c->business_id, 'uuid' => (string) \Illuminate\Support\Str::uuid(),
+            'customer_id' => $c->id, 'sale_date' => $date,
+        ]);
+        $s->created_by = $u->id;
+        $s->total = $total;
+        $s->save();
 
-    return $s;
+        return $s;
+    });
 }
 
 function saleLine(App\Models\Sale $s, App\Models\ProductPack $pack, int $qty, string $rate): void
 {
-    $line = new App\Models\SaleLine([
-        'business_id' => $s->business_id, 'sale_id' => $s->id,
-        'product_pack_id' => $pack->id, 'qty' => $qty, 'rate' => $rate,
-    ]);
-    $line->setConnection('pgsql_migrate');
-    $line->line_total = bcmul($rate, (string) $qty, 2);
-    $line->save();
+    asTenant($s->business_id, function () use ($s, $pack, $qty, $rate) {
+        $line = new App\Models\SaleLine([
+            'business_id' => $s->business_id, 'sale_id' => $s->id,
+            'product_pack_id' => $pack->id, 'qty' => $qty, 'rate' => $rate,
+        ]);
+        $line->line_total = bcmul($rate, (string) $qty, 2);
+        $line->save();
+    });
 }

@@ -21,7 +21,7 @@ use Throwable;
  * unique constraints turn a re-import into an in-place update rather than a
  * duplicate — no schema change, no upsert clause.
  *
- * Tenant context is owned here (not by the caller): SET LOCAL app.current_tenant
+ * Tenant context is owned here (not by the caller): the tenant binding
  * only takes effect inside a transaction, and the app-level BelongsToTenant scope
  * reads app('tenant.id') — so each import call opens one transaction, switches
  * both layers in, then commits (or, on dry-run, rolls back). This mirrors the

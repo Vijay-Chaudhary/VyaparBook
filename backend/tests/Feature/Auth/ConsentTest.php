@@ -24,7 +24,7 @@ $otpSignup = function (string $phone, array $extra = []) {
 it('records consent at email signup with the policy version and evidence', function () use ($register) {
     $register()->assertCreated();
 
-    $consent = Consent::on('pgsql_migrate')->first();
+    $consent = Consent::first();
 
     expect($consent)->not->toBeNull();
     expect($consent->action)->toBe(Consent::GRANTED)
@@ -38,8 +38,8 @@ it('refuses to create an account without consent', function () use ($register) {
     $register(['consent' => null])->assertStatus(422)->assertJsonValidationErrors('consent');
 
     // Nothing was created — no account, no consent record.
-    expect(User::on('pgsql_migrate')->count())->toBe(0);
-    expect(Consent::on('pgsql_migrate')->count())->toBe(0);
+    expect(User::count())->toBe(0);
+    expect(Consent::count())->toBe(0);
 });
 
 it('refuses an omitted consent field rather than defaulting it', function () use ($register) {
@@ -58,8 +58,8 @@ it('refuses an omitted consent field rather than defaulting it', function () use
 it('records consent at otp signup', function () use ($otpSignup) {
     $otpSignup('9876500001', ['consent' => true])->assertOk();
 
-    expect(Consent::on('pgsql_migrate')->count())->toBe(1);
-    expect(Consent::on('pgsql_migrate')->first()->action)->toBe(Consent::GRANTED);
+    expect(Consent::count())->toBe(1);
+    expect(Consent::first()->action)->toBe(Consent::GRANTED);
 });
 
 it('refuses otp signup without consent, without consuming the code', function () use ($otpSignup) {
@@ -69,7 +69,7 @@ it('refuses otp signup without consent, without consuming the code', function ()
     test()->postJson('/api/v1/auth/otp/verify', ['phone' => $phone, 'code' => $code])
         ->assertStatus(422)->assertJsonValidationErrors('consent');
 
-    expect(User::on('pgsql_migrate')->where('phone', $phone)->exists())->toBeFalse();
+    expect(User::where('phone', $phone)->exists())->toBeFalse();
 
     // The code must still work: a validation failure should not cost the user
     // their OTP and force them to request another.
@@ -85,12 +85,12 @@ it('does not re-prompt a returning user at otp login', function () use ($otpSign
     $otpSignup($phone)->assertOk();
 
     // And no second consent record was written.
-    expect(Consent::on('pgsql_migrate')->count())->toBe(1);
+    expect(Consent::count())->toBe(1);
 });
 
 it('reports current consent and history to the person', function () use ($register) {
     $register()->assertCreated();
-    $user = User::on('pgsql_migrate')->first();
+    $user = User::first();
     $token = (new TokenService())->issue($user);
 
     test()->withHeader('Authorization', "Bearer {$token}")
@@ -104,7 +104,7 @@ it('reports current consent and history to the person', function () use ($regist
 
 it('lets the person withdraw consent, and records it without deleting data', function () use ($register) {
     $register()->assertCreated();
-    $user = User::on('pgsql_migrate')->first();
+    $user = User::first();
     $token = (new TokenService())->issue($user);
 
     test()->withHeader('Authorization', "Bearer {$token}")
@@ -112,20 +112,20 @@ it('lets the person withdraw consent, and records it without deleting data', fun
         ->assertOk()
         ->assertJsonPath('consented', false);
 
-    expect(Consent::on('pgsql_migrate')->count())->toBe(2);
+    expect(Consent::count())->toBe(2);
 
     // Withdrawal is recorded, never a deletion of the prior grant: the ledger
     // must still show that consent WAS given, and when.
-    $actions = Consent::on('pgsql_migrate')->orderBy('created_at')->pluck('action')->all();
+    $actions = Consent::orderBy('created_at')->pluck('action')->all();
     expect($actions)->toBe([Consent::GRANTED, Consent::WITHDRAWN]);
 
     // The account and its data survive — erasure is a separate operator action.
-    expect(User::on('pgsql_migrate')->find($user->id))->not->toBeNull();
+    expect(User::find($user->id))->not->toBeNull();
 });
 
 it('refuses to withdraw twice', function () use ($register) {
     $register()->assertCreated();
-    $user = User::on('pgsql_migrate')->first();
+    $user = User::first();
     $token = (new TokenService())->issue($user);
 
     $withdraw = fn () => test()->withHeader('Authorization', "Bearer {$token}")
@@ -134,7 +134,7 @@ it('refuses to withdraw twice', function () use ($register) {
     $withdraw()->assertOk();
     $withdraw()->assertStatus(409);
 
-    expect(Consent::on('pgsql_migrate')->count())->toBe(2);
+    expect(Consent::count())->toBe(2);
 });
 
 /**
@@ -143,7 +143,7 @@ it('refuses to withdraw twice', function () use ($register) {
  */
 it('treats consent to a superseded policy version as stale', function () use ($register) {
     $register()->assertCreated();
-    $user = User::on('pgsql_migrate')->first();
+    $user = User::first();
 
     expect(app(ConsentService::class)->hasCurrentConsent($user))->toBeTrue();
 
@@ -154,7 +154,7 @@ it('treats consent to a superseded policy version as stale', function () use ($r
 
 it('is append-only: consent records cannot be edited or deleted', function () use ($register) {
     $register()->assertCreated();
-    $consent = Consent::on('pgsql_migrate')->first();
+    $consent = Consent::first();
 
     expect(fn () => $consent->update(['action' => Consent::WITHDRAWN]))
         ->toThrow(LogicException::class);

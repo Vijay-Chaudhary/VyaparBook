@@ -18,10 +18,11 @@ class KhataService
      */
     public function outstandingFor(Customer $customer): string
     {
-        // ::text so Postgres hands back an exact decimal string, never a PHP float
-        // that could already have drifted before bc math sees it.
-        $sales = (string) $customer->sales()->selectRaw('coalesce(sum(total), 0)::text as agg')->value('agg');
-        $paid = (string) $customer->payments()->selectRaw('coalesce(sum(amount), 0)::text as agg')->value('agg');
+        // CAST(... AS CHAR) so the sums come back as exact decimal strings,
+        // never PHP floats that could already have drifted before bcmath sees
+        // them.
+        $sales = (string) $customer->sales()->selectRaw('CAST(coalesce(sum(total), 0) AS CHAR) as agg')->value('agg');
+        $paid = (string) $customer->payments()->selectRaw('CAST(coalesce(sum(amount), 0) AS CHAR) as agg')->value('agg');
 
         $balance = bcadd((string) $customer->opening_balance, $sales, 2);
 

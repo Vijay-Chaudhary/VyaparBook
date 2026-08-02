@@ -14,12 +14,12 @@ function enfTenant(string $status, string $plan = 'free'): array
 {
     $business = Business::factory()->create();
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => 'owner',
     ]);
-    Subscription::on('pgsql_migrate')->create([
+    Subscription::create([
         'business_id' => $business->id,
         'plan' => $plan,
         'status' => $status,
@@ -32,7 +32,7 @@ function enfTenant(string $status, string $plan = 'free'): array
 function enfSeedCustomers(Business $b, int $n, ?string $uuid = null): void
 {
     for ($i = 0; $i < $n; $i++) {
-        Customer::on('pgsql_migrate')->create([
+        Customer::create([
             'business_id' => $b->id,
             'uuid' => (string) Str::uuid(),
             'name' => "Seed{$i}",
@@ -40,13 +40,13 @@ function enfSeedCustomers(Business $b, int $n, ?string $uuid = null): void
         ]);
     }
     if ($uuid !== null) {
-        Customer::on('pgsql_migrate')->create([
+        Customer::create([
             'business_id' => $b->id, 'uuid' => $uuid, 'name' => 'Replayable', 'opening_balance' => '0.00',
         ]);
     }
 }
 
-$count = fn (Business $b) => Customer::on('pgsql_migrate')->withoutGlobalScopes()->where('business_id', $b->id)->count();
+$count = fn (Business $b) => Customer::withoutGlobalScopes()->where('business_id', $b->id)->count();
 
 it('soft-blocks the 51st customer on a lapsed free plan', function () use ($count) {
     [$business, $token] = enfTenant('past_due');

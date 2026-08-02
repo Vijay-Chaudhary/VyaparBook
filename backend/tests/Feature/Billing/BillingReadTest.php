@@ -15,12 +15,12 @@ function billingTenant(string $status = 'trialing'): array
 {
     $business = Business::factory()->create();
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => 'owner',
     ]);
-    Subscription::on('pgsql_migrate')->create([
+    Subscription::create([
         'business_id' => $business->id,
         'plan' => 'free',
         'status' => $status,
@@ -32,7 +32,7 @@ function billingTenant(string $status = 'trialing'): array
 
 function seedCustomer(Business $b): void
 {
-    Customer::on('pgsql_migrate')->create([
+    Customer::create([
         'business_id' => $b->id,
         'uuid' => (string) Str::uuid(),
         'name' => 'C' . Str::random(4),
@@ -61,7 +61,7 @@ it('never shows a neighbour\'s payments', function () {
     [$business, $token] = billingTenant();
 
     $neighbour = Business::factory()->create();
-    SubscriptionPayment::on('pgsql_migrate')->create([
+    SubscriptionPayment::create([
         'business_id' => $neighbour->id,
         'uuid' => (string) Str::uuid(),
         'plan' => 'pro', 'amount' => '499.00', 'gst_amount' => '89.82',

@@ -16,7 +16,7 @@ use Illuminate\Http\Request;
  * subscription. Suspending drops the tenant into read_only (dunning) — domain
  * writes soft-block with a 402 while reads flow; reactivating lifts it.
  *
- * Both writes pin the target tenant (PlatformTenantContext) so RLS confines the
+ * Both writes pin the target tenant (PlatformTenantContext) so the scope confines the
  * mutation, and both are recorded in the platform audit trail.
  */
 class SubscriptionController extends Controller
@@ -40,7 +40,7 @@ class SubscriptionController extends Controller
     }
 
     /**
-     * Shared shell: load the tenant's subscription pinned under RLS, apply the
+     * Shared shell: load the tenant's subscription pinned to that tenant, apply the
      * transition, and audit only a real status change (a no-op replay leaves no
      * second trail entry).
      *
@@ -52,7 +52,7 @@ class SubscriptionController extends Controller
         $adminId = (int) auth()->id();
 
         $result = PlatformTenantContext::actAs($id, $adminId, function () use ($id, $apply, $action, $metadata) {
-            // Pinned to $id: a missing or cross-tenant tenant is invisible under RLS.
+            // Pinned to $id: a missing or cross-tenant tenant is invisible under the tenant scope.
             $sub = Subscription::where('business_id', $id)->first();
 
             if ($sub === null) {

@@ -21,22 +21,22 @@ function orderSetup(string $role = 'salesman'): array
 {
     $business = Business::factory()->create();
     $user = User::factory()->create();
-    Membership::on('pgsql_migrate')->create([
+    Membership::create([
         'user_id' => $user->id, 'business_id' => $business->id, 'role' => $role,
     ]);
 
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Ram Traders', 'opening_balance' => '0.00',
     ]);
 
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
-    $size = PackSize::on('pgsql_migrate')->create([
+    $size = PackSize::create([
         'business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
-    $pack = ProductPack::on('pgsql_migrate')->create([
+    $pack = ProductPack::create([
         'business_id' => $business->id, 'product_id' => $product->id,
         'pack_size_id' => $size->id, 'default_sell_price' => '90.00',
         'default_cost_price' => '70.00',
@@ -90,7 +90,7 @@ it('does not move the khata — an order is not money owed', function () {
 
     // The entire point of the design: nothing is owed until goods arrive.
     expect($outstanding)->toBe('0.00');
-    expect(DB::connection('pgsql_migrate')->table('sales')->where('business_id', $b->id)->count())->toBe(0);
+    expect(DB::table('sales')->where('business_id', $b->id)->count())->toBe(0);
 });
 
 it('is idempotent by uuid, so a replayed push creates one order', function () {
@@ -101,7 +101,7 @@ it('is idempotent by uuid, so a replayed push creates one order', function () {
     [$order, $created] = inOrderTenant($b, $u, fn () => app(OrderWriter::class)->createOrder($payload));
 
     expect($created)->toBeFalse();
-    expect(DB::connection('pgsql_migrate')->table('orders')->where('business_id', $b->id)->count())->toBe(1);
+    expect(DB::table('orders')->where('business_id', $b->id)->count())->toBe(1);
     expect($order->id)->not->toBeNull();
 });
 
@@ -118,15 +118,16 @@ it('takes an order below cost, exactly as a sale now does', function () {
     )[0]);
 
     // 60.00 is under the 70.00 cost floor orderSetup builds.
-    expect((string) DB::connection('pgsql_migrate')->table('order_lines')
-        ->where('order_id', $order->id)->value('rate'))->toBe('60.00');
+    expect((string) DB::table('order_lines')
+        ->where('business_id', $b->id)->where('order_id', $order->id)
+        ->value('rate'))->toBe('60.00');
     expect((string) $order->total)->toBe('120.00');
 });
 
 it('refuses another tenant\'s customer', function () {
     [$b, $u, , $pack] = orderSetup();
     [$other] = orderSetup();
-    $theirCustomer = Customer::on('pgsql_migrate')->create([
+    $theirCustomer = Customer::create([
         'business_id' => $other->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Not Yours', 'opening_balance' => '0.00',
     ]);
@@ -152,23 +153,20 @@ function orderAt(Business $b, User $u, Customer $c, ProductPack $pack, string $s
 
     // Acceptance is the online step and has no writer method — the Blade screen
     // does it. Set it directly so the field transitions can be exercised.
-    DB::connection('pgsql_migrate')->table('orders')->where('id', $order->id)
+    DB::table('orders')->where('id', $order->id)
         ->update(['status' => OrderStatus::ACCEPTED, 'accepted_by' => $u->id, 'accepted_at' => now()]);
 
-    // NOTE (deviation from the plan): TenantContext::switchTo uses SET LOCAL,
-    // scoped to inOrderTenant's own transaction; this suite (RefreshesTenantDatabase)
-    // deliberately does not wrap tests in an outer transaction, so once that
-    // transaction commits the tenant GUC is gone and $order->fresh() would run
-    // with no tenant set — RLS (FORCE ROW LEVEL SECURITY) then hides the row and
-    // fresh() returns null. Read post-transaction state via the pgsql_migrate
-    // superuser connection instead, exactly as PurchaseWriterTest does.
+    // The tenant binding is scoped to inOrderTenant's own closure, so by the
+    // time we read back the row there is no tenant bound and ->fresh() would
+    // run unscoped. Re-query explicitly instead, exactly as PurchaseWriterTest
+    // does.
     if ($status === OrderStatus::ACCEPTED) {
-        return Order::on('pgsql_migrate')->find($order->id);
+        return Order::find($order->id);
     }
 
     inOrderTenant($b, $u, fn () => app(OrderWriter::class)->pack($order->uuid));
 
-    return Order::on('pgsql_migrate')->find($order->id);
+    return Order::find($order->id);
 }
 
 it('packs an accepted order', function () {
@@ -198,9 +196,9 @@ it('refuses to pack an order the owner has not accepted yet', function () {
     $call = fn () => inOrderTenant($b, $u, fn () => app(OrderWriter::class)->pack($order->uuid));
 
     expect($call)->toThrow(Illuminate\Validation\ValidationException::class);
-    // Same reason as orderAt()'s ->fresh() swap above: read via pgsql_migrate,
-    // not ->fresh(), since we're outside the tenant-pinned transaction here.
-    expect(Order::on('pgsql_migrate')->find($order->id)->status)->toBe(OrderStatus::PENDING);
+    // Same reason as orderAt()'s ->fresh() swap above: re-query rather than
+    // ->fresh(), since we're outside the tenant-pinned closure here.
+    expect(Order::find($order->id)->status)->toBe(OrderStatus::PENDING);
 });
 
 it('cancels an order at any open stage, keeping the reason', function () {
@@ -244,7 +242,7 @@ it('creates the sale on delivery, dated the delivery day and credited to the del
     [$delivered] = inOrderTenant($b, $u, fn () => app(OrderWriter::class)->deliver($order->uuid));
     Illuminate\Support\Carbon::setTestNow();
 
-    $sale = DB::connection('pgsql_migrate')->table('sales')->where('business_id', $b->id)->sole();
+    $sale = DB::table('sales')->where('business_id', $b->id)->sole();
 
     expect($delivered->status)->toBe(OrderStatus::DELIVERED);
     expect($delivered->sale_id)->toBe($sale->id);
@@ -278,20 +276,20 @@ it('never creates a second sale when delivery is replayed', function () {
     [, $changed] = inOrderTenant($b, $u, fn () => app(OrderWriter::class)->deliver($order->uuid));
 
     expect($changed)->toBeFalse();
-    expect(DB::connection('pgsql_migrate')->table('sales')->where('business_id', $b->id)->count())->toBe(1);
+    expect(DB::table('sales')->where('business_id', $b->id)->count())->toBe(1);
 });
 
 it('refuses to deliver an order the owner rejected while the phone was offline', function () {
     [$b, $u, $c, $pack] = orderSetup();
     $order = orderAt($b, $u, $c, $pack, OrderStatus::PENDING);
-    DB::connection('pgsql_migrate')->table('orders')->where('id', $order->id)
+    DB::table('orders')->where('id', $order->id)
         ->update(['status' => OrderStatus::REJECTED]);
 
     $call = fn () => inOrderTenant($b, $u, fn () => app(OrderWriter::class)->deliver($order->uuid));
 
     expect($call)->toThrow(Illuminate\Validation\ValidationException::class);
     // No sale: the owner declined it, and the field does not get to overrule that.
-    expect(DB::connection('pgsql_migrate')->table('sales')->where('business_id', $b->id)->count())->toBe(0);
+    expect(DB::table('sales')->where('business_id', $b->id)->count())->toBe(0);
 });
 
 it('refuses to deliver an order that was never packed', function () {
@@ -310,8 +308,8 @@ describe('what the salesman ordered', function () {
         $order = inOrderTenant($b, $u, fn () => app(OrderWriter::class)
             ->createOrder(orderPayload($c, $pack))[0]);
 
-        $line = DB::connection('pgsql_migrate')->table('order_lines')
-            ->where('order_id', $order->id)->first();
+        $line = DB::table('order_lines')
+            ->where('business_id', $b->id)->where('order_id', $order->id)->first();
 
         expect($line->ordered_qty)->toBe(2);
         expect((string) $line->ordered_rate)->toBe('85.00');
@@ -326,8 +324,9 @@ describe('what the salesman ordered', function () {
             orderPayload($c, $pack, ['lines' => [['product_pack_id' => $pack->id, 'qty' => 2]]])
         )[0]);
 
-        expect((string) DB::connection('pgsql_migrate')->table('order_lines')
-            ->where('order_id', $order->id)->value('ordered_rate'))->toBe('90.00');
+        expect((string) DB::table('order_lines')
+            ->where('business_id', $b->id)->where('order_id', $order->id)
+            ->value('ordered_rate'))->toBe('90.00');
     });
 
     it('ignores a phone claiming it ordered something else', function () {
@@ -342,8 +341,8 @@ describe('what the salesman ordered', function () {
             ]]])
         )[0]);
 
-        $line = DB::connection('pgsql_migrate')->table('order_lines')
-            ->where('order_id', $order->id)->first();
+        $line = DB::table('order_lines')
+            ->where('business_id', $b->id)->where('order_id', $order->id)->first();
 
         expect($line->ordered_qty)->toBe(2);
         expect((string) $line->ordered_rate)->toBe('85.00');

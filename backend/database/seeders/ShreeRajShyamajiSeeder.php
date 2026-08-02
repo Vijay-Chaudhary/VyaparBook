@@ -19,6 +19,7 @@ use App\Models\StockMovement;
 use App\Models\Supplier;
 use App\Models\User;
 use App\Services\CatalogService;
+use App\Support\Tenancy;
 use Illuminate\Database\Seeder;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Str;
@@ -31,12 +32,11 @@ use Illuminate\Support\Str;
  * holds the insert logic and nothing else, so a re-export from the owner's
  * spreadsheet replaces a data file rather than editing code.
  *
- * Every write goes through the privileged `pgsql_migrate` connection. A seeder
- * runs outside a request, so no SetTenantContext transaction has set
- * `app.current_tenant`, and the RLS WITH CHECK predicate would reject every
- * tenant-owned insert on the app connection. The app-layer BelongsToTenant
- * scope is a no-op here because `app('tenant.id')` resolves to null, so the
- * explicit business_id values below pass through untouched.
+ * A seeder runs outside a request, so nothing has bound a tenant and the
+ * fail-closed BelongsToTenant scope would refuse every query. run() therefore
+ * executes inside Tenancy::withoutTenant() — seeders are one of the sanctioned
+ * cross-tenant paths listed on that class — and the explicit business_id values
+ * below stand on their own.
  *
  * Idempotent: masters use updateOrCreate on natural keys, and a business whose
  * customers already exist is treated as fully seeded, so re-running never
@@ -44,8 +44,6 @@ use Illuminate\Support\Str;
  */
 class ShreeRajShyamajiSeeder extends Seeder
 {
-    private const CONNECTION = 'pgsql_migrate';
-
     private const BUSINESS = 'Shree Raj Shyama Ji Namkeen';
 
     private string $businessId;
@@ -69,32 +67,36 @@ class ShreeRajShyamajiSeeder extends Seeder
 
     public function run(): void
     {
-        $business = Business::on(self::CONNECTION)->updateOrCreate(
-            ['name' => self::BUSINESS],
-            ['city' => 'Hata', 'default_language' => 'hi', 'plan' => 'trial'],
-        );
+        // Wrapped here as well as in DatabaseSeeder, because this seeder is
+        // also called on its own (tests, `db:seed --class`).
+        Tenancy::withoutTenant(function () {
+            $business = Business::updateOrCreate(
+                ['name' => self::BUSINESS],
+                ['city' => 'Hata', 'default_language' => 'hi', 'plan' => 'trial'],
+            );
 
-        $this->businessId = $business->id;
-        $this->ownerId = $this->owner($business)->id;
+            $this->businessId = $business->id;
+            $this->ownerId = $this->owner($business)->id;
 
-        $this->catalog();
-        $this->masters();
-        $this->purchases();
-        $this->sales();
-        $this->payments();
-        $this->production();
+            $this->catalog();
+            $this->masters();
+            $this->purchases();
+            $this->sales();
+            $this->payments();
+            $this->production();
+        });
 
         $this->command->info(self::BUSINESS.': seeded catalog and masters.');
     }
 
     private function owner(Business $business): User
     {
-        $user = User::on(self::CONNECTION)->updateOrCreate(
+        $user = User::updateOrCreate(
             ['email' => 'owner@vyaparbook.test'],
             ['name' => 'Shree Raj Shyama Ji', 'phone' => '9876500001', 'password' => Hash::make('password123')],
         );
 
-        Membership::on(self::CONNECTION)->updateOrCreate(
+        Membership::updateOrCreate(
             ['user_id' => $user->id, 'business_id' => $business->id],
             ['role' => 'owner'],
         );
@@ -114,7 +116,7 @@ class ShreeRajShyamajiSeeder extends Seeder
         $catalog = app(CatalogService::class);
 
         foreach ($template['products'] as $key => $attrs) {
-            $this->products[$key] = Product::on(self::CONNECTION)->updateOrCreate(
+            $this->products[$key] = Product::updateOrCreate(
                 ['business_id' => $this->businessId, 'name_en' => $attrs['name_en']],
                 $attrs,
             )->id;
@@ -122,17 +124,17 @@ class ShreeRajShyamajiSeeder extends Seeder
 
         $sizes = [];
         foreach ($template['pack_sizes'] as $key => $attrs) {
-            $sizes[$key] = PackSize::on(self::CONNECTION)->updateOrCreate(
+            $sizes[$key] = PackSize::updateOrCreate(
                 ['business_id' => $this->businessId, 'label' => $attrs['label']],
                 $attrs,
             );
         }
 
         foreach ($template['product_packs'] as $row) {
-            $product = Product::on(self::CONNECTION)->find($this->products[$row['product']]);
+            $product = Product::find($this->products[$row['product']]);
             $size = $sizes[$row['pack']];
 
-            $pack = ProductPack::on(self::CONNECTION)->updateOrCreate(
+            $pack = ProductPack::updateOrCreate(
                 [
                     'business_id' => $this->businessId,
                     'product_id' => $product->id,
@@ -151,7 +153,7 @@ class ShreeRajShyamajiSeeder extends Seeder
     private function masters(): void
     {
         foreach ($this->data('customers') as [$name, $village]) {
-            $row = Customer::on(self::CONNECTION)->updateOrCreate(
+            $row = Customer::updateOrCreate(
                 ['business_id' => $this->businessId, 'name' => $name, 'village' => $village],
                 ['uuid' => (string) Str::uuid(), 'opening_balance' => '0.00'],
             );
@@ -161,14 +163,14 @@ class ShreeRajShyamajiSeeder extends Seeder
         }
 
         foreach ($this->data('suppliers') as $name) {
-            $this->suppliers[$name] = Supplier::on(self::CONNECTION)->updateOrCreate(
+            $this->suppliers[$name] = Supplier::updateOrCreate(
                 ['business_id' => $this->businessId, 'name' => $name],
                 ['uuid' => (string) Str::uuid(), 'opening_balance' => '0.00'],
             )->id;
         }
 
         foreach ($this->data('materials') as [$name, $unit, $reorder]) {
-            $this->materials[$name] = RawMaterial::on(self::CONNECTION)->updateOrCreate(
+            $this->materials[$name] = RawMaterial::updateOrCreate(
                 ['business_id' => $this->businessId, 'name' => $name],
                 ['uuid' => (string) Str::uuid(), 'unit' => $unit, 'reorder_level' => $reorder],
             )->id;
@@ -182,7 +184,7 @@ class ShreeRajShyamajiSeeder extends Seeder
      */
     private function purchases(): void
     {
-        if (Purchase::on(self::CONNECTION)->where('business_id', $this->businessId)->exists()) {
+        if (Purchase::where('business_id', $this->businessId)->exists()) {
             return;
         }
 
@@ -199,7 +201,6 @@ class ShreeRajShyamajiSeeder extends Seeder
                 'unit_cost' => $unitCost,
                 'total' => bcmul($qty, $unitCost, 2),
             ]);
-            $purchase->setConnection(self::CONNECTION);
             $purchase->created_by = $this->ownerId;
             $purchase->save();
 
@@ -212,7 +213,6 @@ class ShreeRajShyamajiSeeder extends Seeder
                 'qty' => $qty,
                 'purchase_id' => $purchase->id,
             ]);
-            $movement->setConnection(self::CONNECTION);
             $movement->created_by = $this->ownerId;
             $movement->save();
         }
@@ -228,7 +228,7 @@ class ShreeRajShyamajiSeeder extends Seeder
      */
     private function sales(): void
     {
-        if (Sale::on(self::CONNECTION)->where('business_id', $this->businessId)->exists()) {
+        if (Sale::where('business_id', $this->businessId)->exists()) {
             return;
         }
 
@@ -247,7 +247,6 @@ class ShreeRajShyamajiSeeder extends Seeder
                 'customer_id' => $this->customers[$name.'|'.$village],
                 'sale_date' => $date,
             ]);
-            $sale->setConnection(self::CONNECTION);
             $sale->created_by = $this->ownerId;
             $sale->total = '0.00';
             $sale->save();
@@ -267,7 +266,6 @@ class ShreeRajShyamajiSeeder extends Seeder
                     'qty' => $qty,
                     'rate' => $rate,
                 ]);
-                $line->setConnection(self::CONNECTION);
                 $line->line_total = $lineTotal;
                 $line->save();
             }
@@ -280,7 +278,7 @@ class ShreeRajShyamajiSeeder extends Seeder
     /** Mode is 'cash' throughout: the owner's ledger records amount and date, not tender. */
     private function payments(): void
     {
-        if (Payment::on(self::CONNECTION)->where('business_id', $this->businessId)->exists()) {
+        if (Payment::where('business_id', $this->businessId)->exists()) {
             return;
         }
 
@@ -293,7 +291,6 @@ class ShreeRajShyamajiSeeder extends Seeder
                 'amount' => bcadd($amount, '0', 2),
                 'mode' => 'cash',
             ]);
-            $payment->setConnection(self::CONNECTION);
             $payment->created_by = $this->ownerId;
             $payment->save();
         }
@@ -309,7 +306,7 @@ class ShreeRajShyamajiSeeder extends Seeder
      */
     private function production(): void
     {
-        if (ProductionBatch::on(self::CONNECTION)->where('business_id', $this->businessId)->exists()) {
+        if (ProductionBatch::where('business_id', $this->businessId)->exists()) {
             return;
         }
 
@@ -321,12 +318,11 @@ class ShreeRajShyamajiSeeder extends Seeder
                 'batch_date' => $date,
                 'output_kg' => $outputKg,
             ]);
-            $batch->setConnection(self::CONNECTION);
             $batch->created_by = $this->ownerId;
             $batch->save();
 
             foreach ($consumptions as [$material, $qty]) {
-                MaterialConsumption::on(self::CONNECTION)->create([
+                MaterialConsumption::create([
                     'business_id' => $this->businessId,
                     'production_batch_id' => $batch->id,
                     'raw_material_id' => $this->materials[$material],
@@ -343,7 +339,6 @@ class ShreeRajShyamajiSeeder extends Seeder
                     'qty' => bcmul($qty, '-1', 3),
                     'production_batch_id' => $batch->id,
                 ]);
-                $movement->setConnection(self::CONNECTION);
                 $movement->created_by = $this->ownerId;
                 $movement->save();
             }

@@ -5,8 +5,7 @@ use App\Import\TenantImporter;
 use App\Models\Business;
 use App\Models\Customer;
 
-$countFor = fn (Business $b) => Customer::on('pgsql_migrate')
-    ->withoutGlobalScopes()
+$countFor = fn (Business $b) => Customer::withoutGlobalScopes()
     ->where('business_id', $b->id)
     ->count();
 
@@ -24,7 +23,7 @@ it('imports valid customers with their opening balance', function () use ($valid
     expect($report->updated)->toBe(0);
     expect($countFor($business))->toBe(2);
 
-    $ram = Customer::on('pgsql_migrate')->withoutGlobalScopes()
+    $ram = Customer::withoutGlobalScopes()
         ->where('business_id', $business->id)->where('name', 'Ram Traders')->first();
     expect($ram->opening_balance)->toBe('250.00');
     expect($ram->village)->toBe('Bagru');

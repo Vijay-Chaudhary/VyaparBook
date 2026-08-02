@@ -7,9 +7,9 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 
 it('has a uuid primary key and round-trips trial_ends_at as a datetime', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
 
-    $sub = Subscription::on('pgsql_migrate')->create([
+    $sub = Subscription::create([
         'business_id' => $business->id,
         'plan' => 'free',
         'status' => 'trialing',
@@ -18,21 +18,21 @@ it('has a uuid primary key and round-trips trial_ends_at as a datetime', functio
     ]);
 
     expect($sub->id)->toBeString()->toHaveLength(36);
-    expect($sub->fresh()->trial_ends_at)->toBeInstanceOf(Carbon::class);
+    expect(reread($sub)->trial_ends_at)->toBeInstanceOf(Carbon::class);
     expect($sub->version)->toBe(1);
 });
 
 it('allows only one subscription per business', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
 
-    Subscription::on('pgsql_migrate')->create([
+    Subscription::create([
         'business_id' => $business->id,
         'plan' => 'free',
         'status' => 'trialing',
         'trial_ends_at' => now()->addDays(14),
     ]);
 
-    expect(fn () => Subscription::on('pgsql_migrate')->create([
+    expect(fn () => Subscription::create([
         'business_id' => $business->id,
         'plan' => 'pro',
         'status' => 'active',

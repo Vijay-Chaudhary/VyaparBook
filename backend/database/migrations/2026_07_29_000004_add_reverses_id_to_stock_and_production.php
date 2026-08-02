@@ -22,22 +22,22 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->table('stock_movements', function (Blueprint $table) {
+        Schema::table('stock_movements', function (Blueprint $table) {
             $table->foreignUuid('reverses_id')->nullable()->constrained('stock_movements');
         });
 
-        Schema::connection('pgsql_migrate')->table('production_batches', function (Blueprint $table) {
+        Schema::table('production_batches', function (Blueprint $table) {
             $table->foreignUuid('reverses_id')->nullable()->constrained('production_batches');
         });
     }
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->table('stock_movements', function (Blueprint $table) {
+        Schema::table('stock_movements', function (Blueprint $table) {
             $table->dropConstrainedForeignId('reverses_id');
         });
 
-        Schema::connection('pgsql_migrate')->table('production_batches', function (Blueprint $table) {
+        Schema::table('production_batches', function (Blueprint $table) {
             $table->dropConstrainedForeignId('reverses_id');
         });
     }

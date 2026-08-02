@@ -14,7 +14,7 @@ function queuedReminder(array $overrides = []): array
 {
     [$owner, $business] = pwOwner();
 
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Ramesh Kumar', 'village' => 'Rampur',
         'phone' => '9876543210', 'opening_balance' => '0.00',
@@ -24,7 +24,6 @@ function queuedReminder(array $overrides = []): array
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $customer->id, 'sale_date' => now()->subDays(60)->format('Y-m-d'),
     ]);
-    $sale->setConnection('pgsql_migrate');
     $sale->total = '2500.00';
     $sale->created_by = $owner->id;
     $sale->save();
@@ -37,16 +36,22 @@ function queuedReminder(array $overrides = []): array
         'locale' => 'en',
         'phone_e164' => '919876543210',
     ]);
-    $log->setConnection('pgsql_migrate');
     $log->created_by = $owner->id;
     $log->save();
 
     return [$business, $customer, $log];
 }
 
+/**
+ * Re-read a reminder under its OWN tenant.
+ *
+ * Binds explicitly rather than trusting whatever is ambient: the job binds a
+ * tenant while it runs, so a read after dispatch would work by luck, but a read
+ * before it (the "queued" assertion) has nothing bound at all.
+ */
 function freshLog(ReminderLog $log): ReminderLog
 {
-    return ReminderLog::on('pgsql_migrate')->findOrFail($log->id);
+    return asTenant($log->business_id, fn () => ReminderLog::findOrFail($log->id));
 }
 
 beforeEach(function () {

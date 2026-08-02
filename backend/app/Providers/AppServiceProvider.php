@@ -16,10 +16,39 @@ use InvalidArgumentException;
 class AppServiceProvider extends ServiceProvider
 {
     /**
+     * Drop every database connection this project does not run on.
+     *
+     * config/database.php defines only mysql and mysql_platform, but Laravel 11
+     * merges vendor/laravel/framework/config/database.php underneath it as a
+     * base (LoadConfiguration, which array_merges nested keys), so the
+     * framework's stock `pgsql`, `sqlsrv` and `mariadb` entries reappear in
+     * config('database.connections') however the app file is written.
+     *
+     * They are inert -- nothing selects them -- but this project deliberately
+     * runs on MySQL alone, and an inherited `pgsql` entry is exactly the kind of
+     * thing a stray DB::connection('pgsql') would find and half-work against.
+     * Removing them turns that into an immediate "Database connection [pgsql]
+     * not configured" instead.
+     */
+    private function forgetNonMysqlConnections(): void
+    {
+        $keep = ['mysql', 'mysql_platform'];
+
+        config([
+            'database.connections' => array_intersect_key(
+                config('database.connections', []),
+                array_flip($keep),
+            ),
+        ]);
+    }
+
+    /**
      * Register any application services.
      */
     public function register(): void
     {
+        $this->forgetNonMysqlConnections();
+
         // BelongsToTenant's global scope, RequireTenant and CatalogPolicy all read
         // the tenant through the container. Laravel resolves an unbound string key
         // by trying to construct it as a class, so app('tenant.id') outside a
@@ -63,7 +92,7 @@ class AppServiceProvider extends ServiceProvider
      * Per-tenant rate limits (PRD §13, §14) — noisy-neighbour containment.
      *
      * Keyed per TENANT rather than per user or per IP: one busy shop must not
-     * be able to spend every other shop's budget on the shared Postgres, and a
+     * be able to spend every other shop's budget on the shared database, and a
      * shop's six staff on six phones are one unit of load, not six.
      *
      * These run INSIDE the tenant.context group, so app('tenant.id') is already

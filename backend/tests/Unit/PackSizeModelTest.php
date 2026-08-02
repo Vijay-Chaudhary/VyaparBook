@@ -5,39 +5,39 @@ use App\Models\Business;
 use App\Models\PackSize;
 
 it('stores 100g as exactly 0.100 kg', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
 
-    $pack = PackSize::on('pgsql_migrate')->create([
+    $pack = PackSize::create([
         'business_id' => $business->id,
         'label' => '100g',
         'weight_kg' => '0.100',
     ]);
 
-    expect($pack->fresh()->weight_kg)->toBe('0.100');
+    expect(reread($pack)->weight_kg)->toBe('0.100');
 });
 
 it('defaults in_dropdown to true', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
 
-    $pack = PackSize::on('pgsql_migrate')->create([
+    $pack = PackSize::create([
         'business_id' => $business->id,
         'label' => '500g',
         'weight_kg' => '0.500',
     ]);
 
-    expect($pack->fresh()->in_dropdown)->toBeTrue();
+    expect(reread($pack)->in_dropdown)->toBeTrue();
 });
 
 it('rejects a duplicate label within the same business', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
 
-    PackSize::on('pgsql_migrate')->create([
+    PackSize::create([
         'business_id' => $business->id,
         'label' => '500g',
         'weight_kg' => '0.500',
     ]);
 
-    expect(fn () => PackSize::on('pgsql_migrate')->create([
+    expect(fn () => PackSize::create([
         'business_id' => $business->id,
         'label' => '500g',
         'weight_kg' => '0.500',
@@ -48,12 +48,14 @@ it('allows the same label in a different business', function () {
     $a = Business::factory()->create();
     $b = Business::factory()->create();
 
-    PackSize::on('pgsql_migrate')->create([
+    // Each write runs as its own shop, so the uniqueness this asserts is the
+    // per-business one and not an artefact of a single bound tenant.
+    asTenant($a->id, fn () => PackSize::create([
         'business_id' => $a->id, 'label' => '500g', 'weight_kg' => '0.500',
-    ]);
-    $second = PackSize::on('pgsql_migrate')->create([
+    ]));
+    $second = asTenant($b->id, fn () => PackSize::create([
         'business_id' => $b->id, 'label' => '500g', 'weight_kg' => '0.500',
-    ]);
+    ]));
 
     expect($second->id)->toBeString();
 });

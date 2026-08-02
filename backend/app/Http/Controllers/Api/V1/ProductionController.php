@@ -99,7 +99,7 @@ class ProductionController extends Controller
     }
 
     /**
-     * One batch with its material consumptions. findOrFail under RLS → a
+     * One batch with its material consumptions. findOrFail under the tenant scope → a
      * cross-tenant id 404s.
      */
     public function show(string $id)

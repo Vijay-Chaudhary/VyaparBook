@@ -17,12 +17,13 @@ use Throwable;
  * Deleting the row would break the FK or orphan the evidence — so the personal
  * data goes and a dated marker stays.
  *
- * Two independent layers confine every delete, per the project's isolation rule:
- * the statements run inside the tenant's RLS context AND each carries an
- * explicit business_id filter. That redundancy is load-bearing here, not
- * ceremonial — the memberships policy also matches on app.current_user_id, so a
- * DELETE issued with a user GUC set would reach that user's memberships in
- * OTHER businesses. TenantContext::switchTo deliberately sets only the tenant.
+ * Every delete carries an EXPLICIT business_id filter, and does not lean on the
+ * tenant scope to supply one. There used to be a second, database-level layer
+ * here; there is not any more, so the explicit filter is the only thing
+ * standing between an erasure and another shop's rows. It is load-bearing, not
+ * ceremonial — memberships in particular are reachable by user as well as by
+ * business, so a delete that scoped by neither would reach that user's
+ * memberships in OTHER businesses.
  */
 class TenantEraser
 {
@@ -68,6 +69,12 @@ class TenantEraser
         'subscriptions',
         'invites',
         'memberships',
+        // Standalone: a per-tenant counter nothing FKs into, so the position is
+        // free. Note this is the mirror of TenantExporter::NOT_EXPORTED — the
+        // counter is not the shop's records and so is not PORTABLE, but it is
+        // still a row keyed by their business_id, so erasure must take it.
+        // Erasing everything and exporting everything are different questions.
+        'sync_sequences',
     ];
 
     /**
@@ -107,8 +114,8 @@ class TenantEraser
             $deleted = [];
 
             foreach (self::DELETE_ORDER as $table) {
-                // RLS confines this already; the explicit filter is the second,
-                // independent layer (and the only one guarding memberships).
+                // A raw builder, so the tenant scope does not reach it: this
+                // filter is the only thing confining the delete.
                 $deleted[$table] = DB::table($table)->where('business_id', $businessId)->delete();
             }
 
@@ -144,9 +151,7 @@ class TenantEraser
      *
      * Counts MUST run on this same connection: the deletes are still inside an
      * open transaction, so any other connection would read the pre-delete
-     * snapshot and report every row as a survivor. RLS is not a problem here —
-     * it hides OTHER tenants' rows, never this tenant's, so a leftover row of
-     * the tenant being erased is exactly what it would still show.
+     * snapshot and report every row as a survivor.
      */
     private function verify(string $businessId): void
     {

@@ -31,10 +31,10 @@ class SyncController extends Controller
 {
     /**
      * Delta pull: everything in this tenant that changed since the client's
-     * cursor. Rows carry a globally monotonic sync_seq (HasSyncSequence), so
-     * "changed since" is simply sync_seq > since, ordered by sync_seq. RLS and
-     * BelongsToTenant guarantee only the caller's tenant appears even if a query
-     * were imperfect. Archived rows are included — an archive bumps sync_seq, so
+     * cursor. Rows carry a per-tenant monotonic sync_seq (HasSyncSequence), so
+     * "changed since" is simply sync_seq > since, ordered by sync_seq.
+     * BelongsToTenant guarantees only the caller's tenant appears; it is the
+     * only thing that does, so an imperfect query here is not caught twice. Archived rows are included — an archive bumps sync_seq, so
      * the client learns to hide the row.
      *
      * The response cursor is the max sync_seq returned, or `since` when nothing
@@ -56,15 +56,16 @@ class SyncController extends Controller
 
         // Stock & production is owner/admin only (PRD §7), reads included — so a
         // salesman's/accountant's pull must not stream those rows to their device.
-        // Defense in depth over RLS's tenant scope: the app layer withholds them
-        // by role. Non-managers get empty arrays; the response shape stays stable.
+        // A role restriction ON TOP of the tenant scope, not a substitute for
+        // it: these rows are the caller's own tenant's, withheld by role.
+        // Non-managers get empty arrays; the response shape stays stable.
         $canSeeStock = (new StockPolicy())->manage();
         $stockDelta = fn (string $model) => $canSeeStock ? $delta($model) : collect();
 
         // Beats are pure server data the phone only reads. A salesman gets only
         // the beats assigned to them — another salesman's route is not their
-        // business, and withholding it at the app layer is defense in depth over
-        // RLS's tenant scope, exactly as stock is withheld above.
+        // business, and withholding it by role sits on top of the tenant
+        // scope, exactly as stock is withheld above.
         $isManager = (new StockPolicy())->manage();
         $beats = $isManager
             ? $delta(Beat::class)
@@ -136,8 +137,8 @@ class SyncController extends Controller
      * an online and an offline create are the same write.
      *
      * Two guarantees per mutation:
-     *  - tenant_id must equal the session tenant. Belt-and-suspenders with RLS's
-     *    WITH CHECK: the app layer rejects a foreign tenant_id before the DB would.
+     *  - tenant_id must equal the session tenant. Nothing in the database
+     *    checks this any more, so this rejection is the whole guarantee.
      *  - the caller's role must permit the mutation type (PRD §7), same as REST.
      *
      * One bad mutation is reported, never fatal to the batch: each apply runs in
@@ -190,8 +191,9 @@ class SyncController extends Controller
                     'id' => $model->id,
                 ];
             } catch (ModelNotFoundException) {
-                // A referenced customer/pack the caller cannot see (RLS) or that
-                // does not exist. Report, do not fail the batch.
+                // A referenced customer/pack the caller cannot see (it belongs
+                // to another tenant) or that does not exist. Report, do not
+                // fail the batch.
                 $results[] = ['uuid' => $uuid, 'status' => 'rejected', 'reason' => 'not_found'];
             } catch (ValidationException) {
                 // A domain rule the writer enforces (e.g. a line below its cost

@@ -6,7 +6,7 @@ use Illuminate\Support\Str;
 
 it('returns a single tenant with billing, members and payments', function () {
     [$business] = seedTenantWithOwner('active', 'pro');
-    SubscriptionPayment::on('pgsql_migrate')->create([
+    SubscriptionPayment::create([
         'business_id' => $business->id,
         'uuid' => (string) Str::uuid(),
         'plan' => 'pro',

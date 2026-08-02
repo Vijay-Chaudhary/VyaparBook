@@ -33,7 +33,7 @@ class StockMovementController extends Controller
             return $blocked;
         }
 
-        // findOrFail under RLS: a cross-tenant movement is invisible → 404.
+        // findOrFail under the tenant scope: a cross-tenant movement is invisible → 404.
         $original = StockMovement::findOrFail($id);
 
         try {
@@ -90,7 +90,7 @@ class StockMovementController extends Controller
             return response()->json($existing, 200);
         }
 
-        // findOrFail under RLS: a cross-tenant material is invisible → 404.
+        // findOrFail under the tenant scope: a cross-tenant material is invisible → 404.
         $material = RawMaterial::findOrFail($data['raw_material_id']);
 
         // Derive the signed stored qty from kind: in → +, out → −, adjust → as

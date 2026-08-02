@@ -3,7 +3,6 @@
 
 use Illuminate\Database\Migrations\Migration;
 use Illuminate\Database\Schema\Blueprint;
-use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Schema;
 
 /**
@@ -21,7 +20,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->create('orders', function (Blueprint $table) {
+        Schema::create('orders', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('business_id')->constrained('businesses')->cascadeOnDelete();
             $table->uuid('uuid');
@@ -48,7 +47,7 @@ return new class extends Migration
             $table->index(['business_id', 'status']);     // the owner's pending list
         });
 
-        Schema::connection('pgsql_migrate')->create('order_lines', function (Blueprint $table) {
+        Schema::create('order_lines', function (Blueprint $table) {
             $table->uuid('id')->primary();
             $table->foreignUuid('business_id')->constrained('businesses')->cascadeOnDelete();
             $table->foreignUuid('order_id')->constrained('orders')->cascadeOnDelete();
@@ -65,21 +64,11 @@ return new class extends Migration
             $table->index(['business_id', 'order_id']);
             $table->index(['business_id', 'sync_seq']);
         });
-
-        foreach (['orders', 'order_lines'] as $table) {
-            DB::connection('pgsql_migrate')->statement("ALTER TABLE {$table} ENABLE ROW LEVEL SECURITY");
-            DB::connection('pgsql_migrate')->statement("ALTER TABLE {$table} FORCE ROW LEVEL SECURITY");
-            DB::connection('pgsql_migrate')->statement(
-                "CREATE POLICY {$table}_isolation ON {$table}
-                 USING (business_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)
-                 WITH CHECK (business_id = NULLIF(current_setting('app.current_tenant', true), '')::uuid)"
-            );
-        }
     }
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->dropIfExists('order_lines');
-        Schema::connection('pgsql_migrate')->dropIfExists('orders');
+        Schema::dropIfExists('order_lines');
+        Schema::dropIfExists('orders');
     }
 };

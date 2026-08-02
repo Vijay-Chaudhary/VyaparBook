@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 function stockReadToken(Business $business, string $role = 'owner'): string
 {
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => $role,
@@ -23,7 +23,7 @@ function stockReadToken(Business $business, string $role = 'owner'): string
 
 function stockReadMaterial(Business $business, string $reorder = '10.000'): RawMaterial
 {
-    return RawMaterial::on('pgsql_migrate')->create([
+    return RawMaterial::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Besan', 'unit' => 'kg', 'reorder_level' => $reorder,
     ]);
@@ -35,7 +35,6 @@ function stockReadMovement(RawMaterial $m, User $u, string $kind, string $qty, s
         'business_id' => $m->business_id, 'uuid' => (string) Str::uuid(),
         'raw_material_id' => $m->id, 'movement_date' => $date, 'kind' => $kind, 'qty' => $qty,
     ]);
-    $movement->setConnection('pgsql_migrate');
     $movement->created_by = $u->id;
     $movement->save();
 }

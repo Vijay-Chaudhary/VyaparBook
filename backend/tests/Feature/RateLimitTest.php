@@ -143,7 +143,7 @@ it('shares one budget across the staff of a single shop', function () use ($newC
     [$business, $ownerToken] = seedTenantWithOwner('active', 'pro');
 
     $salesman = \App\Models\User::factory()->create();
-    $membership = \App\Models\Membership::on('pgsql_migrate')->create([
+    $membership = \App\Models\Membership::create([
         'user_id' => $salesman->id,
         'business_id' => $business->id,
         'role' => 'salesman',

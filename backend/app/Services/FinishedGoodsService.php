@@ -11,7 +11,7 @@ use Illuminate\Support\Facades\DB;
  * How much of each product is actually on hand (PRD §18 Phase 3).
  *
  * Read-only and tenant-pinned, like the other report services: it assumes an
- * already-pinned transaction (RLS FORCE'd), and the explicit
+ * already-pinned transaction (the tenant scope bound), and the explicit
  * ->where('business_id', ...) is the app-level layer on top — never one alone.
  *
  * Stock here is WEIGHT, derived from what is already recorded: production adds
@@ -36,7 +36,7 @@ class FinishedGoodsService
         $produced = DB::table('production_batches')
             ->where('business_id', $businessId)
             ->groupBy('product_id')
-            ->selectRaw('product_id, coalesce(sum(output_kg), 0)::text as kg')
+            ->selectRaw('product_id, CAST(coalesce(sum(output_kg), 0) AS CHAR) as kg')
             ->pluck('kg', 'product_id');
 
         // qty is an integer count of packs; weight_kg turns it into kg. The
@@ -46,7 +46,7 @@ class FinishedGoodsService
             ->join('pack_sizes', 'pack_sizes.id', '=', 'product_packs.pack_size_id')
             ->where('sale_lines.business_id', $businessId)
             ->groupBy('product_packs.product_id')
-            ->selectRaw('product_packs.product_id as product_id, coalesce(sum(sale_lines.qty * pack_sizes.weight_kg), 0)::text as kg')
+            ->selectRaw('product_packs.product_id as product_id, CAST(coalesce(sum(sale_lines.qty * pack_sizes.weight_kg), 0) AS CHAR) as kg')
             ->pluck('kg', 'product_id');
 
         $products = Product::query()

@@ -13,7 +13,7 @@ use Illuminate\Support\Str;
 function movementToken(Business $business, string $role = 'owner'): string
 {
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => $role,
@@ -24,7 +24,7 @@ function movementToken(Business $business, string $role = 'owner'): string
 
 function movementMaterial(Business $business): RawMaterial
 {
-    return RawMaterial::on('pgsql_migrate')->create([
+    return RawMaterial::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Besan', 'unit' => 'kg', 'reorder_level' => '10.000',
     ]);
@@ -60,7 +60,6 @@ it('stores an out movement as a negative that lowers on hand', function () {
         'raw_material_id' => $material->id, 'movement_date' => '2026-07-09',
         'kind' => 'in', 'qty' => '100.000',
     ]);
-    $seed->setConnection('pgsql_migrate');
     $seed->created_by = User::factory()->create()->id;
     $seed->save();
 
@@ -245,7 +244,7 @@ describe('reversing a movement', function () {
         test()->withHeader('Authorization', "Bearer {$token}")
             ->postJson("/api/v1/stock-movements/{$id}/reverse")->assertStatus(201);
 
-        $original = StockMovement::on('pgsql_migrate')->find($id);
+        $original = StockMovement::find($id);
         expect((string) $original->qty)->toBe('50.000');
         expect($original->reverses_id)->toBeNull();
     });
@@ -263,11 +262,10 @@ describe('reversing a movement', function () {
             'raw_material_id' => $material->id, 'movement_date' => '2026-07-01',
             'kind' => 'in', 'qty' => '100.000',
         ]);
-        $seed->setConnection('pgsql_migrate');
         $seed->created_by = $user->id;
         $seed->save();
 
-        $product = App\Models\Product::on('pgsql_migrate')->create([
+        $product = App\Models\Product::create([
             'business_id' => $business->id, 'name_hi' => 'सेव',
         ]);
 
@@ -277,8 +275,7 @@ describe('reversing a movement', function () {
             'consumptions' => [['raw_material_id' => $material->id, 'qty' => '25.000']],
         ])->assertStatus(201);
 
-        $drawDown = StockMovement::on('pgsql_migrate')
-            ->whereNotNull('production_batch_id')->firstOrFail();
+        $drawDown = StockMovement::whereNotNull('production_batch_id')->firstOrFail();
 
         test()->withHeader('Authorization', "Bearer {$token}")
             ->postJson("/api/v1/stock-movements/{$drawDown->id}/reverse")

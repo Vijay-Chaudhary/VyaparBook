@@ -29,7 +29,7 @@ function registerViaWeb(array $overrides = []): User
         'consent' => '1',
     ], $overrides));
 
-    return User::on('pgsql_migrate')->latest('id')->first();
+    return User::latest('id')->first();
 }
 
 describe('signup', function () {
@@ -45,12 +45,12 @@ describe('signup', function () {
         $response->assertRedirect(route('onboarding.business'));
         $this->assertAuthenticated();
 
-        $user = User::on('pgsql_migrate')->where('email', 'vijay@example.com')->first();
+        $user = User::where('email', 'vijay@example.com')->first();
         expect($user)->not->toBeNull();
 
         // Consent is recorded on this surface too — the web door must not be a
         // way to create an account without it.
-        $consent = Consent::on('pgsql_migrate')->where('user_id', $user->id)->first();
+        $consent = Consent::where('user_id', $user->id)->first();
         expect($consent?->action)->toBe(Consent::GRANTED);
     });
 
@@ -62,7 +62,7 @@ describe('signup', function () {
             'password_confirmation' => 'password123',
         ])->assertSessionHasErrors('consent');
 
-        expect(User::on('pgsql_migrate')->where('email', 'noconsent@example.com')->exists())->toBeFalse();
+        expect(User::where('email', 'noconsent@example.com')->exists())->toBeFalse();
         $this->assertGuest();
     });
 
@@ -87,17 +87,16 @@ describe('create business', function () {
             ->post('/onboarding/business', ['name' => 'Shree Raj Shyama Ji', 'city' => 'Jaipur'])
             ->assertRedirect(route('onboarding.template'));
 
-        $business = Business::on('pgsql_migrate')->where('name', 'Shree Raj Shyama Ji')->first();
+        $business = Business::where('name', 'Shree Raj Shyama Ji')->first();
         expect($business)->not->toBeNull();
 
         // Owner membership …
         expect(
-            Membership::on('pgsql_migrate')
-                ->where('user_id', $user->id)->where('business_id', $business->id)->where('role', 'owner')->exists()
+            Membership::where('user_id', $user->id)->where('business_id', $business->id)->where('role', 'owner')->exists()
         )->toBeTrue();
 
         // … and a trial subscription, same as the API path (shared provisioner).
-        expect(Subscription::on('pgsql_migrate')->where('business_id', $business->id)->first()?->status)
+        expect(Subscription::where('business_id', $business->id)->first()?->status)
             ->toBe('trialing');
     });
 
@@ -130,10 +129,10 @@ describe('choose template', function () {
             ->post('/onboarding/template', ['template' => 'namkeen'])
             ->assertRedirect(route('onboarding.invite'));
 
-        $business = Membership::on('pgsql_migrate')->where('user_id', $user->id)->value('business_id');
+        $business = Membership::where('user_id', $user->id)->value('business_id');
 
         // Products landed in THIS tenant.
-        expect(Product::on('pgsql_migrate')->where('business_id', $business)->count())->toBeGreaterThan(0);
+        expect(Product::where('business_id', $business)->count())->toBeGreaterThan(0);
     });
 
     it('accepts the blank template without seeding anything', function () {
@@ -143,8 +142,8 @@ describe('choose template', function () {
             ->post('/onboarding/template', ['template' => 'blank'])
             ->assertRedirect(route('onboarding.invite'));
 
-        $business = Membership::on('pgsql_migrate')->where('user_id', $user->id)->value('business_id');
-        expect(Product::on('pgsql_migrate')->where('business_id', $business)->count())->toBe(0);
+        $business = Membership::where('user_id', $user->id)->value('business_id');
+        expect(Product::where('business_id', $business)->count())->toBe(0);
     });
 
     it('rejects an unknown template', function () {
@@ -163,16 +162,16 @@ describe('choose template', function () {
         $this->actingAs($user)->post('/onboarding/template', ['template' => 'namkeen'])
             ->assertRedirect(route('onboarding.invite'));
 
-        $business = Membership::on('pgsql_migrate')->where('user_id', $user->id)->value('business_id');
-        $count = Product::on('pgsql_migrate')->where('business_id', $business)->count();
+        $business = Membership::where('user_id', $user->id)->value('business_id');
+        $count = Product::where('business_id', $business)->count();
 
         // Seeding once produced N products; the replay added none.
         $fresh = registerViaWeb();
         $this->actingAs($fresh)->post('/onboarding/business', ['name' => 'Baseline']);
         $this->actingAs($fresh)->post('/onboarding/template', ['template' => 'namkeen']);
-        $baseline = Membership::on('pgsql_migrate')->where('user_id', $fresh->id)->value('business_id');
+        $baseline = Membership::where('user_id', $fresh->id)->value('business_id');
 
-        expect($count)->toBe(Product::on('pgsql_migrate')->where('business_id', $baseline)->count());
+        expect($count)->toBe(Product::where('business_id', $baseline)->count());
     });
 });
 
@@ -193,9 +192,9 @@ describe('invite staff', function () {
             ->assertRedirect(route('onboarding.invite'))
             ->assertSessionHas('invite_link');
 
-        $business = Membership::on('pgsql_migrate')->where('user_id', $user->id)->value('business_id');
+        $business = Membership::where('user_id', $user->id)->value('business_id');
 
-        $invite = Invite::on('pgsql_migrate')->where('business_id', $business)->first();
+        $invite = Invite::where('business_id', $business)->first();
         expect($invite)->not->toBeNull();
         expect($invite->role)->toBe('salesman')
             ->and($invite->invited_by)->toBe($user->id);

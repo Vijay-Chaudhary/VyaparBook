@@ -26,13 +26,13 @@ function restreamOrder(Business $b, User $u, Customer $c, ProductPack $pack, str
     $orderId = (string) Str::uuid();
     $lineId = (string) Str::uuid();
 
-    DB::connection('pgsql_migrate')->table('orders')->insert([
+    DB::table('orders')->insert([
         'id' => $orderId, 'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'order_date' => '2026-07-20', 'status' => $status,
         'total' => '180.00', 'created_by' => $u->id, 'sync_seq' => $seq,
         'created_at' => now(), 'updated_at' => now(),
     ]);
-    DB::connection('pgsql_migrate')->table('order_lines')->insert([
+    DB::table('order_lines')->insert([
         'id' => $lineId, 'business_id' => $b->id, 'order_id' => $orderId,
         'product_pack_id' => $pack->id, 'qty' => 2, 'rate' => '90.00',
         'ordered_qty' => 2, 'ordered_rate' => '90.00',
@@ -49,26 +49,28 @@ function runRestream(): void
     $migration->restream();
 }
 
-function seqOf(string $table, string $id): int
+/** Raw builder, so the tenant predicate is written out for the tripwire. */
+function seqOf(string $businessId, string $table, string $id): int
 {
-    return (int) DB::connection('pgsql_migrate')->table($table)->where('id', $id)->value('sync_seq');
+    return (int) DB::table($table)
+        ->where('business_id', $businessId)->where('id', $id)->value('sync_seq');
 }
 
 function restreamSetup(): array
 {
     $business = Business::factory()->create();
     $user = User::factory()->create();
-    $customer = Customer::on('pgsql_migrate')->create([
+    $customer = Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Ram Traders', 'opening_balance' => '0.00',
     ]);
-    $product = Product::on('pgsql_migrate')->create([
+    $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
-    $size = PackSize::on('pgsql_migrate')->create([
+    $size = PackSize::create([
         'business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500',
     ]);
-    $pack = ProductPack::on('pgsql_migrate')->create([
+    $pack = ProductPack::create([
         'business_id' => $business->id, 'product_id' => $product->id,
         'pack_size_id' => $size->id, 'default_sell_price' => '90.00',
     ]);
@@ -84,17 +86,18 @@ it('lifts every open order and its lines over a device that had already caught u
         $before[$status] = restreamOrder($b, $u, $c, $pack, $status, 10);
     }
 
-    // A colleague whose cursor is already past everything above.
-    $cursor = (int) DB::connection('pgsql_migrate')->selectOne(
-        "SELECT last_value AS v FROM sync_seq_global"
-    )->v;
+    // A colleague whose cursor is already past everything above. The counter is
+    // per-tenant now, so read this shop's own row rather than a global sequence.
+    $cursor = (int) DB::table('sync_sequences')
+        ->where('business_id', $b->id)
+        ->value('value');
 
     runRestream();
 
     foreach ($before as $status => [$orderId, $lineId]) {
-        expect(seqOf('orders', $orderId))->toBeGreaterThan($cursor, "order {$status}");
+        expect(seqOf($b->id, 'orders', $orderId))->toBeGreaterThan($cursor, "order {$status}");
         // Without the line, the colleague gets a delivery with nothing in it.
-        expect(seqOf('order_lines', $lineId))->toBeGreaterThan($cursor, "line {$status}");
+        expect(seqOf($b->id, 'order_lines', $lineId))->toBeGreaterThan($cursor, "line {$status}");
     }
 });
 
@@ -109,8 +112,8 @@ it('leaves finished orders where they are, being history nobody can act on', fun
     runRestream();
 
     foreach ($done as $status => [$orderId, $lineId]) {
-        expect(seqOf('orders', $orderId))->toBe(10, "order {$status}");
-        expect(seqOf('order_lines', $lineId))->toBe(10, "line {$status}");
+        expect(seqOf($b->id, 'orders', $orderId))->toBe(10, "order {$status}");
+        expect(seqOf($b->id, 'order_lines', $lineId))->toBe(10, "line {$status}");
     }
 });
 
@@ -122,5 +125,5 @@ it('keeps every line at or above its own order, so a line never outranks it', fu
 
     runRestream();
 
-    expect(seqOf('order_lines', $lineId))->toBeGreaterThan(seqOf('orders', $orderId));
+    expect(seqOf($b->id, 'order_lines', $lineId))->toBeGreaterThan(seqOf($b->id, 'orders', $orderId));
 });

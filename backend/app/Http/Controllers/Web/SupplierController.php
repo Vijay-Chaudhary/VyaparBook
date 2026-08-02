@@ -60,7 +60,7 @@ class SupplierController extends Controller
         }
 
         $found = $this->runInTenant($businessId, function () use ($businessId, $supplier) {
-            // Explicit owner scope on top of RLS — never trust the id alone.
+            // Explicit owner scope on top of the tenant scope — never trust the id alone.
             $row = Supplier::where('business_id', $businessId)->find($supplier);
             if ($row === null) {
                 return null;

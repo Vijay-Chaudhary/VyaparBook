@@ -9,7 +9,7 @@ use App\Services\TokenService;
 function tokenForRole(Business $business, string $role): string
 {
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => $role,

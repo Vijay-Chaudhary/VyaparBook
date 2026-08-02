@@ -12,7 +12,7 @@ use Illuminate\Support\Str;
 
 function khataReadToken(Business $business, User $user, string $role = 'owner'): string
 {
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id, 'business_id' => $business->id, 'role' => $role,
     ]);
 
@@ -21,7 +21,7 @@ function khataReadToken(Business $business, User $user, string $role = 'owner'):
 
 function readCustomer(Business $business, string $name, string $opening = '0.00'): Customer
 {
-    return Customer::on('pgsql_migrate')->create([
+    return Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => $name, 'opening_balance' => $opening,
     ]);
@@ -33,7 +33,6 @@ function seedSale(Customer $c, User $u, string $total, string $date, ?string $re
         'business_id' => $c->business_id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'sale_date' => $date, 'reverses_id' => $reverses,
     ]);
-    $sale->setConnection('pgsql_migrate');
     $sale->created_by = $u->id;
     $sale->total = $total;
     $sale->save();
@@ -47,7 +46,6 @@ function seedPayment(Customer $c, User $u, string $amount, string $date): Paymen
         'business_id' => $c->business_id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'payment_date' => $date, 'amount' => $amount, 'mode' => 'cash',
     ]);
-    $payment->setConnection('pgsql_migrate');
     $payment->created_by = $u->id;
     $payment->save();
 

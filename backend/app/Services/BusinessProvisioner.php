@@ -13,9 +13,9 @@ use Illuminate\Support\Facades\DB;
  * one operation behind both "create business" surfaces (the JWT API and the
  * Blade onboarding flow).
  *
- * Extracted so the two callers cannot drift: the RLS dance below is exactly the
- * kind of thing that, duplicated, grows a subtle difference and turns into a
- * tenant-isolation bug. One home, one behaviour, one set of tests.
+ * Extracted so the two callers cannot drift: re-pointing the tenant mid-request
+ * is exactly the kind of thing that, duplicated, grows a subtle difference and
+ * turns into a tenant-isolation bug. One home, one behaviour, one set of tests.
  */
 class BusinessProvisioner
 {
@@ -29,15 +29,12 @@ class BusinessProvisioner
         return DB::transaction(function () use ($data, $userId) {
             $business = Business::create($data);
 
-            // Re-point app.current_tenant at the new business before the insert:
-            // the RLS WITH CHECK only admits a membership for the transaction's
-            // current tenant, and the caller's existing tid (if any) is a
-            // different business.
+            // Re-point the tenant at the new business before the inserts: the
+            // caller's existing tid (if any) is a different business, and
+            // BelongsToTenant would otherwise stamp and filter the Subscription
+            // against it. switchTo() binds tenant.id, which is now the whole
+            // mechanism — there is no separate GUC to keep in step with it.
             TenantContext::switchTo($business->id);
-            // Bind the app-level tenant too so the BelongsToTenant scope on the
-            // Subscription is coherent with the switched-in tenant. (Membership
-            // is not tenant-scoped, so it needed only the GUC.)
-            app()->bind('tenant.id', fn () => $business->id);
 
             $membership = Membership::create([
                 'user_id' => $userId,

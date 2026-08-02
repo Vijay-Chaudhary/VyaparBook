@@ -48,7 +48,7 @@ class ProductionWriter
             return [$existing->load('consumptions'), false];
         }
 
-        // findOrFail under RLS: a cross-tenant product is invisible → 404.
+        // findOrFail under the tenant scope: a cross-tenant product is invisible → 404.
         $product = Product::findOrFail($data['product_id']);
 
         $batch = DB::transaction(function () use ($data, $product) {
@@ -63,7 +63,7 @@ class ProductionWriter
             $batch->save();
 
             foreach ($data['consumptions'] as $line) {
-                // findOrFail under RLS: a cross-tenant material is invisible → 404.
+                // findOrFail under the tenant scope: a cross-tenant material is invisible → 404.
                 $material = RawMaterial::findOrFail($line['raw_material_id']);
                 $qty = (string) $line['qty'];
 

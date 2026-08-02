@@ -67,7 +67,7 @@ class RawMaterialController extends Controller
             return $blocked;
         }
 
-        // findOrFail under RLS: another tenant's material is invisible → 404,
+        // findOrFail under the tenant scope: another tenant's material is invisible → 404,
         // never a 403 that would leak its existence.
         $material = RawMaterial::findOrFail($id);
 
@@ -79,7 +79,7 @@ class RawMaterialController extends Controller
 
         $material->update($data);
 
-        return response()->json($material->fresh());
+        return response()->json($material->freshScoped());
     }
 
     public function destroy(string $id)
@@ -115,7 +115,7 @@ class RawMaterialController extends Controller
         $material->archived_at = null;
         $material->save();
 
-        return response()->json($material->fresh());
+        return response()->json($material->freshScoped());
     }
 
     private function denied()

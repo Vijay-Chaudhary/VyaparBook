@@ -139,7 +139,7 @@ class BillingController extends Controller
      * else's billing. With no preference, the sole owned business is used.
      * Returns null when the user owns nothing matching — the caller redirects.
      *
-     * Read under the user's own context (memberships are RLS-scoped, and no
+     * Read under the user's own context (memberships are tenant-scoped, and no
      * tenant is pinned yet), the same as onboarding's ownedBusinessId().
      */
     private function ownedBusinessId(?string $requested): ?string
@@ -159,7 +159,7 @@ class BillingController extends Controller
     }
 
     /**
-     * Run $work with the tenant pinned — the RLS GUC and the app-level scope,
+     * Run $work with the tenant pinned — the tenant binding the scope reads,
      * plus the owner role for BillingPolicy parity — inside one transaction.
      * Mirrors OnboardingController::tenantHas and the importer's runInTenant.
      *

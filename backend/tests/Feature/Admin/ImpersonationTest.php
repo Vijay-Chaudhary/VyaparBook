@@ -5,6 +5,7 @@ use App\Models\Customer;
 use App\Models\PlatformAuditLog;
 use App\Models\User;
 use Illuminate\Support\Str;
+use App\Support\Tenancy;
 
 // platformAdmin() / seedTenantWithOwner() are shared helpers in tests/Pest.php.
 
@@ -51,7 +52,7 @@ it('mints a read-only token that sees the tenant, and audits the mint', function
         ->assertOk()
         ->assertJsonFragment(['name' => 'Ramesh Verma']);
 
-    $logs = PlatformAuditLog::on('pgsql_migrate')->where('action', 'impersonate_tenant')->get();
+    $logs = PlatformAuditLog::where('action', 'impersonate_tenant')->get();
     expect($logs)->toHaveCount(1);
     expect($logs[0]->admin_user_id)->toBe($admin->id)
         ->and($logs[0]->target_business_id)->toBe($business->id)
@@ -70,7 +71,9 @@ it('refuses every write through an impersonation token', function (string $metho
         ->assertJsonPath('code', 'impersonation_read_only');
 
     // Nothing landed in the tenant's books.
-    expect(Customer::on('pgsql_platform')->where('business_id', $business->id)->count())->toBe(0);
+    expect(Tenancy::withoutTenant(
+        fn () => Customer::on('mysql_platform')->where('business_id', $business->id)->count()
+    ))->toBe(0);
 })->with([
     'create a customer' => ['POST', '/api/v1/customers', ['name' => 'Ghost']],
     'record a sale' => ['POST', '/api/v1/sales', ['customer_id' => 1, 'lines' => []]],
@@ -99,7 +102,7 @@ it('dies the moment the admin flag is revoked, mid-session', function () {
     actAs($token, 'GET', '/api/v1/khata')->assertOk();
 
     // Revoke the flag on the live row — the token itself is still unexpired.
-    User::on('pgsql_migrate')->where('id', $admin->id)->update(['is_platform_admin' => false]);
+    User::where('id', $admin->id)->update(['is_platform_admin' => false]);
 
     actAs($token, 'GET', '/api/v1/khata')->assertStatus(403);
 });
@@ -124,7 +127,7 @@ it('can reproduce a narrower role\'s view on request', function () {
     [, $adminToken] = platformAdmin();
 
     $salesman = User::factory()->create();
-    \App\Models\Membership::on('pgsql_migrate')->create([
+    \App\Models\Membership::create([
         'user_id' => $salesman->id,
         'business_id' => $business->id,
         'role' => 'salesman',
@@ -148,7 +151,7 @@ it('rejects a role the tenant has nobody holding', function () {
     actAs($adminToken, 'POST', "/api/v1/admin/tenants/{$business->id}/impersonate", ['role' => 'accountant'])
         ->assertStatus(422);
 
-    expect(PlatformAuditLog::on('pgsql_migrate')->where('action', 'impersonate_tenant')->count())->toBe(0);
+    expect(PlatformAuditLog::where('action', 'impersonate_tenant')->count())->toBe(0);
 });
 
 it('404s on an unknown tenant', function () {

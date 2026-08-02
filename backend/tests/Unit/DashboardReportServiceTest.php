@@ -31,7 +31,6 @@ function dashPayment(Customer $c, User $u, string $amount, string $date): Paymen
         'business_id' => $c->business_id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'payment_date' => $date, 'amount' => $amount, 'mode' => 'cash',
     ]);
-    $p->setConnection('pgsql_migrate');
     $p->created_by = $u->id;
     $p->save();
 
@@ -39,20 +38,30 @@ function dashPayment(Customer $c, User $u, string $amount, string $date): Paymen
 }
 
 it('totals customer outstanding as Σ of KhataService, and isolates tenants', function () {
+    // Two tenants, so asTenant per shop rather than tenantBusiness(): binding
+    // has to follow whose rows are being written and read, or a's sales would
+    // be written while b is bound and this would stop testing isolation at all.
     $a = Business::factory()->create();
     $b = Business::factory()->create();  // a second tenant that must NOT leak in
     $u = User::factory()->create();
 
-    $c1 = dashCustomer($a, 'Ramesh', '1500.00', 'Rampur');
-    $c2 = dashCustomer($a, 'Mahaveer', '0.00');
-    dashSale($c1, $u, '270.00', '2026-07-10');
-    dashPayment($c1, $u, '200.00', '2026-07-12');   // c1 = 1500 + 270 - 200 = 1570.00
-    dashSale($c2, $u, '58.50', '2026-07-11');        // c2 = 58.50
+    [$c1, $c2] = asTenant($a->id, function () use ($a, $u) {
+        $c1 = dashCustomer($a, 'Ramesh', '1500.00', 'Rampur');
+        $c2 = dashCustomer($a, 'Mahaveer', '0.00');
+        dashSale($c1, $u, '270.00', '2026-07-10');
+        dashPayment($c1, $u, '200.00', '2026-07-12');   // c1 = 1500 + 270 - 200 = 1570.00
+        dashSale($c2, $u, '58.50', '2026-07-11');        // c2 = 58.50
 
-    $bOnly = dashCustomer($b, 'Other Shop Customer', '9999.00');
+        return [$c1, $c2];
+    });
+
+    asTenant($b->id, fn () => dashCustomer($b, 'Other Shop Customer', '9999.00'));
 
     $khata = new KhataService();
-    $expectedTotal = bcadd($khata->outstandingFor($c1), $khata->outstandingFor($c2), 2);
+    $expectedTotal = asTenant(
+        $a->id,
+        fn () => bcadd($khata->outstandingFor($c1), $khata->outstandingFor($c2), 2)
+    );
 
     $summary = inTenant($a->id, fn () => app(DashboardReportService::class)
         ->customerOutstanding($a->id));
@@ -73,7 +82,7 @@ it('totals customer outstanding as Σ of KhataService, and isolates tenants', fu
 it('sums sales for today and the selected month, and builds a 12-row sales trend', function () {
     Illuminate\Support\Carbon::setTestNow('2026-07-22');
 
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
     $c = dashCustomer($a, 'Ramesh');
 
@@ -110,7 +119,6 @@ function stockIn(App\Models\RawMaterial $m, User $u, string $qty): void
         'raw_material_id' => $m->id, 'movement_date' => '2026-07-01',
         'kind' => 'in', 'qty' => $qty,
     ]);
-    $mv->setConnection('pgsql_migrate');
     $mv->created_by = $u->id;
     $mv->save();
 }
@@ -120,12 +128,11 @@ function dashBatch(Business $b, User $u, string $kg, string $date): void
 {
     $batch = new App\Models\ProductionBatch([
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
-        'product_id' => App\Models\Product::on('pgsql_migrate')->create([
+        'product_id' => App\Models\Product::create([
             'business_id' => $b->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
         ])->id,
         'batch_date' => $date, 'output_kg' => $kg,
     ]);
-    $batch->setConnection('pgsql_migrate');
     $batch->created_by = $u->id;
     $batch->save();
 }
@@ -136,14 +143,13 @@ function dashExpense(App\Models\Business $b, App\Models\User $u, string $categor
         'business_id' => $b->id, 'uuid' => (string) Illuminate\Support\Str::uuid(),
         'category' => $category, 'amount' => $amount, 'spent_on' => $date, 'note' => $note,
     ]);
-    $e->setConnection('pgsql_migrate');
     $e->created_by = $u->id;
     $e->save();
 }
 
 function dashSupplierPayment(App\Models\Business $b, App\Models\User $u, string $amount, string $date): void
 {
-    $s = App\Models\Supplier::on('pgsql_migrate')->firstOrCreate(
+    $s = App\Models\Supplier::firstOrCreate(
         ['business_id' => $b->id, 'name' => 'Supplier'],
         ['uuid' => (string) Illuminate\Support\Str::uuid(), 'opening_balance' => '0.00'],
     );
@@ -151,13 +157,12 @@ function dashSupplierPayment(App\Models\Business $b, App\Models\User $u, string 
         'business_id' => $b->id, 'uuid' => (string) Illuminate\Support\Str::uuid(),
         'supplier_id' => $s->id, 'payment_date' => $date, 'amount' => $amount, 'mode' => 'cash',
     ]);
-    $sp->setConnection('pgsql_migrate');
     $sp->created_by = $u->id;
     $sp->save();
 }
 
 it('sums production for the month and builds a 12-row kg trend', function () {
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
 
     dashBatch($a, $u, '50.000', '2026-07-04');
@@ -182,15 +187,15 @@ it('sums production for the month and builds a 12-row kg trend', function () {
 });
 
 it('flags materials below reorder and ranks product performance', function () {
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
 
     // Low stock: Besan on-hand 150 (reorder 100 → OK), Salt on-hand 4 (reorder 20 → LOW).
-    $besan = App\Models\RawMaterial::on('pgsql_migrate')->create([
+    $besan = App\Models\RawMaterial::create([
         'business_id' => $a->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Besan', 'unit' => 'kg', 'reorder_level' => '100.000',
     ]);
-    $salt = App\Models\RawMaterial::on('pgsql_migrate')->create([
+    $salt = App\Models\RawMaterial::create([
         'business_id' => $a->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Salt', 'unit' => 'kg', 'reorder_level' => '20.000',
     ]);
@@ -198,13 +203,13 @@ it('flags materials below reorder and ranks product performance', function () {
     stockIn($salt, $u, '4.000');
 
     // Product performance: two packs of one product sold this year.
-    $product = App\Models\Product::on('pgsql_migrate')->create([
+    $product = App\Models\Product::create([
         'business_id' => $a->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
-    $ps = App\Models\PackSize::on('pgsql_migrate')->create([
+    $ps = App\Models\PackSize::create([
         'business_id' => $a->id, 'label' => '1kg', 'weight_kg' => '1.000',
     ]);
-    $pack = App\Models\ProductPack::on('pgsql_migrate')->create([
+    $pack = App\Models\ProductPack::create([
         'business_id' => $a->id, 'product_id' => $product->id, 'pack_size_id' => $ps->id,
         'default_sell_price' => '100.00', 'default_cost_price' => '93.00',
     ]);
@@ -232,7 +237,7 @@ it('assembles a full report, with highest-selling/profit and an empty-shop case'
     Illuminate\Support\Carbon::setTestNow('2026-07-22');
 
     // Empty shop first: everything zero, nothing crashes.
-    $empty = Business::factory()->create();
+    $empty = tenantBusiness();
     $report = inTenant($empty->id, fn () => app(DashboardReportService::class)
         ->forMonth($empty->id, App\Reports\ReportPeriod::fromInput(2026, 7)));
 
@@ -255,16 +260,16 @@ it('assembles a full report, with highest-selling/profit and an empty-shop case'
 });
 
 it('computes an estimated monthly gross profit: sales minus product cost, before expenses', function () {
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
 
-    $product = App\Models\Product::on('pgsql_migrate')->create([
+    $product = App\Models\Product::create([
         'business_id' => $a->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
-    $ps = App\Models\PackSize::on('pgsql_migrate')->create([
+    $ps = App\Models\PackSize::create([
         'business_id' => $a->id, 'label' => '1kg', 'weight_kg' => '1.000',
     ]);
-    $pack = App\Models\ProductPack::on('pgsql_migrate')->create([
+    $pack = App\Models\ProductPack::create([
         'business_id' => $a->id, 'product_id' => $product->id, 'pack_size_id' => $ps->id,
         'default_sell_price' => '100.00', 'default_cost_price' => '93.00',
     ]);
@@ -292,8 +297,8 @@ it('computes an estimated monthly gross profit: sales minus product cost, before
 });
 
 it('totals expenses for a month, breaks them down by category, and builds a 12-row trend', function () {
-    $a = Business::factory()->create();
-    $b = Business::factory()->create();   // second tenant — must NOT leak in
+    $a = tenantBusiness();
+    $b = tenantBusiness();   // second tenant — must NOT leak in
     $u = User::factory()->create();
 
     dashExpense($a, $u, 'rent', '5000.00', '2026-07-01');
@@ -328,17 +333,17 @@ it('totals expenses for a month, breaks them down by category, and builds a 12-r
 it('assembles net profit for a profitable month, a loss month, and guards zero-sales margin', function () {
     Illuminate\Support\Carbon::setTestNow('2026-07-22');
 
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
 
     // One product pack: sell 100, cost 93 → gross profit 7 per unit.
-    $product = App\Models\Product::on('pgsql_migrate')->create([
+    $product = App\Models\Product::create([
         'business_id' => $a->id, 'name_hi' => 'सेव', 'name_en' => 'Sev',
     ]);
-    $ps = App\Models\PackSize::on('pgsql_migrate')->create([
+    $ps = App\Models\PackSize::create([
         'business_id' => $a->id, 'label' => '1kg', 'weight_kg' => '1.000',
     ]);
-    $pack = App\Models\ProductPack::on('pgsql_migrate')->create([
+    $pack = App\Models\ProductPack::create([
         'business_id' => $a->id, 'product_id' => $product->id, 'pack_size_id' => $ps->id,
         'default_sell_price' => '100.00', 'default_cost_price' => '93.00',
     ]);
@@ -375,7 +380,7 @@ it('assembles net profit for a profitable month, a loss month, and guards zero-s
 });
 
 it('reports a zero net margin when there are no sales (no divide-by-zero)', function () {
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
     dashExpense($a, $u, 'rent', '500.00', '2026-07-01');   // expense but no sales
 
@@ -392,7 +397,7 @@ it('costs gross profit from production, falling back to the estimate per product
     // cost that differs from the owner's guess), one bought in (no batches, so
     // the guess still stands). The month's gross profit must mix both, and the
     // marker must report only the bought-in half as estimated.
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
 
     $besan = pwMaterial($a, 'Besan');
@@ -436,7 +441,7 @@ it('costs gross profit from production, falling back to the estimate per product
 });
 
 it('reports nothing as estimated once every product sold has been produced', function () {
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
 
     $besan = pwMaterial($a, 'Besan');
@@ -459,7 +464,7 @@ it('reports nothing as estimated once every product sold has been produced', fun
 it('assembles the cash trend with a running position seeded from prior years', function () {
     Illuminate\Support\Carbon::setTestNow('2026-07-22');
 
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
     $c = dashCustomer($a, 'Ramesh', '0.00');
 

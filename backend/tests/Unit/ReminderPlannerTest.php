@@ -27,7 +27,7 @@ function autoBusiness(array $settings = []): array
 {
     $business = Business::factory()->create();
     $owner = User::factory()->create();
-    DB::connection('pgsql_migrate')->table('businesses')->where('id', $business->id)
+    DB::table('businesses')->where('id', $business->id)
         ->update(['reminder_auto_enabled' => true] + $settings);
 
     return [$business->fresh(), $owner];
@@ -35,7 +35,7 @@ function autoBusiness(array $settings = []): array
 
 function planCustomer(Business $b, User $u, string $name, string $total = '2000.00', ?string $phone = '9876543210'): Customer
 {
-    $c = Customer::on('pgsql_migrate')->create([
+    $c = Customer::create([
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'name' => $name, 'village' => 'Rampur', 'phone' => $phone, 'opening_balance' => '0.00',
     ]);
@@ -44,7 +44,6 @@ function planCustomer(Business $b, User $u, string $name, string $total = '2000.
         'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
         'customer_id' => $c->id, 'sale_date' => now()->subDays(60)->format('Y-m-d'),
     ]);
-    $s->setConnection('pgsql_migrate');
     $s->total = $total;
     $s->created_by = $u->id;
     $s->save();
@@ -60,7 +59,6 @@ function priorReminder(Customer $c, User $u, string $daysAgo, ?string $batchId =
         'channel' => 'cloud_api', 'amount_at_send' => '2000.00',
         'locale' => 'en', 'phone_e164' => '919876543210', 'batch_id' => $batchId,
     ]);
-    $log->setConnection('pgsql_migrate');
     $log->created_by = $u->id;
     $log->status = 'sent';
     $log->created_at = now()->subDays((int) $daysAgo);
@@ -74,10 +72,9 @@ function planFor(Business $b): ?ReminderBatch
 
 function plannedNames(Business $b): array
 {
-    return ReminderLog::on('pgsql_migrate')
-        ->where('business_id', $b->id)->where('status', 'planned')
+    return ReminderLog::where('business_id', $b->id)->where('status', 'planned')
         ->get()
-        ->map(fn ($l) => Customer::on('pgsql_migrate')->find($l->customer_id)->name)
+        ->map(fn ($l) => Customer::find($l->customer_id)->name)
         ->sort()->values()->all();
 }
 
@@ -101,7 +98,7 @@ it('plans a sendable overdue customer and skips one that cannot be messaged', fu
 
 it('excludes a customer auto-reminded inside the cooldown but includes one beyond it', function () {
     [$b, $u] = autoBusiness(['reminder_cooldown_days' => 7]);
-    $batch = ReminderBatch::on('pgsql_migrate')->create([
+    $batch = ReminderBatch::create([
         'business_id' => $b->id, 'scheduled_for' => now()->subDays(30)->format('Y-m-d'),
         'status' => 'sent', 'planned_count' => 2,
     ]);
@@ -151,8 +148,8 @@ it('is idempotent for the day, so a double cron fire cannot double-message', fun
     planFor($b);
     planFor($b);   // cron fired twice
 
-    expect(ReminderBatch::on('pgsql_migrate')->where('business_id', $b->id)->count())->toBe(1);
-    expect(ReminderLog::on('pgsql_migrate')->where('business_id', $b->id)->count())->toBe(1);
+    expect(ReminderBatch::where('business_id', $b->id)->count())->toBe(1);
+    expect(ReminderLog::where('business_id', $b->id)->count())->toBe(1);
 });
 
 it('plans nothing for a tenant that never switched automation on', function () {
@@ -161,7 +158,7 @@ it('plans nothing for a tenant that never switched automation on', function () {
     planCustomer($b, $u, 'Ramesh');
 
     expect(planFor($b))->toBeNull();
-    expect(ReminderLog::on('pgsql_migrate')->where('business_id', $b->id)->count())->toBe(0);
+    expect(ReminderLog::where('business_id', $b->id)->count())->toBe(0);
 });
 
 it('never plans another tenant\'s customers', function () {

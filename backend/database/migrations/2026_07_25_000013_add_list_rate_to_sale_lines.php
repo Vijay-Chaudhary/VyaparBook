@@ -19,14 +19,14 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->table('sale_lines', function (Blueprint $table) {
+        Schema::table('sale_lines', function (Blueprint $table) {
             $table->decimal('list_rate', 10, 2)->nullable();
         });
     }
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->table('sale_lines', function (Blueprint $table) {
+        Schema::table('sale_lines', function (Blueprint $table) {
             $table->dropColumn('list_rate');
         });
     }

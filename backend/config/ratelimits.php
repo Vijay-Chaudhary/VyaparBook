@@ -7,7 +7,7 @@
 |
 | Noisy-neighbour containment: limits are keyed per TENANT, not per user or
 | per IP, so one busy shop cannot spend the budget of every other shop on the
-| same Postgres. A shop with six staff on six phones shares one allowance,
+| same database. A shop with six staff on six phones shares one allowance,
 | which is the unit that actually maps to load.
 |
 | Values are per minute. They are deliberately generous relative to what a

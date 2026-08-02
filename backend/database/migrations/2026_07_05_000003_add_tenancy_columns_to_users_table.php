@@ -9,7 +9,7 @@ return new class extends Migration
 {
     public function up(): void
     {
-        Schema::connection('pgsql_migrate')->table('users', function (Blueprint $table) {
+        Schema::table('users', function (Blueprint $table) {
             $table->string('phone', 15)->unique()->nullable()->after('email');
             $table->boolean('is_platform_admin')->default(false);
             $table->string('email')->nullable()->change();
@@ -18,7 +18,7 @@ return new class extends Migration
 
     public function down(): void
     {
-        Schema::connection('pgsql_migrate')->table('users', function (Blueprint $table) {
+        Schema::table('users', function (Blueprint $table) {
             $table->dropColumn(['phone', 'is_platform_admin']);
         });
     }

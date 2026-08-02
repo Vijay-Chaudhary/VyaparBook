@@ -29,7 +29,7 @@ class PaymentController extends Controller
         $adminId = (int) auth()->id();
 
         $result = PlatformTenantContext::actAs($id, $adminId, function () use ($id, $paymentId) {
-            // Pinned to $id, so RLS only surfaces this tenant's payment: a missing
+            // Pinned to $id, so the tenant scope only surfaces this tenant's payment: a missing
             // or cross-tenant id is indistinguishable and both 404 by design.
             $payment = SubscriptionPayment::where('id', $paymentId)->first();
 
@@ -87,7 +87,7 @@ class PaymentController extends Controller
         $adminId = (int) auth()->id();
 
         $result = PlatformTenantContext::actAs($id, $adminId, function () use ($id, $paymentId, $reason) {
-            // Pinned to $id: a missing or cross-tenant id is invisible under RLS,
+            // Pinned to $id: a missing or cross-tenant id is invisible under the tenant scope,
             // both 404 — same confinement as verify().
             $payment = SubscriptionPayment::where('id', $paymentId)->first();
 

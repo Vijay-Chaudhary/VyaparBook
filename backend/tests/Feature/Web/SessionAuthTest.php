@@ -119,7 +119,7 @@ it('mints a JWT the API actually accepts', function () {
 it('scopes the token to the tenant when the user has exactly one membership', function () {
     $user = User::factory()->create();
     $business = Business::factory()->create();
-    Membership::on('pgsql_migrate')->create([
+    Membership::create([
         'user_id' => $user->id,
         'business_id' => $business->id,
         'role' => 'owner',
@@ -139,7 +139,7 @@ it('mints a tenant-less token when the user belongs to several businesses', func
     $user = User::factory()->create();
 
     foreach (range(1, 2) as $_) {
-        Membership::on('pgsql_migrate')->create([
+        Membership::create([
             'user_id' => $user->id,
             'business_id' => Business::factory()->create()->id,
             'role' => 'owner',
@@ -190,7 +190,7 @@ it('scopes the token to a requested business the user belongs to', function () {
     $a = Business::factory()->create();
     $b = Business::factory()->create();
     foreach ([$a, $b] as $business) {
-        Membership::on('pgsql_migrate')->create([
+        Membership::create([
             'user_id' => $user->id,
             'business_id' => $business->id,
             'role' => 'owner',
@@ -209,7 +209,7 @@ it('scopes the token to a requested business the user belongs to', function () {
 
 it('refuses to scope the token to a business the user does not belong to', function () {
     $user = User::factory()->create();
-    Membership::on('pgsql_migrate')->create([
+    Membership::create([
         'user_id' => $user->id,
         'business_id' => Business::factory()->create()->id,
         'role' => 'owner',

@@ -23,6 +23,14 @@ class Beat extends Model
 
     protected $fillable = ['business_id', 'name', 'weekdays', 'assigned_user_id'];
 
+    /**
+     * MySQL forbids a DEFAULT on a JSON column, so the empty array lives here
+     * rather than in the schema. The column is still NOT NULL.
+     */
+    protected $attributes = [
+        'weekdays' => '[]',
+    ];
+
     protected $casts = [
         'weekdays' => 'array',          // ISO weekdays, 1 = Monday … 7 = Sunday
         'assigned_user_id' => 'integer',

@@ -14,7 +14,7 @@ it('records a mutation with the acting admin, action, target and metadata', func
 
     $log = PlatformAudit::record('suspend', $business->id, ['x' => 1]);
 
-    $stored = PlatformAuditLog::on('pgsql_migrate')->find($log->id);
+    $stored = PlatformAuditLog::find($log->id);
     expect($stored)->not->toBeNull();
     expect($stored->admin_user_id)->toBe($admin->id);
     expect($stored->action)->toBe('suspend');

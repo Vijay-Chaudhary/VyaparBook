@@ -23,7 +23,7 @@ use Illuminate\Support\Str;
 function rbacToken(Business $business, string $role): string
 {
     $user = User::factory()->create();
-    $membership = Membership::on('pgsql_migrate')->create([
+    $membership = Membership::create([
         'user_id' => $user->id, 'business_id' => $business->id, 'role' => $role,
     ]);
 
@@ -32,7 +32,7 @@ function rbacToken(Business $business, string $role): string
 
 function rbacCustomer(Business $business): Customer
 {
-    return Customer::on('pgsql_migrate')->create([
+    return Customer::create([
         'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
         'name' => 'Ram Traders', 'opening_balance' => '500.00',
     ]);
@@ -40,10 +40,10 @@ function rbacCustomer(Business $business): Customer
 
 function rbacPack(Business $business): ProductPack
 {
-    $product = Product::on('pgsql_migrate')->create(['business_id' => $business->id, 'name_hi' => 'सेव']);
-    $packSize = PackSize::on('pgsql_migrate')->create(['business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500']);
+    $product = Product::create(['business_id' => $business->id, 'name_hi' => 'सेव']);
+    $packSize = PackSize::create(['business_id' => $business->id, 'label' => '500g', 'weight_kg' => '0.500']);
 
-    return ProductPack::on('pgsql_migrate')->create([
+    return ProductPack::create([
         'business_id' => $business->id, 'product_id' => $product->id,
         'pack_size_id' => $packSize->id, 'default_sell_price' => '90.00',
     ]);
