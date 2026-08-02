@@ -36,14 +36,14 @@ function stockMovement(RawMaterial $m, User $u, string $kind, string $qty, strin
 }
 
 it('reports zero on hand for a material with no movements', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $material = stockMaterial($business);
 
     expect((new StockService())->onHandFor($material))->toBe('0.000');
 });
 
 it('sums signed movements exactly for on hand', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $user = User::factory()->create();
     $material = stockMaterial($business);
 
@@ -56,7 +56,7 @@ it('sums signed movements exactly for on hand', function () {
 });
 
 it('allows on hand to go negative when over-consumed', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $user = User::factory()->create();
     $material = stockMaterial($business);
 
@@ -67,20 +67,20 @@ it('allows on hand to go negative when over-consumed', function () {
 });
 
 it('flags below reorder only once on hand drops under the level', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $user = User::factory()->create();
     $material = stockMaterial($business, '10.000');
     $service = new StockService();
 
     stockMovement($material, $user, 'in', '10.000');
-    expect($service->belowReorder($material->fresh()))->toBeFalse(); // exactly at level
+    expect($service->belowReorder(RawMaterial::findOrFail($material->id)))->toBeFalse(); // exactly at level
 
     stockMovement($material, $user, 'out', '-0.001');
-    expect($service->belowReorder($material->fresh()))->toBeTrue(); // now under
+    expect($service->belowReorder(RawMaterial::findOrFail($material->id)))->toBeTrue(); // now under
 });
 
 it('never flags below reorder when no reorder level is set', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $user = User::factory()->create();
     $material = stockMaterial($business, null);
 
@@ -90,7 +90,7 @@ it('never flags below reorder when no reorder level is set', function () {
 });
 
 it('builds a ledger whose final running on hand equals on hand', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $user = User::factory()->create();
     $material = stockMaterial($business);
     $service = new StockService();

@@ -18,8 +18,8 @@ it('lists the templates on disk plus blank', function () {
 it('seeds the namkeen template into one business', function () {
     $business = Business::factory()->create();
 
-    // Mirror what a request does: a transaction with the tenant GUC set, so the
-    // RLS WITH CHECK admits the inserts.
+    // Mirror what a request does: a transaction with the tenant bound, so the
+    // scope admits the inserts and stamps business_id on them.
     DB::transaction(function () use ($business) {
         TenantContext::switchTo($business->id);
         app()->bind('tenant.id', fn () => $business->id);

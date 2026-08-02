@@ -345,9 +345,11 @@ describe('scheduled reminders (Phase 4c)', function () {
             'business' => $business->id,
         ])->assertNotFound();
 
-        // Read past the tenant scope: the row belongs to the OTHER tenant, which
-        // is precisely why the request 404'd.
+        // The row belongs to the OTHER tenant, which is precisely why the request
+        // 404'd -- so read it scoped to THEM. A raw builder gets no Eloquent
+        // scope, so that predicate is written out.
         $row = Illuminate\Support\Facades\DB::table('reminder_logs')
+            ->where('business_id', $otherBusiness->id)
             ->where('id', $log->id)->first();
         expect($row->status)->toBe('planned');
     });

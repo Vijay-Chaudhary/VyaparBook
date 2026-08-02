@@ -22,8 +22,8 @@ use Illuminate\Database\Eloquent\Builder;
  *
  * TWO ELOQUENT METHODS ALSO BYPASS IT, and neither is obvious: `$model->fresh()`
  * and `$model->refresh()` build their query with newQueryWithoutScopes(), so
- * they re-read a row with NO tenant predicate. Prefer `Model::findOrFail($id)`
- * when re-reading a tenant-owned row; the tripwire flags the difference.
+ * they re-read a row with NO tenant predicate. Use `freshScoped()` below instead;
+ * the tripwire flags the difference.
  */
 trait BelongsToTenant
 {
@@ -48,5 +48,21 @@ trait BelongsToTenant
                 $model->business_id = app('tenant.id');
             }
         });
+    }
+
+    /**
+     * Re-read this row from the database WITH the tenant scope applied.
+     *
+     * The replacement for fresh(), whose newQueryWithoutScopes() would drop the
+     * tenant predicate. newQuery() keeps global scopes, so the reload is confined
+     * to the bound tenant exactly as the original read was.
+     *
+     * Used after a write to return the row's real persisted state -- database
+     * defaults and any column a trigger or the DB filled in are only knowable by
+     * reading back.
+     */
+    public function freshScoped(): static
+    {
+        return $this->newQuery()->findOrFail($this->getKey());
     }
 }

@@ -56,14 +56,14 @@ function khataPayment(Customer $c, User $u, string $amount, string $date = '2026
 }
 
 it('returns the opening balance verbatim when there is no activity', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $customer = khataCustomer($business, '250.00');
 
     expect((new KhataService())->outstandingFor($customer))->toBe('250.00');
 });
 
 it('computes outstanding as opening + sales - payments, exactly', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $user = User::factory()->create();
     $customer = khataCustomer($business, '100.00');
 
@@ -76,7 +76,7 @@ it('computes outstanding as opening + sales - payments, exactly', function () {
 });
 
 it('leaves outstanding unchanged after a sale and its reversal net out', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $user = User::factory()->create();
     $customer = khataCustomer($business, '0.00');
 
@@ -87,7 +87,7 @@ it('leaves outstanding unchanged after a sale and its reversal net out', functio
 });
 
 it('builds a time-ordered ledger whose final running balance equals outstanding', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $user = User::factory()->create();
     $customer = khataCustomer($business, '100.00');
 
@@ -105,7 +105,7 @@ it('builds a time-ordered ledger whose final running balance equals outstanding'
 });
 
 it('tags a reversal entry distinctly in the ledger', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $user = User::factory()->create();
     $customer = khataCustomer($business, '0.00');
 
@@ -117,7 +117,7 @@ it('tags a reversal entry distinctly in the ledger', function () {
 });
 
 it('snapshots a product pack rate as the sale-time price', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव',
     ]);

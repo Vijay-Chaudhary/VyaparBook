@@ -79,7 +79,7 @@ class RawMaterialController extends Controller
 
         $material->update($data);
 
-        return response()->json($material->fresh());
+        return response()->json($material->freshScoped());
     }
 
     public function destroy(string $id)
@@ -115,7 +115,7 @@ class RawMaterialController extends Controller
         $material->archived_at = null;
         $material->save();
 
-        return response()->json($material->fresh());
+        return response()->json($material->freshScoped());
     }
 
     private function denied()

@@ -73,9 +73,11 @@ function runBackfill(): void
     $migration->backfill();
 }
 
-function orderedPair(string $lineId): array
+/** Raw builder, so the tenant predicate is written out for the tripwire. */
+function orderedPair(string $businessId, string $lineId): array
 {
-    $line = DB::table('order_lines')->where('id', $lineId)->first();
+    $line = DB::table('order_lines')
+        ->where('business_id', $businessId)->where('id', $lineId)->first();
 
     return [$line->ordered_qty, $line->ordered_rate === null ? null : (string) $line->ordered_rate];
 }
@@ -87,7 +89,7 @@ it('fills a pending order from its own values, which cannot yet have been edited
 
     runBackfill();
 
-    expect(orderedPair($lineId))->toBe([2, '85.00']);
+    expect(orderedPair($business->id, $lineId))->toBe([2, '85.00']);
 });
 
 it('leaves every decided order unknown, because its values may already be an edit', function () {
@@ -102,7 +104,7 @@ it('leaves every decided order unknown, because its values may already be an edi
     runBackfill();
 
     foreach ($lines as $status => $lineId) {
-        expect(orderedPair($lineId))->toBe([null, null], "status {$status} must stay unknown");
+        expect(orderedPair($business->id, $lineId))->toBe([null, null], "status {$status} must stay unknown");
     }
 });
 
@@ -110,10 +112,10 @@ it('never overwrites an original it already has', function () {
     [$business, $user, $customer, $pack] = backfillSetup();
 
     $lineId = legacyOrderLine($business, $user, $customer, $pack, OrderStatus::PENDING);
-    DB::table('order_lines')->where('id', $lineId)
+    DB::table('order_lines')->where('business_id', $business->id)->where('id', $lineId)
         ->update(['ordered_qty' => 10, 'ordered_rate' => '90.00']);
 
     runBackfill();
 
-    expect(orderedPair($lineId))->toBe([10, '90.00']);
+    expect(orderedPair($business->id, $lineId))->toBe([10, '90.00']);
 });

@@ -174,7 +174,10 @@ describe('create', function () {
             ->post('/customers', ['business' => $business->id, 'name' => ''])
             ->assertSessionHasErrors('name');
 
-        expect(Customer::where('business_id', $business->id)->count())->toBe(0);
+        // The rejected request aborted before the tenant middleware bound a
+        // tenant, so name the shop being checked rather than leaving the
+        // fail-closed scope with nothing to scope to.
+        expect(asTenant($business->id, fn () => Customer::count()))->toBe(0);
     });
 
     it('is idempotent on a replayed uuid, so a double submit adds one row', function () {

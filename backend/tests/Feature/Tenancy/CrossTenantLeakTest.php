@@ -10,6 +10,7 @@ use App\Models\Subscription;
 use App\Models\SubscriptionPayment;
 use App\Models\User;
 use App\Services\TokenService;
+use App\Support\Tenancy;
 use Illuminate\Support\Str;
 
 function ownerContext(): array
@@ -164,11 +165,12 @@ it('rejects business As owner archiving business Bs product', function () {
         ->deleteJson("/api/v1/products/{$foreign->id}")
         ->assertStatus(404);
 
-    // And it really is untouched. withoutGlobalScopes() because the request
-    // above bound app('tenant.id') to business A for the rest of the process;
+    // And it really is untouched. withoutTenant() because the request above
+    // bound app('tenant.id') to business A for the rest of the process;
     // BelongsToTenant's scope would otherwise filter this business-B row out and
     // the read would see null — hiding, not proving, that the row is intact.
-    expect(Product::withoutGlobalScopes()->find($foreign->id)->archived_at)->toBeNull();
+    expect(Tenancy::withoutTenant(fn () => Product::find($foreign->id)->archived_at))
+        ->toBeNull();
 });
 
 it('never returns business Bs khata to business A', function () {
@@ -230,11 +232,12 @@ it('rejects business As owner voiding business Bs sale and leaves it untouched',
         ->postJson("/api/v1/sales/{$saleB->id}/void")
         ->assertStatus(404);
 
-    // withoutGlobalScopes(): the request pinned app('tenant.id') to A, so a scoped
+    // withoutTenant(): the request pinned app('tenant.id') to A, so a scoped
     // read of this business-B row would see null and prove nothing.
-    $fresh = Sale::withoutGlobalScopes()->find($saleB->id);
+    $fresh = Tenancy::withoutTenant(fn () => Sale::find($saleB->id));
     expect($fresh->reverses_id)->toBeNull();
-    expect(Sale::withoutGlobalScopes()->where('reverses_id', $saleB->id)->exists())->toBeFalse();
+    expect(Tenancy::withoutTenant(fn () => Sale::where('reverses_id', $saleB->id)->exists()))
+        ->toBeFalse();
 });
 
 it('rejects a sync push mutation stamped with business Bs tenant_id and writes nothing', function () {
@@ -292,10 +295,10 @@ it('rejects business As owner recording a movement for business Bs material', fu
         ])
         ->assertStatus(404);
 
-    // And no movement leaked onto B's material. withoutGlobalScopes(): the request
+    // And no movement leaked onto B's material. withoutTenant(): the request
     // pinned app('tenant.id') to A, so a scoped read would filter this B row out.
-    expect(\App\Models\StockMovement::withoutGlobalScopes()
-        ->where('raw_material_id', $foreignMaterial->id)->count())->toBe(0);
+    expect(Tenancy::withoutTenant(fn () => \App\Models\StockMovement::
+        where('raw_material_id', $foreignMaterial->id)->count()))->toBe(0);
 });
 
 it('rejects business As batch consuming business Bs material and leaves Bs stock untouched', function () {
@@ -327,13 +330,13 @@ it('rejects business As batch consuming business Bs material and leaves Bs stock
         ->assertStatus(404);
 
     // B's stock is exactly the seeded 100 — no draw-down leaked, no batch created.
-    // withoutGlobalScopes() because the request pinned the tenant to A.
-    $onHand = (string) \App\Models\StockMovement::withoutGlobalScopes()
-        ->where('raw_material_id', $foreignMaterial->id)
-        ->selectRaw('CAST(coalesce(sum(qty), 0) AS CHAR) as agg')->value('agg');
+    // withoutTenant() because the request pinned the tenant to A.
+    $onHand = (string) Tenancy::withoutTenant(fn () => \App\Models\StockMovement::
+        where('raw_material_id', $foreignMaterial->id)
+        ->selectRaw('CAST(coalesce(sum(qty), 0) AS CHAR) as agg')->value('agg'));
     expect($onHand)->toBe('100.000');
-    expect(\App\Models\ProductionBatch::withoutGlobalScopes()
-        ->where('business_id', $businessA->id)->count())->toBe(0);
+    expect(Tenancy::withoutTenant(fn () => \App\Models\ProductionBatch::
+        where('business_id', $businessA->id)->count()))->toBe(0);
 });
 
 it('never shows business Bs subscription payments in business As billing', function () {
@@ -381,8 +384,9 @@ it('stamps a recorded payment with the callers tenant, ignoring a supplied busin
         ])
         ->assertCreated();
 
-    $payment = SubscriptionPayment::withoutGlobalScopes()
-        ->latest('created_at')->first();
+    // Deliberately unscoped: the claim is about which tenant the newest payment
+    // on the WHOLE platform belongs to, which a scoped read cannot express.
+    $payment = Tenancy::withoutTenant(fn () => SubscriptionPayment::latest('created_at')->first());
     expect($payment->business_id)->toBe($businessA->id);
     expect($payment->business_id)->not->toBe($businessB->id);
 });

@@ -3,6 +3,7 @@
 
 use App\Models\Customer;
 use App\Models\ReminderLog;
+use App\Support\Tenancy;
 use Illuminate\Support\Str;
 
 beforeEach(function () {
@@ -34,23 +35,38 @@ function sentReminder(string $providerMessageId = 'wamid.ABC', string $phone = '
 {
     [$owner, $business] = pwOwner();
 
-    $customer = Customer::create([
-        'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
-        'name' => 'Ramesh Kumar', 'village' => 'Rampur',
-        'phone' => $phone, 'opening_balance' => '0.00',
-    ]);
+    return asTenant($business->id, function () use ($owner, $business, $phone, $providerMessageId) {
+        $customer = Customer::create([
+            'business_id' => $business->id, 'uuid' => (string) Str::uuid(),
+            'name' => 'Ramesh Kumar', 'village' => 'Rampur',
+            'phone' => $phone, 'opening_balance' => '0.00',
+        ]);
 
-    $log = new ReminderLog([
-        'business_id' => $business->id, 'customer_id' => $customer->id,
-        'channel' => 'cloud_api', 'amount_at_send' => '2500.00',
-        'locale' => 'en', 'phone_e164' => '91'.$phone,
-    ]);
-    $log->created_by = $owner->id;
-    $log->status = 'sent';
-    $log->provider_message_id = $providerMessageId;
-    $log->save();
+        $log = new ReminderLog([
+            'business_id' => $business->id, 'customer_id' => $customer->id,
+            'channel' => 'cloud_api', 'amount_at_send' => '2500.00',
+            'locale' => 'en', 'phone_e164' => '91'.$phone,
+        ]);
+        $log->created_by = $owner->id;
+        $log->status = 'sent';
+        $log->provider_message_id = $providerMessageId;
+        $log->save();
 
-    return [$business, $customer, $log];
+        return [$business, $customer, $log];
+    });
+}
+
+/**
+ * Read back a row the webhook touched.
+ *
+ * Deliberately cross-tenant, and it is the subject rather than a shortcut: the
+ * webhook resolves rows by provider_message_id or phone number across EVERY
+ * tenant, because Meta calls one platform number for all of them. An assertion
+ * pinned to one shop could not see that behaviour at all.
+ */
+function waRead(callable $fn): mixed
+{
+    return Tenancy::withoutTenant($fn);
 }
 
 function statusPayload(string $id, string $status): array
@@ -88,7 +104,7 @@ describe('signature verification', function () {
             json_encode(statusPayload('wamid.ABC', 'delivered')))
             ->assertForbidden();
 
-        expect(ReminderLog::find($log->id)->status)->toBe('sent');
+        expect(waRead(fn () => ReminderLog::find($log->id)->status))->toBe('sent');
     });
 
     it('rejects a forged signature and writes nothing', function () {
@@ -97,7 +113,7 @@ describe('signature verification', function () {
         waPost(statusPayload('wamid.ABC', 'delivered'), signature: 'sha256=deadbeef')
             ->assertForbidden();
 
-        expect(ReminderLog::find($log->id)->status)->toBe('sent');
+        expect(waRead(fn () => ReminderLog::find($log->id)->status))->toBe('sent');
     });
 });
 
@@ -107,7 +123,7 @@ describe('delivery status', function () {
 
         waPost(statusPayload('wamid.ABC', 'delivered'))->assertOk();
 
-        $fresh = ReminderLog::find($log->id);
+        $fresh = waRead(fn () => ReminderLog::find($log->id));
         expect($fresh->status)->toBe('delivered');
         expect($fresh->status_at)->not->toBeNull();
     });
@@ -118,7 +134,7 @@ describe('delivery status', function () {
         waPost(statusPayload('wamid.ABC', 'read'))->assertOk();
         waPost(statusPayload('wamid.ABC', 'sent'))->assertOk();   // late, out of order
 
-        expect(ReminderLog::find($log->id)->status)->toBe('read');
+        expect(waRead(fn () => ReminderLog::find($log->id)->status))->toBe('read');
     });
 
     it('records a failure reported by Meta', function () {
@@ -131,7 +147,7 @@ describe('delivery status', function () {
 
         waPost($payload)->assertOk();
 
-        $fresh = ReminderLog::find($log->id);
+        $fresh = waRead(fn () => ReminderLog::find($log->id));
         expect($fresh->status)->toBe('failed');
         expect($fresh->error_code)->toBe('131026');
     });
@@ -139,7 +155,7 @@ describe('delivery status', function () {
     it('ignores a status for a message id it has never seen', function () {
         waPost(statusPayload('wamid.UNKNOWN', 'delivered'))->assertOk();
 
-        expect(ReminderLog::count())->toBe(0);
+        expect(waRead(fn () => ReminderLog::count()))->toBe(0);
     });
 });
 
@@ -152,8 +168,8 @@ describe('inbound STOP', function () {
 
         waPost(inboundPayload('919876543210', 'STOP'))->assertOk();
 
-        expect(Customer::find($mine->id)->reminder_opt_out_at)->not->toBeNull();
-        expect(Customer::find($theirs->id)->reminder_opt_out_at)->not->toBeNull();
+        expect(waRead(fn () => Customer::find($mine->id)->reminder_opt_out_at))->not->toBeNull();
+        expect(waRead(fn () => Customer::find($theirs->id)->reminder_opt_out_at))->not->toBeNull();
     });
 
     it('recognises Hindi stop words and ignores case and punctuation', function () {
@@ -161,7 +177,7 @@ describe('inbound STOP', function () {
 
         waPost(inboundPayload('919876543210', ' बंद '))->assertOk();
 
-        expect(Customer::find($customer->id)->reminder_opt_out_at)->not->toBeNull();
+        expect(waRead(fn () => Customer::find($customer->id)->reminder_opt_out_at))->not->toBeNull();
     });
 
     it('does not opt out on a sentence that merely contains a stop word', function () {
@@ -170,7 +186,7 @@ describe('inbound STOP', function () {
         waPost(inboundPayload('919876543210', "please don't stop sending, I will pay tomorrow"))
             ->assertOk();
 
-        expect(Customer::find($customer->id)->reminder_opt_out_at)->toBeNull();
+        expect(waRead(fn () => Customer::find($customer->id)->reminder_opt_out_at))->toBeNull();
     });
 
     it('ignores a stop from a number nobody has on file', function () {
@@ -178,7 +194,7 @@ describe('inbound STOP', function () {
 
         waPost(inboundPayload('919999999999', 'STOP'))->assertOk();
 
-        expect(Customer::find($customer->id)->reminder_opt_out_at)->toBeNull();
+        expect(waRead(fn () => Customer::find($customer->id)->reminder_opt_out_at))->toBeNull();
     });
 
     it('leaves an ordinary reply alone', function () {
@@ -186,6 +202,6 @@ describe('inbound STOP', function () {
 
         waPost(inboundPayload('919876543210', 'I will pay on Friday'))->assertOk();
 
-        expect(Customer::find($customer->id)->reminder_opt_out_at)->toBeNull();
+        expect(waRead(fn () => Customer::find($customer->id)->reminder_opt_out_at))->toBeNull();
     });
 });

@@ -36,7 +36,7 @@ $payment = fn (Business $b, int $months) => SubscriptionPayment::create([
 ]);
 
 it('provisions a single 14-day trial idempotently', function () use ($inTenant) {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $user = User::factory()->create();
     $svc = new SubscriptionService();
 
@@ -54,7 +54,7 @@ it('provisions a single 14-day trial idempotently', function () use ($inTenant) 
 });
 
 it('flips an expired trial to past_due and bumps version', function () use ($inTenant) {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $user = User::factory()->create();
     $svc = new SubscriptionService();
 
@@ -72,7 +72,7 @@ it('flips an expired trial to past_due and bumps version', function () use ($inT
 });
 
 it('leaves a live trial untouched', function () use ($inTenant) {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $user = User::factory()->create();
     $svc = new SubscriptionService();
 
@@ -90,7 +90,7 @@ it('leaves a live trial untouched', function () use ($inTenant) {
 });
 
 it('activates a plan from a payment and stamps the verifier', function () use ($inTenant, $payment) {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $user = User::factory()->create();
     $svc = new SubscriptionService();
 
@@ -102,7 +102,7 @@ it('activates a plan from a payment and stamps the verifier', function () use ($
         $p = $payment($business, 3);
         $sub = $svc->activateFromPayment($p);
 
-        return [$sub, $p->fresh()];
+        return [$sub, reread($p)];
     });
 
     expect($sub->status)->toBe('active');
@@ -114,7 +114,7 @@ it('activates a plan from a payment and stamps the verifier', function () use ($
 });
 
 it('does not extend again when a verified payment is replayed', function () use ($inTenant, $payment) {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $user = User::factory()->create();
     $svc = new SubscriptionService();
 

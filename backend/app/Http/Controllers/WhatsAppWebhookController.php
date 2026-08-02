@@ -102,34 +102,39 @@ class WhatsAppWebhookController extends Controller
             return;
         }
 
-        // Privileged connection: this row belongs to a tenant we have no pin
-        // for, and Meta's callback is the only thing that can resolve it.
-        $row = DB::table('reminder_logs')
-            ->where('provider_message_id', $id)->first();
+        // Deliberately cross-tenant: this row belongs to a tenant we have no pin
+        // for, and the provider_message_id in Meta's callback is the only thing
+        // that can resolve it. Narrow all the same — provider_message_id comes
+        // from Meta and identifies exactly one row, so suspending the scope
+        // widens what we may read, not what we do read.
+        Tenancy::withoutTenant(function () use ($id, $newStatus, $status) {
+            $row = DB::table('reminder_logs')
+                ->where('provider_message_id', $id)->first();
 
-        if ($row === null) {
-            Log::info('whatsapp.webhook.unknown_message', ['status' => $newStatus]);
+            if ($row === null) {
+                Log::info('whatsapp.webhook.unknown_message', ['status' => $newStatus]);
 
-            return;
-        }
+                return;
+            }
 
-        $current = self::RANK[$row->status] ?? 0;
+            $current = self::RANK[$row->status] ?? 0;
 
-        // 'failed' is terminal information and always recorded; otherwise only
-        // forward moves.
-        if ($newStatus !== 'failed' && self::RANK[$newStatus] <= $current) {
-            return;
-        }
+            // 'failed' is terminal information and always recorded; otherwise
+            // only forward moves.
+            if ($newStatus !== 'failed' && self::RANK[$newStatus] <= $current) {
+                return;
+            }
 
-        DB::table('reminder_logs')->where('id', $row->id)->update([
-            'status' => $newStatus,
-            'status_at' => now(),
-            'error_code' => isset($status['errors'][0]['code']) ? (string) $status['errors'][0]['code'] : null,
-            'error_message' => isset($status['errors'][0]['title'])
-                ? mb_substr((string) $status['errors'][0]['title'], 0, 255)
-                : null,
-            'updated_at' => now(),
-        ]);
+            DB::table('reminder_logs')->where('id', $row->id)->update([
+                'status' => $newStatus,
+                'status_at' => now(),
+                'error_code' => isset($status['errors'][0]['code']) ? (string) $status['errors'][0]['code'] : null,
+                'error_message' => isset($status['errors'][0]['title'])
+                    ? mb_substr((string) $status['errors'][0]['title'], 0, 255)
+                    : null,
+                'updated_at' => now(),
+            ]);
+        });
     }
 
     private function applyInbound(array $message): void

@@ -72,7 +72,7 @@ describe('access', function () {
 describe('issuing', function () {
     it('links the customer on an uninvoiced sale through to their khata', function () {
         [$owner, $business] = invShop();
-        $customer = Customer::where('business_id', $business->id)->firstOrFail();
+        $customer = asTenant($business->id, fn () => Customer::firstOrFail());
 
         $this->actingAs($owner)->get('/invoices?business=' . $business->id)
             ->assertOk()
@@ -106,12 +106,12 @@ describe('issuing', function () {
 
     it('does not change what the customer owes', function () {
         [$owner, $business, $sale] = invShop();
-        $before = (string) Sale::find($sale->id)->total;
+        $before = (string) asTenant($business->id, fn () => Sale::find($sale->id))->total;
 
         $this->actingAs($owner)->post('/invoices', ['business' => $business->id, 'sale' => $sale->id]);
 
         // The whole point of extracting tax rather than adding it.
-        expect((string) Sale::find($sale->id)->total)->toBe($before);
+        expect((string) asTenant($business->id, fn () => Sale::find($sale->id))->total)->toBe($before);
     });
 
     it('refuses a shop with no GSTIN and explains why', function () {
@@ -188,7 +188,10 @@ describe('gst settings', function () {
             'products' => [$product->id => ['hsn_code' => '19059090', 'gst_rate_percent' => '18.00']],
         ])->assertRedirect();
 
-        $fresh = DB::table('products')->where('id', $product->id)->first();
+        // Raw builder: the tenant predicate is written out, since no Eloquent
+        // scope reaches DB::table().
+        $fresh = DB::table('products')
+            ->where('business_id', $business->id)->where('id', $product->id)->first();
         expect($fresh->hsn_code)->toBe('19059090');
         expect((string) $fresh->gst_rate_percent)->toBe('18.00');
     });

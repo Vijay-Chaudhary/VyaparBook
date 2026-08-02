@@ -11,7 +11,7 @@ use App\Models\SaleLine;
 use App\Models\User;
 use Illuminate\Support\Str;
 
-/** Build a product_pack on the migrate connection (bypasses RLS) for one business. */
+/** Build a product_pack for the business bound as the current tenant. */
 function packFor(Business $business, string $sellPrice = '90.00'): ProductPack
 {
     $product = Product::create([
@@ -29,7 +29,7 @@ function packFor(Business $business, string $sellPrice = '90.00'): ProductPack
     ]);
 }
 
-/** A customer on the migrate connection (bypasses RLS) for one business. */
+/** A customer for the business bound as the current tenant. */
 function customerFor(Business $business): Customer
 {
     return Customer::create([
@@ -75,7 +75,7 @@ function saleWithLines(Business $business, Customer $customer, User $user, array
 }
 
 it('relates a sale to its lines and stamps created_by, version and sync_seq', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $customer = customerFor($business);
     $user = User::factory()->create();
     $pack = packFor($business);
@@ -91,7 +91,7 @@ it('relates a sale to its lines and stamps created_by, version and sync_seq', fu
 });
 
 it('freezes the line rate as a snapshot, independent of the pack price later', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $customer = customerFor($business);
     $user = User::factory()->create();
     $pack = packFor($business, '90.00');
@@ -107,7 +107,7 @@ it('freezes the line rate as a snapshot, independent of the pack price later', f
 });
 
 it('resolves a reversal back to the original it voids', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $customer = customerFor($business);
     $user = User::factory()->create();
     $pack = packFor($business);
@@ -131,8 +131,8 @@ it('resolves a reversal back to the original it voids', function () {
 });
 
 it('sets the non-fillable created_by and total via the factory afterMaking hook', function () {
-    // make(), not create(): sales is RLS-protected and this unit test holds no
-    // tenant context. Scalar overrides avoid the nested Business/Customer
+    // make(), not create(): the tenant scope fails closed and this unit test
+    // binds no tenant. Scalar overrides avoid the nested Business/Customer
     // factories, so the only thing under test is the afterMaking hook that fills
     // the two columns mass assignment would otherwise drop.
     $sale = Sale::factory()->make([

@@ -7,7 +7,7 @@ use App\Models\Product;
 use App\Models\ProductPack;
 
 it('relates a product to a pack size with its own price', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव', 'base_cost_per_kg' => '120.00',
     ]);
@@ -31,7 +31,7 @@ it('relates a product to a pack size with its own price', function () {
 });
 
 it('rejects the same product/pack pairing twice', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $product = Product::create([
         'business_id' => $business->id, 'name_hi' => 'सेव',
     ]);

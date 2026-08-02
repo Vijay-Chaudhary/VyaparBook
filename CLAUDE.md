@@ -19,4 +19,7 @@ Requirements:
 - Type hints (PHP typed properties/params/returns; TypeScript on the frontend)
 - Production-ready code
 - Automated tests (Pest)
-- Multi-tenant isolation: enforced by `App\Traits\BelongsToTenant`, which FAILS CLOSED — it throws rather than returning every tenant's rows when no tenant is bound. Cross-tenant work must go through `Tenancy::withoutTenant()` (four sanctioned sites). A test-environment query tripwire catches raw builders that bypass the scope. There is no database-level layer behind this: MySQL has no RLS.
+- Multi-tenant isolation: enforced by `App\Traits\BelongsToTenant`, which FAILS CLOSED — it throws rather than returning every tenant's rows when no tenant is bound. Cross-tenant work must go through `Tenancy::withoutTenant()`; the sanctioned reasons are listed on the `Tenancy` class itself (seeders, data migrations, auth before tenant selection, the WhatsApp webhook, the superadmin console), and `grep -rn withoutTenant` enumerates the actual sites. There is no database-level layer behind this: MySQL has no RLS, so anything the Eloquent scope does not reach is unprotected. In particular:
+  - **Raw builders** (`DB::table(...)`) get no scope — write the `business_id` predicate yourself. A test-environment query tripwire catches the ones that forget.
+  - **`fresh()` / `refresh()`** build their query with `newQueryWithoutScopes()`. Use `freshScoped()` from the trait instead.
+  - **`unique:` / `exists:` validation rules** resolve through the presence verifier, which is also a raw builder — always add `->where('business_id', app('tenant.id'))`.

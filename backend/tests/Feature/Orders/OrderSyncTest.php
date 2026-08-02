@@ -89,7 +89,8 @@ it('walks an order through pack and deliver from the field', function () {
         'payload' => ['order_uuid' => $uuid],
     ]])->assertOk()->assertJsonPath('results.0.status', 'applied');
 
-    expect(DB::table('orders')->where('uuid', $uuid)->value('status'))
+    expect(DB::table('orders')
+        ->where('business_id', $business->id)->where('uuid', $uuid)->value('status'))
         ->toBe('delivered');
     expect(DB::table('sales')->where('business_id', $business->id)->count())
         ->toBe(1);

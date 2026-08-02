@@ -59,7 +59,7 @@ class CustomerController extends Controller
 
         $customer->update($data);
 
-        return response()->json($customer->fresh());
+        return response()->json($customer->freshScoped());
     }
 
     public function destroy(string $id)
@@ -87,7 +87,7 @@ class CustomerController extends Controller
         $customer->archived_at = null;
         $customer->save();
 
-        return response()->json($customer->fresh());
+        return response()->json($customer->freshScoped());
     }
 
     private function denied()

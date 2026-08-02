@@ -14,7 +14,7 @@ use App\Services\StockService;
 use Illuminate\Support\Str;
 
 it('records a purchase with a linked costed stock-in, and is idempotent', function () {
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
     $s = pwSupplier($a);
     $m = pwMaterial($a);
@@ -35,7 +35,7 @@ it('records a purchase with a linked costed stock-in, and is idempotent', functi
 
         // Read on-hand on the DEFAULT connection (same transaction the writer used),
         // so the just-written movement is visible — mirrors the controller flow.
-        return [$p->fresh(), (new StockService())->onHandFor(RawMaterial::find($m->id))];
+        return [reread($p), (new StockService())->onHandFor(RawMaterial::find($m->id))];
     });
 
     expect($purchase->total)->toBe('400.00');   // 10 × 40
@@ -45,7 +45,7 @@ it('records a purchase with a linked costed stock-in, and is idempotent', functi
 });
 
 it('reverses the stock-in when a purchase is removed', function () {
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
     $s = pwSupplier($a);
     $m = pwMaterial($a);

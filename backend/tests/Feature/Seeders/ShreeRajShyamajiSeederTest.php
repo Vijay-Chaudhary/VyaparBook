@@ -33,6 +33,12 @@ function srsCount(string $class): int
 
 beforeEach(function () {
     $this->seed(ShreeRajShyamajiSeeder::class);
+
+    // The seeder runs inside Tenancy::withoutTenant() and leaves no tenant
+    // bound. Every assertion below reads this shop's own rows, so bind it once
+    // here rather than wrapping each one -- and bind it rather than suspending
+    // the scope, so a query that reached another tenant would still be caught.
+    app()->bind('tenant.id', fn () => srsBusiness()->id);
 });
 
 it('seeds the masters onto one business', function () {
@@ -196,9 +202,10 @@ it('costs every product below what it sells for', function () {
     // The point of reconstructing production: the owner's own consumption
     // figures give Rs 304/kg against Rs 102/kg of revenue.
     //
-    // Pinned inside pwInTenant because CogsService reads through DB::table on
-    // the RLS-restricted app connection, unlike the services above that query
-    // through model relations. Unpinned it would see an empty tenant.
+    // Pinned inside pwInTenant because CogsService reads through DB::table,
+    // which carries its own business_id predicate rather than inheriting the
+    // Eloquent scope the services above rely on. Unpinned it would see an empty
+    // tenant.
     $revenuePerKg = ['Senvda' => 92.77, 'Sev' => 114.42, 'Mix Sev' => 127.30];
     $businessId = srsBusiness()->id;
     $costs = pwInTenant($businessId, fn () => app(CogsService::class)->packCosts($businessId));

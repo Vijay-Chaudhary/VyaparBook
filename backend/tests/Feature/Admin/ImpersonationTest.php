@@ -5,6 +5,7 @@ use App\Models\Customer;
 use App\Models\PlatformAuditLog;
 use App\Models\User;
 use Illuminate\Support\Str;
+use App\Support\Tenancy;
 
 // platformAdmin() / seedTenantWithOwner() are shared helpers in tests/Pest.php.
 
@@ -70,7 +71,9 @@ it('refuses every write through an impersonation token', function (string $metho
         ->assertJsonPath('code', 'impersonation_read_only');
 
     // Nothing landed in the tenant's books.
-    expect(Customer::on('mysql_platform')->where('business_id', $business->id)->count())->toBe(0);
+    expect(Tenancy::withoutTenant(
+        fn () => Customer::on('mysql_platform')->where('business_id', $business->id)->count()
+    ))->toBe(0);
 })->with([
     'create a customer' => ['POST', '/api/v1/customers', ['name' => 'Ghost']],
     'record a sale' => ['POST', '/api/v1/sales', ['customer_id' => 1, 'lines' => []]],

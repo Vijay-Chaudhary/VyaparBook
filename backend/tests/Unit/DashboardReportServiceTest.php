@@ -38,20 +38,30 @@ function dashPayment(Customer $c, User $u, string $amount, string $date): Paymen
 }
 
 it('totals customer outstanding as Σ of KhataService, and isolates tenants', function () {
+    // Two tenants, so asTenant per shop rather than tenantBusiness(): binding
+    // has to follow whose rows are being written and read, or a's sales would
+    // be written while b is bound and this would stop testing isolation at all.
     $a = Business::factory()->create();
     $b = Business::factory()->create();  // a second tenant that must NOT leak in
     $u = User::factory()->create();
 
-    $c1 = dashCustomer($a, 'Ramesh', '1500.00', 'Rampur');
-    $c2 = dashCustomer($a, 'Mahaveer', '0.00');
-    dashSale($c1, $u, '270.00', '2026-07-10');
-    dashPayment($c1, $u, '200.00', '2026-07-12');   // c1 = 1500 + 270 - 200 = 1570.00
-    dashSale($c2, $u, '58.50', '2026-07-11');        // c2 = 58.50
+    [$c1, $c2] = asTenant($a->id, function () use ($a, $u) {
+        $c1 = dashCustomer($a, 'Ramesh', '1500.00', 'Rampur');
+        $c2 = dashCustomer($a, 'Mahaveer', '0.00');
+        dashSale($c1, $u, '270.00', '2026-07-10');
+        dashPayment($c1, $u, '200.00', '2026-07-12');   // c1 = 1500 + 270 - 200 = 1570.00
+        dashSale($c2, $u, '58.50', '2026-07-11');        // c2 = 58.50
 
-    $bOnly = dashCustomer($b, 'Other Shop Customer', '9999.00');
+        return [$c1, $c2];
+    });
+
+    asTenant($b->id, fn () => dashCustomer($b, 'Other Shop Customer', '9999.00'));
 
     $khata = new KhataService();
-    $expectedTotal = bcadd($khata->outstandingFor($c1), $khata->outstandingFor($c2), 2);
+    $expectedTotal = asTenant(
+        $a->id,
+        fn () => bcadd($khata->outstandingFor($c1), $khata->outstandingFor($c2), 2)
+    );
 
     $summary = inTenant($a->id, fn () => app(DashboardReportService::class)
         ->customerOutstanding($a->id));
@@ -72,7 +82,7 @@ it('totals customer outstanding as Σ of KhataService, and isolates tenants', fu
 it('sums sales for today and the selected month, and builds a 12-row sales trend', function () {
     Illuminate\Support\Carbon::setTestNow('2026-07-22');
 
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
     $c = dashCustomer($a, 'Ramesh');
 
@@ -152,7 +162,7 @@ function dashSupplierPayment(App\Models\Business $b, App\Models\User $u, string 
 }
 
 it('sums production for the month and builds a 12-row kg trend', function () {
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
 
     dashBatch($a, $u, '50.000', '2026-07-04');
@@ -177,7 +187,7 @@ it('sums production for the month and builds a 12-row kg trend', function () {
 });
 
 it('flags materials below reorder and ranks product performance', function () {
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
 
     // Low stock: Besan on-hand 150 (reorder 100 → OK), Salt on-hand 4 (reorder 20 → LOW).
@@ -227,7 +237,7 @@ it('assembles a full report, with highest-selling/profit and an empty-shop case'
     Illuminate\Support\Carbon::setTestNow('2026-07-22');
 
     // Empty shop first: everything zero, nothing crashes.
-    $empty = Business::factory()->create();
+    $empty = tenantBusiness();
     $report = inTenant($empty->id, fn () => app(DashboardReportService::class)
         ->forMonth($empty->id, App\Reports\ReportPeriod::fromInput(2026, 7)));
 
@@ -250,7 +260,7 @@ it('assembles a full report, with highest-selling/profit and an empty-shop case'
 });
 
 it('computes an estimated monthly gross profit: sales minus product cost, before expenses', function () {
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
 
     $product = App\Models\Product::create([
@@ -287,8 +297,8 @@ it('computes an estimated monthly gross profit: sales minus product cost, before
 });
 
 it('totals expenses for a month, breaks them down by category, and builds a 12-row trend', function () {
-    $a = Business::factory()->create();
-    $b = Business::factory()->create();   // second tenant — must NOT leak in
+    $a = tenantBusiness();
+    $b = tenantBusiness();   // second tenant — must NOT leak in
     $u = User::factory()->create();
 
     dashExpense($a, $u, 'rent', '5000.00', '2026-07-01');
@@ -323,7 +333,7 @@ it('totals expenses for a month, breaks them down by category, and builds a 12-r
 it('assembles net profit for a profitable month, a loss month, and guards zero-sales margin', function () {
     Illuminate\Support\Carbon::setTestNow('2026-07-22');
 
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
 
     // One product pack: sell 100, cost 93 → gross profit 7 per unit.
@@ -370,7 +380,7 @@ it('assembles net profit for a profitable month, a loss month, and guards zero-s
 });
 
 it('reports a zero net margin when there are no sales (no divide-by-zero)', function () {
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
     dashExpense($a, $u, 'rent', '500.00', '2026-07-01');   // expense but no sales
 
@@ -387,7 +397,7 @@ it('costs gross profit from production, falling back to the estimate per product
     // cost that differs from the owner's guess), one bought in (no batches, so
     // the guess still stands). The month's gross profit must mix both, and the
     // marker must report only the bought-in half as estimated.
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
 
     $besan = pwMaterial($a, 'Besan');
@@ -431,7 +441,7 @@ it('costs gross profit from production, falling back to the estimate per product
 });
 
 it('reports nothing as estimated once every product sold has been produced', function () {
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
 
     $besan = pwMaterial($a, 'Besan');
@@ -454,7 +464,7 @@ it('reports nothing as estimated once every product sold has been produced', fun
 it('assembles the cash trend with a running position seeded from prior years', function () {
     Illuminate\Support\Carbon::setTestNow('2026-07-22');
 
-    $a = Business::factory()->create();
+    $a = tenantBusiness();
     $u = User::factory()->create();
     $c = dashCustomer($a, 'Ramesh', '0.00');
 

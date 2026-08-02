@@ -7,7 +7,7 @@ use Illuminate\Database\QueryException;
 use Illuminate\Support\Carbon;
 
 it('has a uuid primary key and round-trips trial_ends_at as a datetime', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
 
     $sub = Subscription::create([
         'business_id' => $business->id,
@@ -18,12 +18,12 @@ it('has a uuid primary key and round-trips trial_ends_at as a datetime', functio
     ]);
 
     expect($sub->id)->toBeString()->toHaveLength(36);
-    expect($sub->fresh()->trial_ends_at)->toBeInstanceOf(Carbon::class);
+    expect(reread($sub)->trial_ends_at)->toBeInstanceOf(Carbon::class);
     expect($sub->version)->toBe(1);
 });
 
 it('allows only one subscription per business', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
 
     Subscription::create([
         'business_id' => $business->id,

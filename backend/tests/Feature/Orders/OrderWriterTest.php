@@ -119,7 +119,8 @@ it('takes an order below cost, exactly as a sale now does', function () {
 
     // 60.00 is under the 70.00 cost floor orderSetup builds.
     expect((string) DB::table('order_lines')
-        ->where('order_id', $order->id)->value('rate'))->toBe('60.00');
+        ->where('business_id', $b->id)->where('order_id', $order->id)
+        ->value('rate'))->toBe('60.00');
     expect((string) $order->total)->toBe('120.00');
 });
 
@@ -308,7 +309,7 @@ describe('what the salesman ordered', function () {
             ->createOrder(orderPayload($c, $pack))[0]);
 
         $line = DB::table('order_lines')
-            ->where('order_id', $order->id)->first();
+            ->where('business_id', $b->id)->where('order_id', $order->id)->first();
 
         expect($line->ordered_qty)->toBe(2);
         expect((string) $line->ordered_rate)->toBe('85.00');
@@ -324,7 +325,8 @@ describe('what the salesman ordered', function () {
         )[0]);
 
         expect((string) DB::table('order_lines')
-            ->where('order_id', $order->id)->value('ordered_rate'))->toBe('90.00');
+            ->where('business_id', $b->id)->where('order_id', $order->id)
+            ->value('ordered_rate'))->toBe('90.00');
     });
 
     it('ignores a phone claiming it ordered something else', function () {
@@ -340,7 +342,7 @@ describe('what the salesman ordered', function () {
         )[0]);
 
         $line = DB::table('order_lines')
-            ->where('order_id', $order->id)->first();
+            ->where('business_id', $b->id)->where('order_id', $order->id)->first();
 
         expect($line->ordered_qty)->toBe(2);
         expect((string) $line->ordered_rate)->toBe('85.00');

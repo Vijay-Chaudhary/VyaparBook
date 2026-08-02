@@ -6,7 +6,7 @@ use App\Models\Customer;
 use Illuminate\Support\Str;
 
 it('generates a uuid primary key and stamps a positive sync_seq', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
 
     $customer = Customer::create([
         'business_id' => $business->id,
@@ -17,12 +17,12 @@ it('generates a uuid primary key and stamps a positive sync_seq', function () {
 
     expect($customer->id)->toBeString();
     expect(strlen($customer->id))->toBe(36);
-    expect($customer->fresh()->version)->toBe(1);
-    expect($customer->fresh()->sync_seq)->toBeInt()->toBeGreaterThan(0);
+    expect(reread($customer)->version)->toBe(1);
+    expect(reread($customer)->sync_seq)->toBeInt()->toBeGreaterThan(0);
 });
 
 it('casts opening_balance to a 2-decimal string, not a float', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
 
     $customer = Customer::create([
         'business_id' => $business->id,
@@ -31,11 +31,11 @@ it('casts opening_balance to a 2-decimal string, not a float', function () {
         'opening_balance' => '1000.5',
     ]);
 
-    expect($customer->fresh()->opening_balance)->toBe('1000.50');
+    expect(reread($customer)->opening_balance)->toBe('1000.50');
 });
 
 it('defaults opening_balance to 0.00', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
 
     $customer = Customer::create([
         'business_id' => $business->id,
@@ -43,11 +43,11 @@ it('defaults opening_balance to 0.00', function () {
         'name' => 'Mohan Kirana',
     ]);
 
-    expect($customer->fresh()->opening_balance)->toBe('0.00');
+    expect(reread($customer)->opening_balance)->toBe('0.00');
 });
 
 it('rejects a duplicate uuid within the same business', function () {
-    $business = Business::factory()->create();
+    $business = tenantBusiness();
     $uuid = (string) Str::uuid();
 
     Customer::create([

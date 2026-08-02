@@ -129,11 +129,13 @@ function seedFullTenant(): array
 /** Count this tenant's rows across every table, past the application scope. */
 function tenantRowCount(string $businessId): int
 {
+    // Aliased: MySQL returns information_schema's own columns UPPERCASED, so
+    // pluck('table_name') would yield a column of nulls rather than fail.
     $tables = collect(DB::select(
-        'select table_name from information_schema.columns
+        'select table_name as name from information_schema.columns
          where column_name = ? and table_schema = database()',
         ['business_id']
-    ))->pluck('table_name');
+    ))->pluck('name');
 
     return $tables->sum(fn (string $t) => DB::table($t)
         ->where('business_id', $businessId)->count());

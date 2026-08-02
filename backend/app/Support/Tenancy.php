@@ -12,7 +12,12 @@ namespace App\Support;
  *   1. Seeders                  — run outside any request
  *   2. Data migrations          — likewise, and their job IS every shop
  *   3. Auth before tenant selection (TenantContext::forUser)
- *   4. Inbound WhatsApp STOP    — one number, every tenant holding it
+ *   4. The WhatsApp webhook     — Meta calls ONE platform number on behalf of
+ *                                 every tenant, so the callback arrives with no
+ *                                 tenant context to bind: a delivery status
+ *                                 resolves its row by provider_message_id, and
+ *                                 an inbound STOP opts the sender out of every
+ *                                 tenant holding their number
  *   5. The superadmin console   — cross-tenant by design, though it happens to
  *                                 need no wrap: it uses raw builders on the
  *                                 SELECT-only connection, which Eloquent scopes

@@ -87,7 +87,7 @@ function onHandFor(Business $b): array
 }
 
 it('reports what was produced when nothing has been sold', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     $u = User::factory()->create();
     fgProduce(fgProduct($b), $u, '20.000');
 
@@ -100,7 +100,7 @@ it('reports what was produced when nothing has been sold', function () {
 });
 
 it('converts sold packs to kg by their own pack weight', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     $u = User::factory()->create();
     $product = fgProduct($b);
     fgProduce($product, $u, '20.000');
@@ -115,7 +115,7 @@ it('converts sold packs to kg by their own pack weight', function () {
 });
 
 it('sums several pack sizes of the same product', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     $u = User::factory()->create();
     $product = fgProduct($b);
     fgProduce($product, $u, '20.000');
@@ -128,7 +128,7 @@ it('sums several pack sizes of the same product', function () {
 });
 
 it('self-nets a return, because a return is a negative-qty line', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     $u = User::factory()->create();
     $product = fgProduct($b);
     fgProduce($product, $u, '20.000');
@@ -142,7 +142,7 @@ it('self-nets a return, because a return is a negative-qty line', function () {
 });
 
 it('self-nets a full reversal without excluding any row', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     $u = User::factory()->create();
     $product = fgProduct($b);
     fgProduce($product, $u, '20.000');
@@ -172,7 +172,7 @@ it('self-nets a full reversal without excluding any row', function () {
 });
 
 it('shows a negative on-hand rather than hiding a data error', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     $u = User::factory()->create();
     $product = fgProduct($b);
     // Sold without ever recording production — the owner needs to see this.
@@ -185,14 +185,14 @@ it('shows a negative on-hand rather than hiding a data error', function () {
 });
 
 it('omits a product that was never produced or sold', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     fgProduct($b, 'Never Touched');
 
     expect(onHandFor($b))->toBeEmpty();
 });
 
 it('excludes archived products', function () {
-    $b = Business::factory()->create();
+    $b = tenantBusiness();
     $u = User::factory()->create();
     $product = fgProduct($b);
     fgProduce($product, $u, '20.000');
@@ -203,8 +203,8 @@ it('excludes archived products', function () {
 });
 
 it('never counts another tenant\'s production or sales', function () {
-    $mine = Business::factory()->create();
-    $theirs = Business::factory()->create();
+    $mine = tenantBusiness();
+    $theirs = tenantBusiness();
     $u = User::factory()->create();
 
     fgProduce(fgProduct($mine, 'Mine'), $u, '20.000');

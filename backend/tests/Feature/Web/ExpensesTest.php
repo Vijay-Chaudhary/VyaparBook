@@ -5,6 +5,7 @@ use App\Models\Business;
 use App\Models\Expense;
 use App\Models\Membership;
 use App\Models\User;
+use App\Support\Tenancy;
 use Illuminate\Support\Str;
 
 /** @return array{0: User, 1: Business} */
@@ -20,7 +21,7 @@ function expensesOwner(): array
 }
 
 /**
- * Seed an expense directly (privileged connection). created_by is stamped, not
+ * Seed an expense directly. created_by is stamped, not
  * fillable, so it must be set after construction — Expense::create(['created_by'
  * => ...]) would silently drop it and hit the NOT NULL constraint.
  */
@@ -96,11 +97,12 @@ describe('crud', function () {
         ])->assertRedirect();
         expect(Expense::find($e->id)->amount)->toBe('5500.00');
 
-        // Archive (soft delete). withoutGlobalScopes: the tenant scope is still
-        // bound from the request, so read the row unscoped to assert on it.
+        // Archive (soft delete). A plain scoped read: archiving only stamps
+        // archived_at, and the row is this tenant's own, so the scope left bound
+        // by the request is exactly the one that should see it.
         $this->actingAs($owner)->delete('/expenses/' . $e->id, ['business' => $business->id])
             ->assertRedirect();
-        expect(Expense::withoutGlobalScopes()->find($e->id)->archived_at)->not->toBeNull();
+        expect(Expense::find($e->id)->archived_at)->not->toBeNull();
     });
 
     it('refuses to touch another tenant\'s expense', function () {
@@ -110,8 +112,11 @@ describe('crud', function () {
 
         $this->actingAs($owner)->delete('/expenses/' . $foreign->id, ['business' => $business->id])
             ->assertRedirect();
-        // Untouched — read unscoped since the request left the owner's tenant bound.
-        expect(Expense::withoutGlobalScopes()->find($foreign->id)->archived_at)->toBeNull();
+        // Untouched. Deliberately cross-tenant -- the assertion is about the
+        // OTHER shop's row, which this tenant cannot see -- so withoutTenant,
+        // which is greppable and tells the tripwire it was meant.
+        expect(Tenancy::withoutTenant(fn () => Expense::find($foreign->id)->archived_at))
+            ->toBeNull();
     });
 
     it('rejects a malformed client-supplied uuid cleanly (not a 500)', function () {
@@ -122,7 +127,9 @@ describe('crud', function () {
             'category' => 'rent', 'amount' => '5000', 'spent_on' => '2026-07-01',
         ])->assertSessionHasErrors('uuid');
 
-        expect(Expense::where('business_id', $business->id)->count())->toBe(0);
+        // Validation rejected the request before a tenant was bound, so say
+        // which shop this counts.
+        expect(asTenant($business->id, fn () => Expense::count()))->toBe(0);
     });
 
     it('is idempotent on a replayed uuid', function () {

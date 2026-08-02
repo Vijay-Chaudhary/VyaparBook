@@ -12,7 +12,7 @@ return new class extends Migration
         Schema::create('sale_lines', function (Blueprint $table) {
             $table->uuid('id')->primary();
             // business_id is carried directly (not reached through sale_id) so the
-            // RLS predicate stays flat and needs no join. No `uuid`: a line is
+            // tenant predicate stays flat and needs no join. No `uuid`: a line is
             // never created independently offline — it is written in one
             // transaction with its parent Sale, whose (business_id, uuid) already
             // makes the whole sale idempotent.

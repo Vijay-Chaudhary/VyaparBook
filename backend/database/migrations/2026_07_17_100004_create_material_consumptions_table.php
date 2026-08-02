@@ -12,7 +12,7 @@ return new class extends Migration
         Schema::create('material_consumptions', function (Blueprint $table) {
             $table->uuid('id')->primary();
             // business_id is carried directly (not reached through the batch) so the
-            // RLS predicate stays flat and needs no join. No `uuid`: a consumption
+            // tenant predicate stays flat and needs no join. No `uuid`: a consumption
             // is never created independently offline — it is written in one
             // transaction with its parent batch, whose (business_id, uuid) already
             // makes the whole batch idempotent (mirrors sale_lines).

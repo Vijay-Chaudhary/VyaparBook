@@ -136,6 +136,43 @@ function asTenant(string $businessId, callable $fn): mixed
     }
 }
 
+/**
+ * A fresh business, left bound as the current tenant for the rest of the test.
+ *
+ * The workhorse for tests that operate as ONE shop throughout. Services and
+ * models always run tenant-pinned in production (the controller's runInTenant,
+ * or a TenantAwareJob), and BelongsToTenant now fails closed -- so a test that
+ * skipped the binding would not be testing the subject, it would be testing the
+ * scope's refusal.
+ *
+ * Use asTenant() instead where a test deliberately acts as more than one shop.
+ */
+function tenantBusiness(): \App\Models\Business
+{
+    $business = \App\Models\Business::factory()->create();
+    app()->bind('tenant.id', fn () => $business->id);
+
+    return $business;
+}
+
+/**
+ * Re-read a model from the database WITH the tenant scope applied.
+ *
+ * The replacement for $model->fresh() and $model->refresh(), both of which build
+ * their query with newQueryWithoutScopes() and so re-read the row with no tenant
+ * predicate at all (see the note in BelongsToTenant). newQuery() applies global
+ * scopes, so this reads as the tenant a request would -- and a row that somehow
+ * belonged to another shop fails here instead of being handed back.
+ *
+ * @template T of \Illuminate\Database\Eloquent\Model
+ * @param  T  $model
+ * @return T
+ */
+function reread(\Illuminate\Database\Eloquent\Model $model): \Illuminate\Database\Eloquent\Model
+{
+    return $model->newQuery()->findOrFail($model->getKey());
+}
+
 /** Run $fn inside a tenant-pinned transaction. */
 function pwInTenant(string $businessId, callable $fn): mixed
 {

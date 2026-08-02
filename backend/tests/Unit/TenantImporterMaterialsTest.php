@@ -8,12 +8,25 @@ use App\Models\StockMovement;
 use App\Models\User;
 use App\Services\StockService;
 
-$materialFor = fn (Business $b, string $name) => RawMaterial::withoutGlobalScopes()
-    ->where('business_id', $b->id)
-    ->where('name', $name)
-    ->first();
+/**
+ * Read the imported material back under its own tenant.
+ *
+ * asTenant, not withoutGlobalScopes(): the importer writes for one business, so
+ * binding it keeps the scope live and a row landing in the wrong tenant would
+ * still fail here rather than be read back regardless.
+ */
+$materialFor = fn (Business $b, string $name) => asTenant(
+    $b->id,
+    fn () => RawMaterial::where('name', $name)->first(),
+);
 
-it('imports a raw material and its opening stock as one in-movement', function () use ($materialFor) {
+/** Count the movements the importer wrote, under the same tenant, for the same reason. */
+$movementsFor = fn (Business $b, callable $filter) => asTenant(
+    $b->id,
+    fn () => $filter(StockMovement::query())->count(),
+);
+
+it('imports a raw material and its opening stock as one in-movement', function () use ($materialFor, $movementsFor) {
     $business = Business::factory()->create();
     $owner = User::factory()->create();
 
@@ -25,12 +38,12 @@ it('imports a raw material and its opening stock as one in-movement', function (
 
     $material = $materialFor($business, 'Besan');
     expect($material)->not->toBeNull();
-    expect((new StockService())->onHandFor($material))->toBe('100.000');
-    expect(StockMovement::withoutGlobalScopes()
-        ->where('raw_material_id', $material->id)->where('kind', 'in')->count())->toBe(1);
+    expect(asTenant($business->id, fn () => (new StockService())->onHandFor($material)))->toBe('100.000');
+    expect($movementsFor($business, fn ($q) => $q
+        ->where('raw_material_id', $material->id)->where('kind', 'in')))->toBe(1);
 });
 
-it('does not double the opening stock on a plain re-run', function () use ($materialFor) {
+it('does not double the opening stock on a plain re-run', function () use ($materialFor, $movementsFor) {
     $business = Business::factory()->create();
     $owner = User::factory()->create();
     $importer = new TenantImporter();
@@ -43,12 +56,12 @@ it('does not double the opening stock on a plain re-run', function () use ($mate
     expect($report->updated)->toBe(1);
 
     $material = $materialFor($business, 'Besan');
-    expect((new StockService())->onHandFor($material))->toBe('100.000');
-    expect(StockMovement::withoutGlobalScopes()
-        ->where('raw_material_id', $material->id)->count())->toBe(1);
+    expect(asTenant($business->id, fn () => (new StockService())->onHandFor($material)))->toBe('100.000');
+    expect($movementsFor($business, fn ($q) => $q
+        ->where('raw_material_id', $material->id)))->toBe(1);
 });
 
-it('corrects the single opening movement when re-imported with a new figure', function () use ($materialFor) {
+it('corrects the single opening movement when re-imported with a new figure', function () use ($materialFor, $movementsFor) {
     $business = Business::factory()->create();
     $owner = User::factory()->create();
     $importer = new TenantImporter();
@@ -61,12 +74,12 @@ it('corrects the single opening movement when re-imported with a new figure', fu
     ], false, $owner->id);
 
     $material = $materialFor($business, 'Besan');
-    expect((new StockService())->onHandFor($material))->toBe('80.000');
-    expect(StockMovement::withoutGlobalScopes()
-        ->where('raw_material_id', $material->id)->count())->toBe(1);
+    expect(asTenant($business->id, fn () => (new StockService())->onHandFor($material)))->toBe('80.000');
+    expect($movementsFor($business, fn ($q) => $q
+        ->where('raw_material_id', $material->id)))->toBe(1);
 });
 
-it('creates no movement for a material without opening stock', function () use ($materialFor) {
+it('creates no movement for a material without opening stock', function () use ($materialFor, $movementsFor) {
     $business = Business::factory()->create();
     $owner = User::factory()->create();
 
@@ -75,9 +88,9 @@ it('creates no movement for a material without opening stock', function () use (
     ], false, $owner->id);
 
     $material = $materialFor($business, 'Salt');
-    expect((new StockService())->onHandFor($material))->toBe('0.000');
-    expect(StockMovement::withoutGlobalScopes()
-        ->where('raw_material_id', $material->id)->count())->toBe(0);
+    expect(asTenant($business->id, fn () => (new StockService())->onHandFor($material)))->toBe('0.000');
+    expect($movementsFor($business, fn ($q) => $q
+        ->where('raw_material_id', $material->id)))->toBe(0);
 });
 
 it('skips and reports a material with an invalid unit', function () use ($materialFor) {

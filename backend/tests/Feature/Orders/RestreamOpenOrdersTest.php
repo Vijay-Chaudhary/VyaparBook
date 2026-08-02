@@ -49,9 +49,11 @@ function runRestream(): void
     $migration->restream();
 }
 
-function seqOf(string $table, string $id): int
+/** Raw builder, so the tenant predicate is written out for the tripwire. */
+function seqOf(string $businessId, string $table, string $id): int
 {
-    return (int) DB::table($table)->where('id', $id)->value('sync_seq');
+    return (int) DB::table($table)
+        ->where('business_id', $businessId)->where('id', $id)->value('sync_seq');
 }
 
 function restreamSetup(): array
@@ -93,9 +95,9 @@ it('lifts every open order and its lines over a device that had already caught u
     runRestream();
 
     foreach ($before as $status => [$orderId, $lineId]) {
-        expect(seqOf('orders', $orderId))->toBeGreaterThan($cursor, "order {$status}");
+        expect(seqOf($b->id, 'orders', $orderId))->toBeGreaterThan($cursor, "order {$status}");
         // Without the line, the colleague gets a delivery with nothing in it.
-        expect(seqOf('order_lines', $lineId))->toBeGreaterThan($cursor, "line {$status}");
+        expect(seqOf($b->id, 'order_lines', $lineId))->toBeGreaterThan($cursor, "line {$status}");
     }
 });
 
@@ -110,8 +112,8 @@ it('leaves finished orders where they are, being history nobody can act on', fun
     runRestream();
 
     foreach ($done as $status => [$orderId, $lineId]) {
-        expect(seqOf('orders', $orderId))->toBe(10, "order {$status}");
-        expect(seqOf('order_lines', $lineId))->toBe(10, "line {$status}");
+        expect(seqOf($b->id, 'orders', $orderId))->toBe(10, "order {$status}");
+        expect(seqOf($b->id, 'order_lines', $lineId))->toBe(10, "line {$status}");
     }
 });
 
@@ -123,5 +125,5 @@ it('keeps every line at or above its own order, so a line never outranks it', fu
 
     runRestream();
 
-    expect(seqOf('order_lines', $lineId))->toBeGreaterThan(seqOf('orders', $orderId));
+    expect(seqOf($b->id, 'order_lines', $lineId))->toBeGreaterThan(seqOf($b->id, 'orders', $orderId));
 });

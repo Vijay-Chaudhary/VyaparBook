@@ -69,6 +69,12 @@ class TenantEraser
         'subscriptions',
         'invites',
         'memberships',
+        // Standalone: a per-tenant counter nothing FKs into, so the position is
+        // free. Note this is the mirror of TenantExporter::NOT_EXPORTED — the
+        // counter is not the shop's records and so is not PORTABLE, but it is
+        // still a row keyed by their business_id, so erasure must take it.
+        // Erasing everything and exporting everything are different questions.
+        'sync_sequences',
     ];
 
     /**

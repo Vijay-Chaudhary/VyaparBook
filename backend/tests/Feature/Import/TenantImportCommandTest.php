@@ -8,6 +8,7 @@ use App\Models\RawMaterial;
 use App\Models\User;
 use App\Services\StockService;
 use Illuminate\Support\Str;
+use App\Support\Tenancy;
 
 $fixture = fn (string $name) => dirname(__DIR__, 2) . '/fixtures/import/' . $name;
 
@@ -19,7 +20,8 @@ $ownerFor = function (Business $business): void {
     ]);
 };
 
-$customerCount = fn (Business $b) => Customer::withoutGlobalScopes()->where('business_id', $b->id)->count();
+/** Count a shop's imported customers, read as that shop rather than past the scope. */
+$customerCount = fn (Business $b) => asTenant($b->id, fn () => Customer::count());
 
 it('imports customers and exits 0', function () use ($fixture, $customerCount) {
     $business = Business::factory()->create();
@@ -43,9 +45,12 @@ it('imports raw materials with their opening stock', function () use ($fixture, 
         'path' => $fixture('raw-materials.csv'),
     ])->assertExitCode(0);
 
-    $besan = RawMaterial::withoutGlobalScopes()
-        ->where('business_id', $business->id)->where('name', 'Besan')->first();
-    expect((new StockService())->onHandFor($besan))->toBe('100.000');
+    [$besan, $onHand] = asTenant($business->id, function () {
+        $besan = RawMaterial::where('name', 'Besan')->first();
+
+        return [$besan, (new StockService())->onHandFor($besan)];
+    });
+    expect($onHand)->toBe('100.000');
 });
 
 it('applies good rows, warns bad ones, and exits 1 on errors', function () use ($fixture, $customerCount) {
@@ -81,7 +86,9 @@ it('exits 1 for an unknown business', function () use ($fixture) {
         'path' => $fixture('customers.csv'),
     ])->assertExitCode(1);
 
-    expect(Customer::withoutGlobalScopes()->count())->toBe(0);
+    // Cross-tenant on purpose: an import against an unknown business must have
+    // written into NO shop's books, which a scoped count could not establish.
+    expect(Tenancy::withoutTenant(fn () => Customer::count()))->toBe(0);
 });
 
 it('exits 1 for an unknown type', function () use ($fixture) {
@@ -129,8 +136,7 @@ it('imports customers from an xlsx and stores excel-native values correctly', fu
         'path' => $fixture('customers.xlsx'),
     ])->assertExitCode(0);
 
-    $customers = Customer::withoutGlobalScopes()
-        ->where('business_id', $business->id)->orderBy('name')->get();
+    $customers = asTenant($business->id, fn () => Customer::orderBy('name')->get());
 
     expect($customers)->toHaveCount(4);
 

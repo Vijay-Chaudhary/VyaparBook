@@ -42,9 +42,16 @@ function queuedReminder(array $overrides = []): array
     return [$business, $customer, $log];
 }
 
+/**
+ * Re-read a reminder under its OWN tenant.
+ *
+ * Binds explicitly rather than trusting whatever is ambient: the job binds a
+ * tenant while it runs, so a read after dispatch would work by luck, but a read
+ * before it (the "queued" assertion) has nothing bound at all.
+ */
 function freshLog(ReminderLog $log): ReminderLog
 {
-    return ReminderLog::findOrFail($log->id);
+    return asTenant($log->business_id, fn () => ReminderLog::findOrFail($log->id));
 }
 
 beforeEach(function () {

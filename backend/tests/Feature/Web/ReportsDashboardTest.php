@@ -109,7 +109,8 @@ describe('phase 2a', function () {
         // 100kg @ ₹42 = ₹4,200 stock value; supplier payable 500 + 4,200 = 4,700.
         $this->actingAs($owner)->post('/purchases', [
             'business' => $business->id, 'supplier_id' => $sup->id,
-            'raw_material_id' => \App\Models\RawMaterial::where('business_id', $business->id)->where('name', 'Besan')->value('id'),
+            'raw_material_id' => asTenant($business->id,
+                fn () => \App\Models\RawMaterial::where('name', 'Besan')->value('id')),
             'purchase_date' => '2026-07-04', 'qty' => '100', 'unit_cost' => '42',
         ])->assertRedirect();
 
@@ -131,7 +132,8 @@ describe('phase 2a', function () {
         pwMaterial($other, 'Foreign Material');
         $this->actingAs($otherOwner)->post('/purchases', [
             'business' => $other->id, 'supplier_id' => $foreignSup->id,
-            'raw_material_id' => \App\Models\RawMaterial::where('business_id', $other->id)->value('id'),
+            'raw_material_id' => asTenant($other->id,
+                fn () => \App\Models\RawMaterial::value('id')),
             'purchase_date' => '2026-07-04', 'qty' => '10', 'unit_cost' => '900',
         ]);
 

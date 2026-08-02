@@ -12,26 +12,27 @@ use Illuminate\Support\Str;
 
 /**
  * Seed a tenant with an owner and $n customers, returning the business.
- * Customers are written through the importer's tenant-context pattern so RLS
- * accepts the inserts.
+ * Written with the tenant bound, as every write path does in production.
  */
 function seedTenantWithCustomers(array $names): Business
 {
     $business = Business::factory()->create();
 
-    Membership::create([
-        'user_id' => User::factory()->create()->id,
-        'business_id' => $business->id,
-        'role' => 'owner',
-    ]);
-
-    foreach ($names as $name) {
-        Customer::create([
+    asTenant($business->id, function () use ($business, $names) {
+        Membership::create([
+            'user_id' => User::factory()->create()->id,
             'business_id' => $business->id,
-            'uuid' => (string) Str::uuid(),
-            'name' => $name,
+            'role' => 'owner',
         ]);
-    }
+
+        foreach ($names as $name) {
+            Customer::create([
+                'business_id' => $business->id,
+                'uuid' => (string) Str::uuid(),
+                'name' => $name,
+            ]);
+        }
+    });
 
     return $business;
 }
@@ -87,11 +88,19 @@ it('covers every tenant-owned table so nothing is silently omitted', function ()
     // would slip through. Any table carrying business_id is tenant-owned and
     // must appear in a portability export; a silently incomplete one is a
     // compliance failure that looks like a success.
+    // Two MySQL differences, both of which silently produced an empty list
+    // rather than an error: table_schema is the DATABASE name (there is no
+    // 'public' schema as there was on Postgres), and information_schema returns
+    // its own columns UPPERCASED, so the alias is what makes pluck() work.
     $tenantTables = collect(DB::select(
-        'select table_name from information_schema.columns
+        'select table_name as name from information_schema.columns
          where column_name = ? and table_schema = ?',
-        ['business_id', 'public']
-    ))->pluck('table_name')->all();
+        ['business_id', DB::connection()->getDatabaseName()]
+    ))->pluck('name')
+        // Exclusions are declared on the exporter with a reason, so omitting a
+        // table stays a deliberate act; forgetting one still fails here.
+        ->reject(fn (string $t) => in_array($t, TenantExporter::NOT_EXPORTED, true))
+        ->values()->all();
 
     expect($tenantTables)->not->toBeEmpty();
     expect(array_keys($export['data']))->toEqualCanonicalizing($tenantTables);

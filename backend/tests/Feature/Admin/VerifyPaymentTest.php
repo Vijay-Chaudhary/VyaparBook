@@ -5,6 +5,7 @@ use App\Models\PlatformAuditLog;
 use App\Models\Subscription;
 use App\Models\SubscriptionPayment;
 use Illuminate\Support\Str;
+use App\Support\Tenancy;
 
 // pendingPayment() and platformAdmin() are shared helpers defined in tests/Pest.php.
 
@@ -22,11 +23,11 @@ it('verifies a pending payment: activates the plan and stamps the admin', functi
         ->assertJsonPath('payment.verified_by', $admin->id);
 
     // Persisted state (read past RLS on the bypass connection).
-    $stored = SubscriptionPayment::on('mysql_platform')->find($payment->id);
+    $stored = Tenancy::withoutTenant(fn () => SubscriptionPayment::on('mysql_platform')->find($payment->id));
     expect($stored->status)->toBe('verified')
         ->and($stored->verified_by)->toBe($admin->id);
 
-    $sub = Subscription::on('mysql_platform')->where('business_id', $business->id)->first();
+    $sub = Tenancy::withoutTenant(fn () => Subscription::on('mysql_platform')->where('business_id', $business->id)->first());
     expect($sub->status)->toBe('active')->and($sub->plan)->toBe('pro');
 });
 
@@ -103,8 +104,8 @@ it('cannot verify one tenant\'s payment under another tenant\'s id (RLS-confined
         ->assertStatus(404);
 
     // B's payment and subscription are untouched.
-    expect(SubscriptionPayment::on('mysql_platform')->find($paymentB->id)->status)->toBe('pending');
-    expect(Subscription::on('mysql_platform')->where('business_id', $tenantB->id)->first()->status)->toBe('trialing');
+    expect(Tenancy::withoutTenant(fn () => SubscriptionPayment::on('mysql_platform')->find($paymentB->id))->status)->toBe('pending');
+    expect(Tenancy::withoutTenant(fn () => Subscription::on('mysql_platform')->where('business_id', $tenantB->id)->first())->status)->toBe('trialing');
 });
 
 it('is gated by the platform guard', function () {

@@ -6,6 +6,7 @@
 use App\Models\Supplier;
 use App\Models\SupplierPayment;
 use App\Models\User;
+use App\Support\Tenancy;
 use Illuminate\Support\Str;
 
 describe('access', function () {
@@ -84,7 +85,9 @@ describe('crud', function () {
             'business' => $business->id, 'amount' => '10', 'payment_date' => '2026-07-06', 'mode' => 'barter',
         ])->assertSessionHasErrors('mode');
 
-        expect(SupplierPayment::withoutGlobalScopes()->count())->toBe(0);
+        // Cross-tenant on purpose: the claim is that the rejected write landed
+        // in NO shop's books, which a scoped count could not establish.
+        expect(Tenancy::withoutTenant(fn () => SupplierPayment::count()))->toBe(0);
     });
 
     it('does not leak or accept another tenant\'s supplier', function () {
@@ -106,6 +109,8 @@ describe('crud', function () {
             'business' => $business->id, 'amount' => '100', 'payment_date' => '2026-07-06', 'mode' => 'cash',
         ])->assertRedirect();
 
-        expect(SupplierPayment::withoutGlobalScopes()->count())->toBe(0);
+        // Cross-tenant on purpose: the claim is that the rejected write landed
+        // in NO shop's books, which a scoped count could not establish.
+        expect(Tenancy::withoutTenant(fn () => SupplierPayment::count()))->toBe(0);
     });
 });

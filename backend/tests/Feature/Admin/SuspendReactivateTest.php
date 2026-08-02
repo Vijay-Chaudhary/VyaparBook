@@ -4,6 +4,7 @@
 use App\Models\PlatformAuditLog;
 use App\Models\Subscription;
 use Illuminate\Support\Str;
+use App\Support\Tenancy;
 
 // platformAdmin() / seedTenantWithOwner() are shared helpers in tests/Pest.php.
 
@@ -16,7 +17,7 @@ it('suspends a tenant into read_only and audits the transition', function () {
         ->assertOk()
         ->assertJsonPath('subscription.status', 'read_only');
 
-    expect(Subscription::on('mysql_platform')->where('business_id', $business->id)->first()->status)->toBe('read_only');
+    expect(Tenancy::withoutTenant(fn () => Subscription::on('mysql_platform')->where('business_id', $business->id)->first())->status)->toBe('read_only');
 
     $logs = PlatformAuditLog::where('action', 'suspend_tenant')->get();
     expect($logs)->toHaveCount(1);

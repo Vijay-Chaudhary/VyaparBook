@@ -160,7 +160,8 @@ describe('record payment', function () {
             ])
             ->assertSessionHasErrors(['plan', 'amount']);
 
-        expect(SubscriptionPayment::where('business_id', $business->id)->exists())
+        // Rejected before the tenant middleware bound anything, so name the shop.
+        expect(asTenant($business->id, fn () => SubscriptionPayment::exists()))
             ->toBeFalse();
     });
 
@@ -175,7 +176,9 @@ describe('record payment', function () {
             ])
             ->assertRedirect(route('app'));
 
-        expect(SubscriptionPayment::where('business_id', $other->id)->exists())
+        // The caller was bounced to /app, so nothing is bound; check the shop
+        // they tried to write to.
+        expect(asTenant($other->id, fn () => SubscriptionPayment::exists()))
             ->toBeFalse();
     });
 });

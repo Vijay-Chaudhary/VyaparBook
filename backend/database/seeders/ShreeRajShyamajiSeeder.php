@@ -34,9 +34,9 @@ use Illuminate\Support\Str;
  *
  * A seeder runs outside a request, so nothing has bound a tenant and the
  * fail-closed BelongsToTenant scope would refuse every query. run() therefore
- * executes inside Tenancy::withoutTenant() — one of the four sanctioned
- * cross-tenant paths — and the explicit business_id values below stand on
- * their own.
+ * executes inside Tenancy::withoutTenant() — seeders are one of the sanctioned
+ * cross-tenant paths listed on that class — and the explicit business_id values
+ * below stand on their own.
  *
  * Idempotent: masters use updateOrCreate on natural keys, and a business whose
  * customers already exist is treated as fully seeded, so re-running never

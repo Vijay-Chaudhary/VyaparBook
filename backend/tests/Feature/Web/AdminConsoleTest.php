@@ -98,7 +98,7 @@ describe('suspend / reactivate', function () {
             ->assertRedirect(route('admin.console.show', $business->id))
             ->assertSessionHas('console_status', 'suspended');
 
-        expect(Subscription::where('business_id', $business->id)->value('status'))
+        expect(asTenant($business->id, fn () => Subscription::value('status')))
             ->toBe('read_only');
 
         $log = PlatformAuditLog::where('action', 'suspend_tenant')->where('target_business_id', $business->id)->first();
@@ -115,7 +115,7 @@ describe('suspend / reactivate', function () {
             ->assertSessionHas('console_status', 'reactivated');
 
         // read_only with an open period → active (naturalStatus).
-        expect(Subscription::where('business_id', $business->id)->value('status'))
+        expect(asTenant($business->id, fn () => Subscription::value('status')))
             ->toBe('active');
     });
 });
@@ -130,9 +130,9 @@ describe('payments', function () {
             ->assertRedirect(route('admin.console.show', $business->id))
             ->assertSessionHas('console_status', 'payment_verified');
 
-        expect(SubscriptionPayment::where('id', $payment->id)->value('status'))
+        expect(asTenant($business->id, fn () => SubscriptionPayment::where('id', $payment->id)->value('status')))
             ->toBe('verified');
-        expect(Subscription::where('business_id', $business->id)->value('status'))
+        expect(asTenant($business->id, fn () => Subscription::value('status')))
             ->toBe('active');
 
         expect(PlatformAuditLog::where('action', 'verify_payment')->where('target_business_id', $business->id)->exists())
@@ -148,7 +148,7 @@ describe('payments', function () {
             ->assertRedirect(route('admin.console.show', $business->id))
             ->assertSessionHas('console_status', 'payment_rejected');
 
-        expect(SubscriptionPayment::where('id', $payment->id)->value('status'))
+        expect(asTenant($business->id, fn () => SubscriptionPayment::where('id', $payment->id)->value('status')))
             ->toBe('rejected');
         expect(PlatformAuditLog::where('action', 'reject_payment')->where('target_business_id', $business->id)->exists())
             ->toBeTrue();
@@ -157,13 +157,14 @@ describe('payments', function () {
     it('refuses to verify an already-rejected payment', function () {
         [$business] = seedTenantWithOwner();
         $payment = pendingPayment($business->id);
-        SubscriptionPayment::where('id', $payment->id)->update(['status' => 'rejected']);
+        asTenant($business->id, fn () => SubscriptionPayment::where('id', $payment->id)
+            ->update(['status' => 'rejected']));
 
         $this->actingAs(platformAdminUser())
             ->post(route('admin.console.payment.verify', [$business->id, $payment->id]))
             ->assertSessionHas('console_error', 'verify_rejected');
 
-        expect(SubscriptionPayment::where('id', $payment->id)->value('status'))
+        expect(asTenant($business->id, fn () => SubscriptionPayment::where('id', $payment->id)->value('status')))
             ->toBe('rejected');
     });
 });

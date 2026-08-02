@@ -36,8 +36,11 @@ function platformCustomer(): Business
 it('reads across tenants on the platform connection', function () {
     platformCustomer();
 
-    expect(DB::connection('mysql_platform')->table('customers')->count())
-        ->toBeGreaterThanOrEqual(1);
+    // The whole point of this test: the platform connection sees every shop.
+    // withoutTenant() states that, and is what the tripwire honours.
+    expect(Tenancy::withoutTenant(
+        fn () => DB::connection('mysql_platform')->table('customers')->count()
+    ))->toBeGreaterThanOrEqual(1);
 });
 
 it('cannot write on the platform connection, whatever the code asks of it', function () {

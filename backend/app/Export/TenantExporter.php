@@ -18,6 +18,13 @@ use Throwable;
  * pull another shop's books into a customer's export file. That is the point of
  * doing it the slow way.
  *
+ * Every table read below carries its OWN business_id predicate. These are query
+ * builders, not Eloquent models, so BelongsToTenant's global scope never sees
+ * them — binding the tenant alone would confine nothing. Under Postgres the
+ * row-level security policy caught that; MySQL has no such backstop, so the
+ * predicate is the only thing standing between one shop's export and everyone
+ * else's books.
+ *
  * The whole export runs inside ONE transaction so the snapshot is consistent —
  * a sale written midway cannot land in sale_lines but miss sales.
  */
@@ -63,6 +70,22 @@ class TenantExporter
     ];
 
     /**
+     * Tenant-owned tables deliberately left OUT of the export, and why.
+     *
+     * Named rather than merely absent: TenantExportTest derives the expected
+     * table list from the live schema, so anything carrying business_id must be
+     * either exported or excluded here. A new table cannot slip out of a
+     * portability export by being forgotten -- silently incomplete is a
+     * compliance failure that looks like a success.
+     */
+    public const NOT_EXPORTED = [
+        // A single (business_id, value) high-water mark for offline sync. Internal
+        // machinery, not the shop's records: the number means nothing outside this
+        // installation, and re-importing one would desync every device.
+        'sync_sequences',
+    ];
+
+    /**
      * @return array{manifest: array<string, mixed>, data: array<string, list<array<string, mixed>>>}
      */
     public function export(string $businessId): array
@@ -83,7 +106,9 @@ class TenantExporter
             $data = [];
 
             foreach (self::TABLES as $table) {
-                $data[$table] = DB::table($table)->orderBy('id')->get()
+                $data[$table] = DB::table($table)
+                    ->where('business_id', $businessId)
+                    ->orderBy('id')->get()
                     ->map(fn ($row) => (array) $row)
                     ->all();
             }

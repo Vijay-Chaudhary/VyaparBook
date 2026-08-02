@@ -49,7 +49,7 @@ class ProductController extends Controller
 
         $product->update($data);
 
-        return response()->json($product->fresh());
+        return response()->json($product->freshScoped());
     }
 
     public function destroy(string $id)
@@ -79,7 +79,7 @@ class ProductController extends Controller
         $product->archived_at = null;
         $product->save();
 
-        return response()->json($product->fresh());
+        return response()->json($product->freshScoped());
     }
 
     private function denied()

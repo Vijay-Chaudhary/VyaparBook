@@ -74,7 +74,10 @@ describe('planning', function () {
             'business' => $business->id, 'customers' => [$second->id, $first->id],
         ])->assertRedirect();
 
+        // Raw builder: no Eloquent scope reaches it, so the tenant predicate is
+        // written out. The tripwire insists on exactly that.
         $rows = DB::table('beat_customers')
+            ->where('business_id', $business->id)
             ->where('beat_id', $beat->id)->orderBy('position')->get();
 
         expect($rows->pluck('customer_id')->all())->toBe([$second->id, $first->id]);
@@ -98,7 +101,8 @@ describe('planning', function () {
             'business' => $business->id, 'customers' => [$b->id],
         ]);
 
-        $rows = DB::table('beat_customers')->where('beat_id', $beat->id)->get();
+        $rows = DB::table('beat_customers')
+            ->where('business_id', $business->id)->where('beat_id', $beat->id)->get();
         expect($rows)->toHaveCount(1);
         expect($rows->first()->customer_id)->toBe($b->id);
     });
@@ -117,7 +121,8 @@ describe('planning', function () {
             'business' => $business->id, 'customers' => [$theirCustomer->id],
         ]);
 
-        expect(DB::table('beat_customers')->where('beat_id', $beat->id)->count())->toBe(0);
+        expect(DB::table('beat_customers')
+            ->where('business_id', $business->id)->where('beat_id', $beat->id)->count())->toBe(0);
     });
 
     it('does not touch another tenant\'s beat', function () {
@@ -131,7 +136,10 @@ describe('planning', function () {
         $this->actingAs($owner)->post('/beats/' . $theirs->id . '/archive', ['business' => $business->id])
             ->assertNotFound();
 
-        expect(DB::table('beats')->where('id', $theirs->id)->value('archived_at'))->toBeNull();
+        // The other shop's row: scoped to THEM, which is what makes this an
+        // assertion about their data surviving rather than an unscoped peek.
+        expect(DB::table('beats')->where('business_id', $other->id)
+            ->where('id', $theirs->id)->value('archived_at'))->toBeNull();
     });
 
     it('archives a beat instead of deleting it, so devices learn to drop it', function () {
@@ -143,7 +151,8 @@ describe('planning', function () {
 
         $this->actingAs($owner)->post('/beats/' . $beat->id . '/archive', ['business' => $business->id]);
 
-        $row = DB::table('beats')->where('id', $beat->id)->first();
+        $row = DB::table('beats')
+            ->where('business_id', $business->id)->where('id', $beat->id)->first();
         expect($row)->not->toBeNull();              // still there to sync
         expect($row->archived_at)->not->toBeNull();
     });
