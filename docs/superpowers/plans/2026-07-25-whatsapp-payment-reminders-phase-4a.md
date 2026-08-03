@@ -1,5 +1,10 @@
 # WhatsApp Payment Reminders — Phase 4a Implementation Plan
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 **Goal:** Give the owner a reviewed **overdue list** at `/reminders` and a one-tap
 `wa.me` deep link that opens WhatsApp with a prefilled reminder in the customer's
 language, logging the intent. No Meta API and no unattended sending — 4b swaps

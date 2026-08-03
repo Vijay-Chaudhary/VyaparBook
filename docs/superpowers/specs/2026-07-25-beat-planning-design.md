@@ -1,5 +1,10 @@
 # Salesman Beat Planning — Design
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 **Date:** 2026-07-25
 **Status:** Shipped.
 **Scope:** PRD §18 Phase 3, "salesman route/beat planning". Owner plans beats;

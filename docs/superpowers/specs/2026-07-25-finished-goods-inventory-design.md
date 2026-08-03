@@ -1,5 +1,10 @@
 # Finished-Goods Inventory — Design
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 **Date:** 2026-07-25
 **Status:** Draft (design); awaiting sign-off.
 **Scope:** PRD §18 Phase 3, "finished-goods packed inventory". Answers *how much

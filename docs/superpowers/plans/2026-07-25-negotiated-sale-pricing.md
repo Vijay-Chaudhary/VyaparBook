@@ -1,5 +1,10 @@
 # Negotiated Sale Pricing & Ledger Line Items — Implementation Plan
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Let a salesman change a sale line's price in the field — prefilled from the pack default, bounded by a cost floor — and show the items (at the price actually charged) under each sale in the customer's khata ledger.

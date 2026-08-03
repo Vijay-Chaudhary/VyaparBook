@@ -1,5 +1,10 @@
 # Tenancy & Auth Core Implementation Plan
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Stand up the Laravel backend for VyaparBook's tenancy & auth core: `Business`/`User`/`Membership`/`Invite`/`OtpCode` models, Postgres RLS isolation with a `SET LOCAL`-per-request middleware safe under PgBouncer transaction pooling, JWT auth (phone OTP + email/password) carrying `tid`/`role` claims, business creation/switch/invite endpoints, and a cross-tenant-leak test suite that proves isolation holds.

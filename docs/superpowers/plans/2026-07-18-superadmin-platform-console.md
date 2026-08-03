@@ -1,5 +1,10 @@
 # Superadmin / Platform Console Implementation Plan
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** A platform-admin-gated, cross-tenant console API: list tenants with subscription + usage, suspend/reactivate, verify/reject the manual/UPI payments Billing records, and platform metrics — every mutation audited.

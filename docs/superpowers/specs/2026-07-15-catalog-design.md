@@ -1,5 +1,10 @@
 # Tenant Catalog — Design Spec
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 **Status:** approved 2026-07-15
 **Slice:** Phase 1, module 2 (follows the tenancy & auth core)
 **Supersedes for this slice:** PRD §10's Django sketch of `Product` / `PackSize` / `ProductPack`. The domain intent stands; the Eloquent/migration model below is what gets built.

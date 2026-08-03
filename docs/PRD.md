@@ -82,9 +82,9 @@ Three standard options, judged for **this** product (many small tenants, high te
 
 **Recommendation: shared schema, `tenant_id` on every domain row, isolation enforced by PostgreSQL Row-Level Security.**
 
-> **Superseded (§4.1–§4.3):** the product moved to **MySQL 8**, which has no row-level security. The shared-schema + `tenant_id` shape below is unchanged and still correct; what changed is *what enforces it*. Isolation is now a single application layer — `App\Traits\BelongsToTenant`, which **fails closed** and throws when no tenant is bound — plus a test-environment query tripwire for raw builders. PgBouncer leaves the stack entirely. See `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`. The three subsections below are retained for the reasoning behind the shared-schema choice, not as a description of the running system.
+> **Superseded (all of §4, including the table above):** the product moved to **MySQL 8**, which has no row-level security. The shared-schema + `tenant_id` shape is unchanged and still correct; what changed is *what enforces it*. Isolation is now a single application layer — `App\Traits\BelongsToTenant`, which **fails closed** and throws when no tenant is bound — plus a test-environment query tripwire for raw builders. PgBouncer leaves the stack entirely. See `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`. The table row and the three subsections are retained for the reasoning behind the shared-schema choice, not as a description of the running system. **Every later mention of RLS, `SET LOCAL`, GUCs, PgBouncer or Postgres in this document is superseded by this note**, whether or not it is marked individually.
 
-> **Note vs RepairOS:** RepairOS used *database-per-tenant* — correct there, because repair shops are fewer, heavier, and value hard isolation. VyaparBook targets a **high count of very small tenants**, where per-tenant DBs become an operational tax. Shared-schema + RLS is the right trade for this shape, and it matches the RLS direction of your CRM spec.
+> **Note vs RepairOS:** RepairOS used *database-per-tenant* — correct there, because repair shops are fewer, heavier, and value hard isolation. VyaparBook targets a **high count of very small tenants**, where per-tenant DBs become an operational tax. Shared-schema is the right trade for this shape. ~~and it matches the RLS direction of your CRM spec.~~ (The argument is about the *schema* shape, which survived the MySQL move; the RLS half did not.)
 
 ### 4.1 RLS implementation ~~(superseded — no RLS on MySQL)~~
 - Every tenant-owned table has `tenant_id UUID NOT NULL` (indexed; most queries filter on it).
@@ -179,12 +179,12 @@ Combining offline sync, tenant isolation, and money-ledger integrity is where mo
 
 - **One active tenant per device session.** The client's IndexedDB (Dexie) is **namespaced by `tenant_id`**; only the active business's data is cached. Switching business requires the outbox to be flushed (synced) first, then the cache namespace swaps — no cross-tenant mixing, ever.
 - **Every outbox mutation carries `tenant_id`** plus a client `uuid`. Uniqueness/idempotency is **`(tenant_id, uuid)`**.
-- **Sync push:** server derives the tenant from the authenticated membership, sets `SET LOCAL app.current_tenant`, and **rejects any mutation whose `tenant_id` ≠ the session tenant** (belt-and-suspenders with RLS `WITH CHECK`).
-- **Sync pull:** delta since a per-tenant cursor; RLS guarantees the response only contains that tenant's rows even if a query is imperfect.
+- **Sync push:** server derives the tenant from the authenticated membership, ~~sets `SET LOCAL app.current_tenant`~~ **binds the tenant in the container for the request (`SetTenantContext`)**, and **rejects any mutation whose `tenant_id` ≠ the session tenant** ~~(belt-and-suspenders with RLS `WITH CHECK`)~~ — **this check is now the only one; there is no `WITH CHECK` underneath it.**
+- **Sync pull:** delta since a per-tenant cursor, ~~RLS guarantees~~ **scoped by `business_id` through `BelongsToTenant`. An imperfect query is no longer caught by the database** — a raw builder that omits the predicate returns other tenants' rows, which is what the test-environment query tripwire exists to catch.
 - **Append-only ledger** (sales, payments, returns as immutable entries; corrections are new voiding entries) → outstanding is always recomputable, and offline conflicts are near-eliminated.
 - **Idempotency** ensures a sale/payment retried over a flaky link posts exactly once.
 
-Net: the client is a fast per-tenant cache; the server + RLS are the source of truth and the isolation guarantee.
+Net: the client is a fast per-tenant cache; the server ~~+ RLS are~~ **is** the source of truth and the isolation guarantee.
 
 ---
 
@@ -233,14 +233,14 @@ class MaterialConsumption(TenantModel): batch=FK; material=FK; qty=…
 ```
 
 - `uuid` uniqueness is scoped per tenant: `unique_together = ("tenant","uuid")`.
-- RLS policies (from §4) applied to every `TenantModel` table via a migration that iterates the tenant tables.
+- ~~RLS policies (from §4) applied to every `TenantModel` table via a migration that iterates the tenant tables.~~ **No policies exist; every tenant-owned model uses the `BelongsToTenant` trait instead.**
 - Outstanding computed by aggregation, cached per customer in Redis (tenant-namespaced key).
 
 ---
 
 ## 11. API Design
 
-- **Tenant resolution:** JWT carries `sub` (user), `tid` (active business), `role`. Middleware verifies membership, sets `SET LOCAL app.current_tenant`. Switching business = re-issue token with a new `tid`.
+- **Tenant resolution:** JWT carries `sub` (user), `tid` (active business), `role`. Middleware verifies membership, then ~~sets `SET LOCAL app.current_tenant`~~ **binds `tenant.id` in the container for the request**. Switching business = re-issue token with a new `tid`.
 - All domain endpoints are implicitly tenant-scoped (no `tenant_id` in the path; it comes from the token).
 
 ```
@@ -270,12 +270,12 @@ A separate, role-gated surface for you (the operator): list tenants, plan/subscr
 
 ## 13. Security, Isolation & Compliance
 
-- **Isolation:** RLS (DB-enforced) + ORM tenant filter (app-enforced) = two independent layers; a single-layer bug fails closed.
+- **Isolation:** ~~RLS (DB-enforced) + ORM tenant filter (app-enforced) = two independent layers; a single-layer bug fails closed.~~ **One layer, app-enforced: the `BelongsToTenant` global scope, which throws rather than returning unscoped rows when no tenant is bound. There is no DB-enforced layer behind it — see §4's superseded note.**
 - **Auth:** OTP/phone-first (India), JWT with short expiry + refresh; role checks server-side.
 - **Transport:** HTTPS everywhere (Caddy auto-TLS).
 - **India DPDP Act (2023):** per-tenant **data export** and **delete/erasure**, consent on signup, data-processing terms. Shared-schema means delete = tenant-scoped row purge (script + verification).
 - **Auditability:** append-only ledger; admin/impersonation actions logged.
-- **Backups:** nightly full `pg_dump`; per-tenant logical export on demand (RLS-scoped dump) for portability and offboarding.
+- **Backups:** nightly full ~~`pg_dump`~~ **`mysqldump`**; per-tenant logical export on demand (~~RLS-scoped dump~~ **`business_id`-scoped, via `TenantExporter`**) for portability and offboarding.
 - **Idempotency & rate limits:** per-tenant, to contain a noisy tenant.
 
 ---
@@ -284,12 +284,12 @@ A separate, role-gated surface for you (the operator): list tenants, plan/subscr
 
 > **Note:** the PRD's Docker-based infra below is superseded for this project — no Docker; see `CLAUDE.md`. The Celery references translate to Laravel Queues + a `TenantAwareJob` base in the actual implementation.
 
-- **Connections:** PgBouncer (transaction pooling) with the `SET LOCAL` tenant pattern (§4.2). One Postgres scales to thousands of small tenants; shard later only if needed.
+- **Connections:** ~~PgBouncer (transaction pooling) with the `SET LOCAL` tenant pattern (§4.2). One Postgres scales~~ **No pooler — PgBouncer was in the stack only for transaction-pooled GUCs that no longer exist. One MySQL 8 instance scales** to thousands of small tenants; shard later only if needed.
 - **Redis:** keys namespaced `t:{tenant_id}:…`; cache + Celery broker.
 - **Celery:** tenant-in-payload tasks; separate queues for interactive vs heavy (reports, WhatsApp) work; per-tenant concurrency caps to prevent noisy neighbors.
 - **Noisy-neighbor:** per-tenant rate limits, query timeouts, and (later) heavy tenants isolated to their own worker pool.
 - **Observability:** metrics tagged by `tenant_id` (careful with cardinality — bucket small tenants), per-tenant error tracking.
-- **Infra:** Docker Compose to start (Django/DRF, Postgres, PgBouncer, Redis, Celery, Next.js, Caddy) — same shape as RepairOS; move to managed Postgres + horizontal API scaling as tenants grow.
+- **Infra:** ~~Docker Compose to start (Django/DRF, Postgres, PgBouncer, Redis, Celery, Next.js, Caddy) — same shape as RepairOS; move to managed Postgres~~ **Native local services per `CLAUDE.md` (Laravel, MySQL 8, Redis); move to managed MySQL** + horizontal API scaling as tenants grow.
 
 ---
 
@@ -328,7 +328,7 @@ A Django management command reading the existing `.xlsx` (openpyxl) does this pe
 
 ## 18. Roadmap
 
-**Phase 1 — Multi-tenant core (this doc):** tenancy + RLS, onboarding, tenant catalog, Sales/Khata/Stock/Production, offline PWA, Hindi/English, basic billing, superadmin, Excel import.
+**Phase 1 — Multi-tenant core (this doc):** tenancy ~~+ RLS~~ **(app-enforced)**, onboarding, tenant catalog, Sales/Khata/Stock/Production, offline PWA, Hindi/English, basic billing, superadmin, Excel import.
 
 **Phase 2:** Supplier ledger + purchases, Expenses, analytics dashboard (port the Excel KPIs, per tenant), **automated WhatsApp reminders** (Celery + WhatsApp Business API), full self-serve billing/dunning, staff roles (accountant), reports.
 
@@ -344,8 +344,8 @@ A Django management command reading the existing `.xlsx` (openpyxl) does this pe
 
 ## 19. Risks
 
-- **Tenant leakage** — mitigated by two-layer isolation (RLS + ORM), `WITH CHECK`, and a dedicated cross-tenant test suite that *tries* to leak and must fail.
-- **PgBouncer/RLS misuse** — the `SET LOCAL`-per-transaction pattern must be enforced centrally (one base transaction wrapper), never ad hoc.
+- **Tenant leakage** — ~~mitigated by two-layer isolation (RLS + ORM), `WITH CHECK`, and~~ **now a materially larger risk than this doc originally assumed: one app layer (`BelongsToTenant`, fail-closed), the test-environment query tripwire for raw builders, and** a dedicated cross-tenant test suite that *tries* to leak and must fail.
+- ~~**PgBouncer/RLS misuse** — the `SET LOCAL`-per-transaction pattern must be enforced centrally (one base transaction wrapper), never ad hoc.~~ **Replaced by: bypass creep.** `Tenancy::withoutTenant()` is the only sanctioned way past the scope; the sites are enumerable with `grep -rn withoutTenant` and each one must stay justified. Raw builders (`DB::table()`), `fresh()`/`refresh()`, and `unique:`/`exists:` rules all walk past the scope — see `CLAUDE.md`.
 - **Offline + tenant switch** — enforce "flush before switch"; forbid mixed-tenant outbox.
 - **Billing complexity in India** — start plan-based + UPI; avoid metered billing until demand proves it.
 - **Vertical creep** — keep the domain generic; resist per-vertical special-casing beyond templates.
@@ -355,7 +355,7 @@ A Django management command reading the existing `.xlsx` (openpyxl) does this pe
 ## 20. Open Questions (before build kickoff)
 
 1. **Product name & brand** — VyaparBook is a placeholder. Keep Hindi-flavored (VyaparBook / DukaanKhata / BikriBook) or neutral?
-2. **Isolation confidence** — comfortable with **shared-schema + RLS** (my recommendation), or do you want **schema-per-tenant** for stronger perceived isolation despite the ops cost?
+2. **Isolation confidence** — comfortable with **shared-schema + RLS** (my recommendation), or do you want **schema-per-tenant** for stronger perceived isolation despite the ops cost? — *Resolved: shared-schema, but on MySQL 8 with **no** RLS — isolation is app-enforced only. See §4's superseded note.*
 3. **User ↔ business** — support a user belonging to **multiple businesses** in v1, or lock to one-business-per-user to simplify? — *Resolved: multiple businesses supported, see the tenancy/auth core spec.*
 4. **Billing in v1** — ship real Razorpay subscriptions in v1, or trial + manual/UPI now and automate in Phase 2?
 5. **Verticals at launch** — namkeen-only templates for v1, or seed sweets/spices templates too to test generality early?

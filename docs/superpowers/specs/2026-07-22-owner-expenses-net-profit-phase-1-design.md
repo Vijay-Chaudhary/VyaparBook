@@ -1,5 +1,10 @@
 # Owner Expenses & Net Profit — Phase 1 Design
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 **Date:** 2026-07-22
 **Status:** Approved (design); ready for implementation plan
 **Scope:** Phase 1 of the multi-phase "Management Dashboard" for business owners.

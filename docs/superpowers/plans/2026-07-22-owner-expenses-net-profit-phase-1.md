@@ -1,5 +1,10 @@
 # Owner Expenses & Net Profit — Phase 1 Implementation Plan
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Add an owner-only Operating-Expenses module (record/edit/delete expenses by category) and the P&L it unlocks on the reporting dashboard — Est. Gross Profit → minus Expenses → **Net Profit**, net margin %, a per-category breakdown, and monthly expenses + net-profit trends/charts.

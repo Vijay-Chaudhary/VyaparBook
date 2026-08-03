@@ -1,5 +1,10 @@
 # Scheduled Reminders — Phase 4c Implementation Plan
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 **Goal:** Plan tomorrow's reminders on a schedule, show the owner a preview they
 can cancel from, and send what remains inside quiet hours, under a per-customer
 cooldown and a per-tenant daily cap.

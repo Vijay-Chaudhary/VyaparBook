@@ -355,7 +355,7 @@ Each phase ends shippable and testable. No phase depends on a later one.
   (verified in a browser: the guard fired and the business stayed put).
 
 > Business creation was extracted into `BusinessProvisioner` so the JWT API and
-> the Blade flow share one implementation of the RLS-sensitive
+> the Blade flow share one implementation of the tenancy-sensitive
 > business+membership+trial transaction, rather than risking divergence.
 
 ### Phase 5 — Stock & Production ✅ *done*
@@ -382,7 +382,7 @@ Each phase ends shippable and testable. No phase depends on a later one.
 
 ### Phase 7 — Platform console *(Blade, online-only)* ✅ *done*
 - Tenant directory (search + pagination), drill-down (business, subscription, members, recent payments), verify/reject payment, suspend/reactivate, impersonate. ✅
-- Session-gated on the **live** `is_platform_admin` flag (`platform_admin.web`), the server-rendered twin of the JWT `require.platform_admin`. Cross-tenant by design: reads on the BYPASSRLS connection, writes pinned to the target tenant through RLS (`PlatformTenantContext`). ✅
+- Session-gated on the **live** `is_platform_admin` flag (`platform_admin.web`), the server-rendered twin of the JWT `require.platform_admin`. Cross-tenant by design: reads on the SELECT-only platform connection (`mysql_platform`, user `vyapar_platform_ro`), writes pinned to the target tenant and pushed back **through** the tenant scope on the normal connection (`PlatformTenantContext`). ✅
 - **No logic fork:** the Blade actions reuse the exact same seams as the API (`SubscriptionService`, `PlatformTenantContext`, `PlatformAudit`, `TokenService`) — the web layer only chooses redirect+flash over JSON. Every mutation writes the same audit trail. ✅
 - Login routes a platform admin to the console rather than `/app` (they hold no membership, so the shopkeeper app would stall). ✅
 - Impersonation is a one-click **"view as tenant"**: the console stashes the short-lived read-only token in the operator's **server-side session** (never a URL, never the DOM), redirects to `/app`, and the existing session→JWT bridge (`ApiTokenController`) hands that token to the SPA on boot — so it lives in memory exactly like any other token, with no new storage path. The app shows a loud read-only banner, hides every write CTA and blocks all write handlers as a backstop (the server already bars writes on the token), and **Exit wipes the tenant's local cache off the operator's device** before ending the session. The 30-minute token expiry ends the view on its own. ✅

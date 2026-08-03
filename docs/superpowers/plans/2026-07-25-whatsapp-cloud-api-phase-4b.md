@@ -1,5 +1,10 @@
 # WhatsApp Reminders, Cloud API Transport — Phase 4b Implementation Plan
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 **Goal:** Send the 4a reminder through the Meta Cloud API from the platform
 number instead of handing off to the owner's WhatsApp, record delivery status,
 and honour inbound STOP. Built **dark**: the `log` driver is the default, so

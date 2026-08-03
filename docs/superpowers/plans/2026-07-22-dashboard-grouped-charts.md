@@ -1,5 +1,10 @@
 # Dashboard Grouped Charts with Numeric Axis — Implementation Plan
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 > **For agentic workers:** Steps use checkbox (`- [ ]`) syntax for tracking. TDD throughout, small commits.
 
 **Goal:** Replace the dashboard's four separate, number-less single-series bar charts with (a) one **grouped multi-bar ₹ chart** showing Sales, Est. gross profit and Net profit side-by-side per month, and (b) a **Production (kg)** chart — both with a **numeric y-axis (labeled reference gridlines) and a legend**. Losses stay loss-aware (net-profit bars below the zero line, in red).

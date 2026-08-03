@@ -1,5 +1,10 @@
 # Tenant Khata Implementation Plan
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 > **For agentic workers:** REQUIRED SUB-SKILL: Use superpowers:subagent-driven-development (recommended) or superpowers:executing-plans to implement this plan task-by-task. Steps use checkbox (`- [ ]`) syntax for tracking.
 
 **Goal:** Build VyaparBook's transactional core — `Customer`, `Sale`/`SaleLine`, `Payment` as an **append-only money ledger** with per-customer outstanding, plus the **offline sync** endpoints (idempotent push, delta pull) that PRD §9 calls "the genuinely hard part." Every table carries RLS + the `BelongsToTenant` app scope; every mutation is idempotent by `(business_id, uuid)`; nothing is ever mutated in place — corrections are new reversing entries.

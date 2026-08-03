@@ -1,5 +1,10 @@
 # Order Workflow — Order → Accept → Pack → Deliver — Design
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 **Date:** 2026-07-26
 **Status:** Draft (design); awaiting sign-off.
 **Scope:** A salesman takes an **order** in the field; an owner or admin accepts

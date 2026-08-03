@@ -1,5 +1,10 @@
 # Suppliers, Costed Purchases & Stock Value — Phase 2a Design
 
+> **Historical (pre-2026-07-30).** This document predates the PostgreSQL → MySQL 8
+> migration; its RLS / `SET LOCAL` / PgBouncer references describe the system as it
+> was then, not as it runs now. See
+> `docs/superpowers/specs/2026-07-30-postgres-to-mysql-design.md`.
+
 **Date:** 2026-07-22
 **Status:** Approved (design); building.
 **Scope:** Phase 2a of the multi-phase Management Dashboard. Builds on Phase 0 (dashboard) and Phase 1 (expenses/net profit).
