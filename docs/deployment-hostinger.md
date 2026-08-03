@@ -1,294 +1,352 @@
-# Deployment — Hostinger shared hosting
+# Deployment — Hostinger shared hosting (as built)
 
-**Target:** `shreerajshyamaji.com` (tenant #1, per PRD §17)
-**Server:** `in-mum-web1878`, user `u772825868`
-**Verified available:** git 2.47.3 · Composer 2.9.8 · PHP 8.3.31 (`/opt/alt/php83/usr/bin/php`)
+**Live:** https://shreerajshyamaji.com — deployed 2026-08-03
+**Server:** `in-mum-web1878.main-hosting.eu` · user `u772825868` · SSH `82.25.107.41:65002`
+**Runtime:** PHP 8.3.31 (`/opt/alt/php83/usr/bin/php`) · Composer 2.9.8 · git 2.47.3
+**Database:** **MariaDB 11.8.8** (not MySQL 8 — see §3.3)
 
-Hostinger's shared tier gives SSH, git and Composer here, so this is a **clone-and-build-on-server**
-deploy, not an FTP upload. Only the Vite bundle has to be built elsewhere (see §4).
+This is an as-built record, not a plan. Every command here was run against the live box, and the
+findings in §3 are things that actually bit during the first deploy.
 
-The app has one property that dictates the whole layout: the service worker is registered from
-`/sw.js` at the site root, and `resources/js/offline/register-sw.js:4` explains why — *"a worker's
-scope cannot be broader than its own path."* So VyaparBook must own a **domain or subdomain root**.
-Deploying under `example.com/vyaparbook/` silently disables the offline PWA, which PRD §9 calls a
-hard requirement. `shreerajshyamaji.com` is a domain root, so this is satisfied.
+The app has one property that dictates the whole layout: the service worker registers from `/sw.js`,
+and `resources/js/offline/register-sw.js:4` explains why — *"a worker's scope cannot be broader than
+its own path."* VyaparBook must own a **domain or subdomain root**. Under `example.com/vyaparbook/`
+the offline PWA silently dies, and PRD §9 calls it a hard requirement.
 
 ---
 
-## 1. Preflight — run these first
+## 1. Preflight
 
-Each of these has blocked a shared-hosting Laravel deploy before. Check them before moving files.
+Run **all** of these before touching anything. Each one blocked this deploy at some point.
 
 ```bash
 PHP=/opt/alt/php83/usr/bin/php
 
-# 1. Extensions. bcmath is non-negotiable: every rupee is a decimal string
-#    through bcmath and never touches a float (34 files in app/ depend on it).
-$PHP -m | grep -Ei '^(bcmath|pdo_mysql|mbstring|openssl|zip|gd|xml|dom|curl|fileinfo|ctype|tokenizer)$'
-# Expect all 12. zip + gd are for phpoffice/phpspreadsheet (Excel import/export).
-
-# 2. proc_open — Composer needs it. Many shared hosts disable it.
-$PHP -r 'echo function_exists("proc_open") ? "proc_open OK\n" : "proc_open DISABLED\n";'
-
-# 3. Database engine. CLAUDE.md specifies MySQL 8; AppServiceProvider deliberately
-#    deletes the mariadb connection at boot. If this says MariaDB, stop and read §8.
-mysql -u USER -p -e 'SELECT VERSION();'
-
-# 4. Node — probably absent. If so, the Vite bundle is built locally (§4).
-node -v 2>/dev/null || echo 'no node — build assets locally'
+$PHP -v                                   # expect 8.3.x
+$PHP -r 'echo function_exists("proc_open")?"proc_open OK":"proc_open DISABLED";'
+node -v 2>/dev/null || echo 'no node — build assets locally (§7)'
+which composer git mysql
 ```
 
-**Cron granularity** cannot be checked from the shell — confirm in hPanel → Cron Jobs that the plan
-allows a **every-minute** entry. Laravel's scheduler assumes per-minute ticks. On plans capped at
-15- or 30-minute minimums, `reminders:plan`'s `dailyAt('06:00')` can be skipped entirely.
-`bootstrap/app.php:47` states the consequence: reminders are "planned and never sent — safe, but
-silent."
+**The authoritative extension check is `composer check-platform-reqs`, not a hand-written list.**
+A hand-written list missed `ext-sodium` on this deploy and cost a round trip. Run it against the
+lock file before installing anything:
+
+```bash
+cd .../backend && composer check-platform-reqs --no-dev
+```
+
+On this box that surfaced exactly one miss: **`ext-sodium`**, required by `lcobucci/jwt 5.6.0` via
+`php-open-source-saver/jwt-auth`. `sodium.so` shipped with alt-php but was not enabled.
+
+> **Enable extensions in hPanel → Advanced → PHP Configuration → PHP Extensions.** That covers both
+> the CLI and the web SAPI. Confirm it is genuinely just a toggle before sending anyone hunting:
+> if `$PHP -d extension=sodium.so -m | grep sodium` loads, the module is present and only disabled.
+
+**Cron granularity** cannot be checked from the shell. Confirm in hPanel → Cron Jobs that the plan
+allows an every-minute entry.
 
 ---
 
-## 2. Folder layout
+## 2. Layout
 
-`~/domains/shreerajshyamaji.com/` ships with a `DO_NOT_UPLOAD_HERE` marker and a `public_html/`.
-That marker means *files here are not web-served* — which is exactly where the application belongs.
-Only `public_html/` is reachable over HTTP.
+`~/domains/shreerajshyamaji.com/` ships a `DO_NOT_UPLOAD_HERE` marker and a `public_html/`. The
+marker means *files here are not web-served* — which is exactly where the application belongs.
 
 ```
 /home/u772825868/domains/shreerajshyamaji.com/
 ├── DO_NOT_UPLOAD_HERE          ← Hostinger's marker; leave it
 ├── vyaparbook/                 ← the git clone (NOT web-reachable)
-│   ├── backend/
-│   │   ├── app/  bootstrap/  config/  database/  lang/  resources/  routes/
-│   │   ├── vendor/             ← composer install --no-dev
-│   │   ├── storage/            ← must be writable
-│   │   ├── public/             ← the real docroot contents
-│   │   ├── artisan
-│   │   └── .env                ← outside public_html, so never web-readable
-│   ├── docs/
-│   └── CLAUDE.md
-└── public_html/                ← symlink → vyaparbook/backend/public   (see §3)
+│   └── backend/
+│       ├── app/ bootstrap/ config/ database/ lang/ resources/ routes/
+│       ├── vendor/             ← composer install --no-dev
+│       ├── storage/            ← 775
+│       ├── public/             ← the real docroot contents
+│       └── .env                ← chmod 600, outside public_html
+└── public_html -> vyaparbook/backend/public      ← symlink
 ```
 
-Keeping `.env` outside `public_html` is the point of this layout: a webserver misconfiguration
-cannot expose `APP_KEY`, `JWT_SECRET` or the DB password.
+`.env` living outside `public_html` is the point: a webserver misconfiguration cannot expose
+`APP_KEY`, `JWT_SECRET` or the DB password.
 
----
+### Docroot symlink
 
-## 3. Docroot: symlink (preferred) or copy
+**Verified working — LiteSpeed follows the symlink**, so `public/index.php` needs no path patching.
 
-### Option A — symlink `public_html` (recommended)
-
-Redeploys become `git pull` with nothing to re-copy, and `public/index.php` stays unmodified.
+`public_html` is **not empty** on a fresh domain; it holds Hostinger's `default.php`. Back it up
+rather than deleting:
 
 ```bash
 cd ~/domains/shreerajshyamaji.com
-rmdir public_html                       # only works if empty — see below if not
+mkdir -p ~/backup-default-docroot && cp -a public_html/. ~/backup-default-docroot/
+rm -rf public_html
 ln -s vyaparbook/backend/public public_html
-ls -l public_html                       # should show the symlink
+readlink -f public_html          # confirm
 ```
 
-If `public_html` is not empty, move it aside rather than deleting: `mv public_html public_html.bak`.
-
-Two risks, both worth verifying immediately after linking by loading the site:
-
-- LiteSpeed must follow symlinks (`Options +FollowSymLinks`) — normally on, but confirm.
-- hPanel operations can recreate `public_html` as a real directory. If the site 404s after a panel
-  change, check whether the symlink survived.
-
-### Option B — copy, if the symlink is rejected
-
-```bash
-cd ~/domains/shreerajshyamaji.com
-cp -r vyaparbook/backend/public/. public_html/
-```
-
-Then edit three paths in `public_html/index.php` (currently lines 8, 13, 16) to reach back into the
-app:
-
-```php
-if (file_exists($maintenance = __DIR__.'/../vyaparbook/backend/storage/framework/maintenance.php')) {
-require __DIR__.'/../vyaparbook/backend/vendor/autoload.php';
-(require_once __DIR__.'/../vyaparbook/backend/bootstrap/app.php')
-```
-
-With Option B, **every deploy must re-copy `public/`** — including `build/` after an asset change.
-That is the standing cost of this option and the reason A is preferred.
+If hPanel ever recreates `public_html` as a real directory the site 404s — recreate the symlink.
 
 ---
 
-## 4. Assets: build locally, ship separately
+## 3. What this box does NOT give you
 
-`public/build` is gitignored (`backend/.gitignore:3`), so it is **not** in the clone. If the
-preflight found no Node on the server, build on your machine and copy the result up:
+Four findings from the real deploy. None were predicted correctly by the first version of this doc.
+
+### 3.1 The repo is private — `git clone <url>` will not work
+
+The server needs its own credential. Use a **read-only deploy key** — not a PAT, and not agent
+forwarding, because this is a shared host and a forwarded personal key would be exposed to anyone
+with root on it.
 
 ```bash
-# local
-cd backend
-npm ci
-npm run build                    # → backend/public/build
+# on the server
+ssh-keygen -t ed25519 -C "vyaparbook-deploy@in-mum-web1878" -f ~/.ssh/id_ed25519_vyaparbook -N "" -q
+cat ~/.ssh/id_ed25519_vyaparbook.pub
 
-scp -r public/build \
-  u772825868@in-mum-web1878:~/domains/shreerajshyamaji.com/vyaparbook/backend/public/
+printf 'Host github.com\n  IdentityFile ~/.ssh/id_ed25519_vyaparbook\n  IdentitiesOnly yes\n  StrictHostKeyChecking accept-new\n' >> ~/.ssh/config
+chmod 600 ~/.ssh/config
 ```
 
-Do this on **every deploy that touches `resources/js` or `resources/css`**. A stale `build/` against
-new Blade templates fails in ways that look like caching bugs.
+Register it (`gh pr` subcommands are broken on this repo; `gh api` is the working path):
+
+```bash
+gh api -X POST repos/Vijay-Chaudhary/VyaparBook/keys \
+  -f title="hostinger in-mum-web1878 (read-only deploy)" \
+  -f key="ssh-ed25519 AAAA…" -F read_only=true
+```
+
+Confirm with `ssh -T git@github.com`. Current key id **159099724**, `read_only: true`.
+
+### 3.2 `proc_open` is DISABLED — and it breaks the scheduler
+
+Two consequences, one of them severe.
+
+**Composer** cannot run scripts. Install with `--no-scripts`, then run discovery directly:
+
+```bash
+composer install --no-dev --optimize-autoloader --no-scripts --no-interaction
+$PHP artisan package:discover
+```
+
+> `package:discover` must run **after `.env` exists**. Without it `DB_CONNECTION` falls back to the
+> `sqlite` default at `config/database.php:19`, and `AppServiceProvider::forgetNonMysqlConnections()`
+> has deleted that connection — so it dies with *"Database connection [sqlite] not configured."*
+> That is the provider working as designed, not a bug.
+
+**The scheduler cannot execute anything.** `Illuminate\Console\Scheduling\Event::execute()` shells
+out through Symfony Process. Proven on this box:
+
+```
+$ php artisan schedule:test --name="reminders:dispatch"
+  Running ['artisan' reminders:dispatch] ... FAIL
+  The Process class relies on proc_open, which is not available on your PHP installation.
+```
+
+`schedule:run` still exits 0 and prints *"No scheduled commands are ready to run"* when nothing is
+due — **so a cron entry looks healthy while delivering nothing.** This is the failure
+`bootstrap/app.php:47` warns about ("planned and never sent — safe, but silent"), reached by a route
+that comment never anticipated. Never conclude the scheduler works from a quiet `schedule:run`; test
+with `schedule:test`.
+
+`php artisan queue:work` and direct `php artisan <command>` invocation both work — neither needs
+`proc_open`.
+
+**Fix, in order of preference:**
+
+1. Enable `proc_open` in hPanel (remove it from `disable_functions`). Restores the scheduler and
+   Composer scripts.
+2. If Hostinger refuses, bypass the scheduler with direct cron calls (§6). This **loses
+   `withoutOverlapping()`**, which exists so a slow run cannot double-send. Double-sending WhatsApp
+   reminders to a shopkeeper's customers is real harm, so treat this as a stopgap.
+
+### 3.3 The engine is MariaDB, not MySQL 8
+
+`CLAUDE.md` specifies MySQL 8 and `AppServiceProvider` deliberately deletes the `mariadb` connection
+at boot. Hostinger provisioned **MariaDB 11.8.8**. The app runs on it through the `mysql` driver,
+with every idiom the Postgres→MySQL migration called out verified directly:
+
+| Idiom | Used by | Result |
+|---|---|---|
+| `json_contains(weekdays, ?)` | `BeatService.php:34` | ✅ `1` |
+| `UPDATE … LAST_INSERT_ID(value+1)` | `HasSyncSequence.php:73` | ✅ `11` |
+| `regexp_replace` (global by default) | `WhatsAppWebhookController` | ✅ `abc` |
+| `CAST(… AS CHAR/SIGNED)` | money-as-string preservation | ✅ |
+| **DECIMAL → PHP `string`** | 41 decimal cols, ~2,700 assertions | ✅ `string '1.05'` |
+
+`sql_mode` carries `STRICT_TRANS_TABLES` and `ONLY_FULL_GROUP_BY`, which is what
+`config/database.php`'s `'strict' => true` comment depends on.
+
+Note `CAST(x AS JSON)` is **not** valid MariaDB syntax — it is also not something the app does, so it
+does not matter here. Beware writing diagnostic queries in MySQL-only syntax and concluding the app
+is broken.
+
+> **Open risk:** the Pest suite has never run against MariaDB, and cannot on this box (`--no-dev`
+> means Pest is not installed). Run it locally against MariaDB 11.8 before real khata data lands.
+> Since the MySQL migration there is no RLS — `BelongsToTenant` failing closed is the *entire*
+> isolation layer, and the raw-builder tripwire is test-environment only.
+
+### 3.4 No SELECT-only database user
+
+`config/database.php:119` expects `vyapar_platform_ro` granted `SELECT` and nothing else — the
+surviving half of the old Postgres BYPASSRLS role, so the superadmin console *physically cannot*
+mutate tenant data. No migration creates it, and hPanel grants all-or-nothing per database.
+
+**Decision taken:** `DB_PLATFORM_USERNAME` points at the app user, with a comment in `.env` recording
+why. The console works; the hard guarantee is **not in force**. The only remaining protection is that
+platform writes route through `PlatformTenantContext`.
 
 ---
 
-## 5. First deploy
+## 4. First deploy
 
 ```bash
 PHP=/opt/alt/php83/usr/bin/php
 cd ~/domains/shreerajshyamaji.com
 
-git clone <repo-url> vyaparbook
+git clone git@github.com:Vijay-Chaudhary/VyaparBook.git vyaparbook
 cd vyaparbook/backend
 
-$PHP /usr/local/bin/composer install --no-dev --optimize-autoloader
+composer install --no-dev --optimize-autoloader --no-scripts --no-interaction
+# write .env (§5) BEFORE package:discover — see 3.2
+$PHP artisan package:discover
 
-cp .env.example .env
-# edit .env per §6, then:
-$PHP artisan key:generate
-$PHP artisan jwt:secret          # REQUIRED — see §6
-$PHP artisan migrate --force
-
+$PHP artisan key:generate --force
+$PHP artisan jwt:secret --force        # REQUIRED: .env.example has no JWT_SECRET
+chmod 600 .env
 chmod -R 775 storage bootstrap/cache
 
-$PHP artisan config:cache
-$PHP artisan route:cache
-$PHP artisan view:cache
+$PHP artisan migrate --force           # 43 tables
+$PHP artisan config:cache && $PHP artisan route:cache && $PHP artisan view:cache
 ```
 
-Smoke test: `curl -I https://shreerajshyamaji.com/up` — Laravel's health endpoint, registered in
-`bootstrap/app.php` via `health: '/up'`. Expect `200`.
+`composer` is on `PATH` and already runs php83 — do **not** prefix it with the PHP binary.
 
----
-
-## 6. Production `.env`
-
-Start from `.env.example` and change these:
-
-```dotenv
-APP_ENV=production
-APP_DEBUG=false                  # leaking stack traces on a money app is not acceptable
-APP_URL=https://shreerajshyamaji.com
-APP_TIMEZONE=Asia/Kolkata        # NOT UTC — see the warning below
-LOG_LEVEL=warning
-
-DB_DATABASE=<hpanel db>
-DB_USERNAME=<hpanel user>
-DB_PASSWORD=<hpanel password>
-
-SESSION_ENCRYPT=true
-
-# Leave these on database drivers. Redis is NOT required — see §7.
-CACHE_STORE=database
-SESSION_DRIVER=database
-QUEUE_CONNECTION=database
-
-# Leave the transport dark until it is deliberately proven against the real API.
-WHATSAPP_DRIVER=log
-```
-
-**`JWT_SECRET` is missing from `.env.example`** — it lists only `JWT_TTL` and `JWT_REFRESH_TTL`.
-`php-open-source-saver/jwt-auth` will not issue tokens without it, so `artisan jwt:secret` in §5 is
-mandatory, not optional. Skipping it means the React app under `/app/*` cannot authenticate at all.
-
-### ⚠ `APP_TIMEZONE` is load-bearing for reminders
-
-`.env.example` ships `APP_TIMEZONE=UTC`. `ReminderDispatcher.php:65` compares `Carbon::now()->hour`
-against quiet-hours bounds, and line 74 compares `$now->format('H:i:s')` against the shopkeeper's
-chosen `reminder_send_at`. Both read the **app timezone**. Left on UTC, an Indian shop that picks
-"send at 10:00" gets dispatch evaluated 5h30m off, and the quiet-hours guard protects the wrong part
-of the day.
-
-Set `APP_TIMEZONE=Asia/Kolkata` **before the first reminder batch is planned**, and confirm existing
-timestamps read correctly afterwards — changing it on a live database changes how every stored
-datetime is interpreted.
-
----
-
-## 7. Redis is not needed
-
-`CLAUDE.md` lists Redis in the stack, but nothing in `app/` calls `Redis::`, and `.env.example`
-already routes cache, session and queue to `database`. This is the single reason the app fits shared
-hosting at all — keep all three on `database` and ignore the `REDIS_*` block.
-
----
-
-## 8. Cron
-
-hPanel → Cron Jobs. Note the **CloudLinux PHP path** — plain `php` may resolve to a different
-version:
-
-```cron
-* * * * * /opt/alt/php83/usr/bin/php /home/u772825868/domains/shreerajshyamaji.com/vyaparbook/backend/artisan schedule:run >> /dev/null 2>&1
-
-* * * * * /opt/alt/php83/usr/bin/php /home/u772825868/domains/shreerajshyamaji.com/vyaparbook/backend/artisan queue:work --stop-when-empty --tries=3 --max-time=55 >> /dev/null 2>&1
-```
-
-The second line is the shared-hosting substitute for a daemonised worker: no Supervisor exists here,
-so instead of a long-lived process, the worker drains the queue and exits before the next minute's
-tick. `--max-time=55` is what prevents processes stacking.
-
-Both are required. The scheduler plans reminder batches; the worker sends them. With only the
-scheduler, batches accumulate and nothing is ever delivered.
-
----
-
-## 9. Redeploying
-
-With Option A (symlink):
+Smoke test — all verified on the live site:
 
 ```bash
-cd ~/domains/shreerajshyamaji.com/vyaparbook
-git pull
-cd backend
-/opt/alt/php83/usr/bin/php /usr/local/bin/composer install --no-dev --optimize-autoloader
-/opt/alt/php83/usr/bin/php artisan migrate --force
-/opt/alt/php83/usr/bin/php artisan config:cache && \
-/opt/alt/php83/usr/bin/php artisan route:cache && \
-/opt/alt/php83/usr/bin/php artisan view:cache
+curl -sS -o /dev/null -w "%{http_code}\n" https://shreerajshyamaji.com/up      # 200
+curl -sS -o /dev/null -w "%{http_code}\n" https://shreerajshyamaji.com/login   # 200
+curl -sS -o /dev/null -w "%{http_code}\n" https://shreerajshyamaji.com/sw.js   # 200 — root scope
+curl -sS -o /dev/null -w "%{http_code}\n" https://shreerajshyamaji.com/        # 302 → /app
 ```
 
-Plus the `scp` from §4 if frontend assets changed. Add `php artisan down` before and
-`php artisan up` after if a migration is not backward-compatible.
+`artisan about` fails on this box (it uses Process → `proc_open`). Not a deployment problem.
 
 ---
 
-## 10. Known gaps on shared hosting
+## 5. Production `.env`
 
-Three things this environment cannot give the app. None block launch; all should be decided
-deliberately rather than discovered later.
+```dotenv
+APP_NAME=VyaparBook
+APP_ENV=production
+APP_DEBUG=false
+APP_TIMEZONE=Asia/Kolkata        # NOT UTC — see below
+APP_URL=https://shreerajshyamaji.com
+LOG_LEVEL=warning
 
-### The platform read-only DB user
+DB_CONNECTION=mysql
+DB_HOST=localhost
+DB_DATABASE=u772825868_vyaparbook
+DB_USERNAME=u772825868_vyaparbook
+DB_PASSWORD=                     # set with an editor, never a sed one-liner
 
-`config/database.php:119` expects `DB_PLATFORM_USERNAME=vyapar_platform_ro`, granted `SELECT` and
-nothing else — the surviving half of the old Postgres BYPASSRLS role, so that the superadmin console
-*physically cannot* mutate a tenant's data however wrong the code gets. **No migration creates this
-user**; it needs a manual `CREATE USER` + `GRANT SELECT`, which shared MySQL accounts generally
-cannot issue (hPanel grants all-or-nothing per database).
+# Shared hosting cannot grant SELECT-only — see §3.4.
+DB_PLATFORM_USERNAME=u772825868_vyaparbook
+DB_PLATFORM_PASSWORD="${DB_PASSWORD}"      # phpdotenv interpolation; must come AFTER DB_PASSWORD
 
-If SELECT-only is unobtainable, point `DB_PLATFORM_*` at the main app user. The console keeps
-working; the hard guarantee is gone, and the only remaining protection is that platform writes route
-through `PlatformTenantContext`. Record the decision either way.
+SESSION_DRIVER=database
+SESSION_ENCRYPT=true
+CACHE_STORE=database
+QUEUE_CONNECTION=database
+WHATSAPP_DRIVER=log              # ships dark; nothing sends until deliberately switched
+```
 
-### Isolation has no database backstop
+Set `DB_PASSWORD` with `nano`, not `sed` — a password containing `#`, `$` or a space needs quoting,
+and an editor sidesteps the trap.
 
-Since the MySQL migration there is no RLS. `App\Traits\BelongsToTenant` failing closed is the
-*entire* isolation layer in production, and the query tripwire that catches raw builders missing a
-`business_id` predicate is **test-environment only** — string-matching SQL was judged too blunt to
-gate production traffic on.
+**`JWT_SECRET` is absent from `.env.example`** (only `JWT_TTL`/`JWT_REFRESH_TTL` are there). Without
+`artisan jwt:secret` the React app under `/app/*` cannot authenticate at all.
 
-Practical consequence: run the full Pest suite against the **same MySQL version the server runs**
-before the first tenant's data lands. A version difference is exactly where an untripped raw builder
-would surface.
+**Redis is not needed.** `CLAUDE.md` lists it, but cache, session and queue all default to `database`
+drivers and nothing in `app/` calls `Redis::`. This is why the app fits shared hosting.
 
-### Decimal fidelity
+### ⚠ `APP_TIMEZONE` is load-bearing
 
-`config/database.php:82` sets `PDO::ATTR_EMULATE_PREPARES => false`, with the note that under
-emulated prepares "PDO hands DECIMAL columns back as PHP floats instead of strings — nothing throws,
-and khatas drift by paise. 41 decimal columns and ~2,700 assertions rest on this being false."
+`.env.example` ships UTC. `ReminderDispatcher.php:65` compares `Carbon::now()->hour` against
+quiet-hours bounds, and `:74` compares `$now->format('H:i:s')` against the shopkeeper's chosen
+`reminder_send_at`. Both read the **app timezone**. On UTC an Indian shop's "10:00" is evaluated
+5h30m off and quiet hours guard the wrong part of the day.
 
-If the host's PDO build forces emulation, money corrupts silently. `DecimalFidelityTest` pins this —
-run it against the production database as part of go-live, not just in CI.
+Confirm it took effect: `storage/logs/laravel.log` timestamps should read IST while `date` on the
+server reads UTC.
+
+---
+
+## 6. Cron
+
+**`crontab` is not on PATH — cron must be configured in hPanel → Cron Jobs.** Use the absolute
+CloudLinux PHP path; plain `php` may resolve to a different version.
+
+```cron
+# Always. queue:work does not need proc_open.
+* * * * * /opt/alt/php83/usr/bin/php /home/u772825868/domains/shreerajshyamaji.com/vyaparbook/backend/artisan queue:work --stop-when-empty --tries=3 --max-time=55 >/dev/null 2>&1
+
+# If proc_open is ENABLED — the correct form:
+* * * * * /opt/alt/php83/usr/bin/php .../artisan schedule:run >/dev/null 2>&1
+
+# If proc_open stays DISABLED — stopgap, loses withoutOverlapping (§3.2):
+0 6 * * *    /opt/alt/php83/usr/bin/php .../artisan reminders:plan >/dev/null 2>&1
+*/15 * * * * /opt/alt/php83/usr/bin/php .../artisan reminders:dispatch >/dev/null 2>&1
+```
+
+`--stop-when-empty --max-time=55` is the shared-hosting substitute for a daemonised worker: no
+Supervisor exists, so the worker drains the queue and exits before the next tick rather than
+stacking processes.
+
+Neither entry blocks launch while `WHATSAPP_DRIVER=log`.
+
+---
+
+## 7. Frontend assets
+
+The server has **no Node**, and `public/build` is gitignored (`backend/.gitignore:3`) so it is not in
+the clone. Build locally and copy up:
+
+```bash
+# local
+cd backend && npm ci && npm run build
+scp -P 65002 -r public/build \
+  u772825868@82.25.107.41:~/domains/shreerajshyamaji.com/vyaparbook/backend/public/
+```
+
+Do this on **every deploy touching `resources/js` or `resources/css`**. A stale `build/` against new
+Blade templates fails in ways that look like caching bugs.
+
+The font warnings during build (`/fonts/*.woff2 didn't resolve at build time`) are expected — those
+are served from `public/fonts` at runtime.
+
+---
+
+## 8. Redeploying
+
+```bash
+PHP=/opt/alt/php83/usr/bin/php
+cd ~/domains/shreerajshyamaji.com/vyaparbook && git pull
+cd backend
+composer install --no-dev --optimize-autoloader --no-scripts --no-interaction
+$PHP artisan package:discover
+$PHP artisan migrate --force
+$PHP artisan config:cache && $PHP artisan route:cache && $PHP artisan view:cache
+```
+
+Plus the `scp` from §7 if assets changed. Wrap in `artisan down` / `artisan up` if a migration is not
+backward-compatible.
+
+---
+
+## 9. Outstanding
+
+- [ ] Enable `proc_open` in hPanel, then switch cron to `schedule:run` (§3.2).
+- [ ] Add the cron entries in hPanel (§6).
+- [ ] Run the Pest suite against MariaDB 11.8 locally before real data lands (§3.3).
+- [ ] Decide whether the lost SELECT-only guarantee (§3.4) is acceptable long-term.
