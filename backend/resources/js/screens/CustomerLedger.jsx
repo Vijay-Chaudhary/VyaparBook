@@ -7,7 +7,12 @@ import { Screen } from '../components/Chrome';
  * One customer's khata: the running statement plus the two actions that
  * actually get used at the counter.
  */
-export function CustomerLedger({ customer, entries, outstandingPaise, readOnly = false }) {
+export function CustomerLedger({
+    customer, entries, outstandingPaise, readOnly = false,
+    // Owner/admin only, and only online: correcting an order is a Blade screen
+    // outside this app, so the phone can link to it but never do it offline.
+    canCorrectOrders = false, businessId = null,
+}) {
     if (!customer) {
         return (
             <Screen title={t('khata')} onBack={() => navigate('/khata')}>
@@ -125,6 +130,23 @@ export function CustomerLedger({ customer, entries, outstandingPaise, readOnly =
                                       </li>
                                   ))}
                               </ul>
+                          )}
+
+                          {/* The way back to the order this sale came from.
+                              A wrong quantity is noticed HERE, reading the
+                              khata — and this was the one screen with no route
+                              to the thing that can fix it. Leaves the SPA on
+                              purpose: correcting is an online Blade screen. */}
+                          {canCorrectOrders && entry.orderId && (
+                              <a
+                                  // ?order= opens the form server-side; the
+                                  // fragment scrolls to it on a long list.
+                                  href={`/orders?business=${businessId}&order=${entry.orderId}#order-${entry.orderId}`}
+                                  className="mt-2 inline-flex min-h-tap items-center text-sm font-medium text-brand"
+                                  data-testid={`correct-order-${entry.orderId}`}
+                              >
+                                  {t('correct_order')}
+                              </a>
                           )}
                         </li>
                     ))}

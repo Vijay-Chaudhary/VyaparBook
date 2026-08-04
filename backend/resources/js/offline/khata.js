@@ -105,6 +105,18 @@ export async function ledgerFor(db, customer, { includePending = true } = {}) {
     const allLines = await db.sale_lines.toArray();
     const locale = getLocale();
 
+    // Which sales came from an order, so the statement can offer the owner a
+    // way back to it. A delivered order IS this sale — the khata is where you
+    // notice the figure is wrong, and until now it was the one screen with no
+    // route to the thing that could fix it.
+    //
+    // Keyed on sale_id rather than the sale's uuid: after a correction the
+    // order points at a re-issued sale whose uuid is derived, not the order's.
+    const orders = await db.orders.toArray();
+    const orderBySaleId = new Map(
+        orders.filter((o) => o.sale_id).map((o) => [o.sale_id, o.id])
+    );
+
     const entries = [
         ...sales.map((s) => ({
             kind: s.reverses_id ? 'sale_reversal' : 'sale',
@@ -113,6 +125,8 @@ export async function ledgerFor(db, customer, { includePending = true } = {}) {
             created_at: s.created_at,
             deltaPaise: toPaise(s.total),
             pending: false,
+            // null for a counter sale, which has no order behind it.
+            orderId: orderBySaleId.get(s.id) ?? null,
             items: describeLines(
                 allLines.filter((l) => l.sale_id === s.id),
                 packs, products, locale
