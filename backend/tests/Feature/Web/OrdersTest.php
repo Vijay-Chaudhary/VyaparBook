@@ -463,6 +463,34 @@ describe('owner corrections', function () {
             ->and($saleId)->toBeNull();
     });
 
+    it('opens the correction form for the order the khata linked to', function () {
+        // The app's "Correct this order" link carries ?order={id}. Opened
+        // server-side because :target cannot force a <details> open and this
+        // screen carries no JS of its own.
+        [$owner, $business, $orderId] = pendingOrder('100.00');
+        deliverSeededOrder($owner, $business, $orderId);
+
+        $html = $this->actingAs($owner)
+            ->get("/orders?business={$business->id}&order={$orderId}")
+            ->assertOk()
+            ->getContent();
+
+        expect($html)->toContain('id="order-' . $orderId . '" open');
+    });
+
+    it('leaves every correction form shut when no order was asked for', function () {
+        [$owner, $business, $orderId] = pendingOrder('100.00');
+        deliverSeededOrder($owner, $business, $orderId);
+
+        $html = $this->actingAs($owner)
+            ->get("/orders?business={$business->id}")
+            ->assertOk()
+            ->getContent();
+
+        expect($html)->toContain('id="order-' . $orderId . '"')
+            ->not->toContain('id="order-' . $orderId . '" open');
+    });
+
     it('keeps a salesman away from both corrections', function () {
         [$owner, $business, $orderId] = pendingOrder('100.00');
 

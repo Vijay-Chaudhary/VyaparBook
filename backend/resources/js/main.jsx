@@ -562,6 +562,10 @@ function App({ userName, locale }) {
                         // loads is a wrong number a shopkeeper could act on.
                         outstandingPaise={ledger ? ledger.outstanding : null}
                         readOnly={readOnly}
+                        // Same gate as the approvals link: only the two roles
+                        // the Blade screen would admit see a route to it.
+                        canCorrectOrders={canAcceptOrders && !readOnly}
+                        businessId={tenantId}
                     />
                 );
 

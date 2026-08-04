@@ -198,7 +198,13 @@
                                      thing you see, and the machinery for
                                      changing them stays one tap away. --}}
                                 @unless (in_array($order->status, [OrderStatus::CANCELLED, OrderStatus::REJECTED], true))
-                                    <details class="mt-2">
+                                    {{-- ?order={id} arrives from the "Correct this
+                                         order" link on a customer's khata in the
+                                         app. Opened server-side rather than with a
+                                         fragment, because :target cannot force a
+                                         <details> open and this screen carries no
+                                         JS of its own. --}}
+                                    <details class="mt-2" id="order-{{ $order->id }}" {{ request('order') === $order->id ? 'open' : '' }}>
                                         <summary class="inline-flex min-h-tap cursor-pointer items-center text-sm font-medium text-brand">
                                             {{ __('orders.revise') }}
                                         </summary>

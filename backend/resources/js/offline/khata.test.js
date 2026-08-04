@@ -339,3 +339,41 @@ describe('ledger line items', () => {
         expect(entries.find((e) => e.uuid === 'pay-1').items).toEqual([]);
     });
 });
+
+describe('the order behind a sale', () => {
+    it('points a delivered order\'s sale back at the order', async () => {
+        // The khata is where a wrong quantity gets noticed, so it has to know
+        // which sale came from an order and which was a counter sale.
+        const c = customer();
+        await db.customers.add(c);
+        await db.sales.add(sale({ uuid: 'from-order', id: 'srv-sale-1' }));
+        await db.sales.add(sale({ uuid: 'counter', id: 'srv-sale-2' }));
+        await db.orders.add({
+            uuid: 'ord-1', id: 'srv-order-1', customer_id: 'srv-cust-1',
+            status: 'delivered', sale_id: 'srv-sale-1', order_date: '2026-07-01', sync_seq: 1,
+        });
+
+        const byUuid = Object.fromEntries(
+            (await ledgerFor(db, c)).map((e) => [e.uuid, e.orderId])
+        );
+
+        expect(byUuid['from-order']).toBe('srv-order-1');
+        expect(byUuid.counter).toBeNull();
+    });
+
+    it('leaves a sale unlinked when the order points nowhere', async () => {
+        // A cancelled order has its sale_id cleared, so the reversed sale must
+        // not keep offering a route to an order that no longer owns it.
+        const c = customer();
+        await db.customers.add(c);
+        await db.sales.add(sale({ uuid: 'voided', id: 'srv-sale-9' }));
+        await db.orders.add({
+            uuid: 'ord-9', id: 'srv-order-9', customer_id: 'srv-cust-1',
+            status: 'cancelled', sale_id: null, order_date: '2026-07-01', sync_seq: 2,
+        });
+
+        const [entry] = await ledgerFor(db, c);
+
+        expect(entry.orderId).toBeNull();
+    });
+});
