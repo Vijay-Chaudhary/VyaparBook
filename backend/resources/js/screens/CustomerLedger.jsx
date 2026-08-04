@@ -12,6 +12,9 @@ export function CustomerLedger({
     // Owner/admin only, and only online: correcting an order is a Blade screen
     // outside this app, so the phone can link to it but never do it offline.
     canCorrectOrders = false, businessId = null,
+    // Owner only — CustomerController::correct resolves the tenant with the
+    // default ['owner'] role, so an admin would be bounced to /app.
+    canCorrectPayments = false,
 }) {
     if (!customer) {
         return (
@@ -146,6 +149,19 @@ export function CustomerLedger({
                                   data-testid={`correct-order-${entry.orderId}`}
                               >
                                   {t('correct_order')}
+                              </a>
+                          )}
+
+                          {/* A payment recorded wrong is noticed on this screen
+                              too. Same journey out to the Blade ledger, which
+                              reverses the original and records what was meant. */}
+                          {canCorrectPayments && entry.paymentId && (
+                              <a
+                                  href={`/customers/${customer.id}?business=${businessId}&payment=${entry.paymentId}#payment-${entry.paymentId}`}
+                                  className="mt-2 inline-flex min-h-tap items-center text-sm font-medium text-brand"
+                                  data-testid={`correct-payment-${entry.paymentId}`}
+                              >
+                                  {t('correct_payment')}
                               </a>
                           )}
                         </li>

@@ -201,6 +201,7 @@ class OrderController extends Controller
             'lines' => ['required', 'array', 'min:1'],
             'lines.*.qty' => ['required', 'integer', 'not_in:0'],
             'lines.*.rate' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
+            'order_date' => ['nullable', 'date'],
         ]);
 
         $error = $this->runInTenant($businessId, function () use ($businessId, $order, $data) {
@@ -211,7 +212,7 @@ class OrderController extends Controller
             }
 
             try {
-                $this->writer->reviseOrder($model->uuid, $data['lines']);
+                $this->writer->reviseOrder($model->uuid, $data['lines'], $data['order_date'] ?? null);
             } catch (ValidationException $e) {
                 // Revising a cancelled order — surfaced as a flash message
                 // rather than a 422 page, matching how this screen reports

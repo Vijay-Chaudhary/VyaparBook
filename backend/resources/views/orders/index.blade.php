@@ -218,6 +218,17 @@
                                                 @csrf
                                                 <input type="hidden" name="business" value="{{ $businessId }}">
 
+                                                {{-- The day it was TAKEN. Does not reach the
+                                                     khata — a sale is dated the day goods
+                                                     arrived — but it is what "overdue" counts
+                                                     from, so a wrong one nags forever. --}}
+                                                <label class="mb-3 block text-sm">
+                                                    <span class="field-label">{{ __('orders.order_date') }}</span>
+                                                    <input type="date" name="order_date"
+                                                           value="{{ $order->order_date?->format('Y-m-d') }}"
+                                                           class="field-input">
+                                                </label>
+
                                                 @foreach ($order->lines as $line)
                                                     <fieldset class="mb-3">
                                                         <legend class="text-sm font-medium text-ink">

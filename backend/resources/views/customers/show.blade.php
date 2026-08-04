@@ -153,6 +153,50 @@
                                         {{ $isSale ? __('customers.void') : __('customers.reverse') }}
                                     </button>
                                 </form>
+
+                                {{-- A payment recorded wrong is far more common
+                                     than one that never happened, and reversing
+                                     it left the shopkeeper to re-enter it from
+                                     memory. Correcting does both halves at once
+                                     and keeps them paired on the statement. --}}
+                                @unless ($isSale)
+                                    <details class="mt-1 text-left" id="payment-{{ $e['ref']->id }}" {{ request('payment') === $e['ref']->id ? 'open' : '' }}>
+                                        <summary class="inline-flex min-h-tap cursor-pointer items-center text-sm font-medium text-brand">
+                                            {{ __('customers.correct_payment') }}
+                                        </summary>
+                                        <form method="POST" class="card mt-2"
+                                              action="{{ route('customers.payments.correct', [
+                                                  'customer' => $customer->id, 'payment' => $e['ref']->id,
+                                              ]) }}">
+                                            @csrf
+                                            <input type="hidden" name="business" value="{{ $businessId }}">
+                                            <label class="block text-sm">
+                                                <span class="field-label">{{ __('customers.amount') }}</span>
+                                                <input type="number" step="0.01" min="0.01" name="amount"
+                                                       value="{{ $e['ref']->amount }}" class="field-input" required>
+                                            </label>
+                                            <label class="mt-2 block text-sm">
+                                                <span class="field-label">{{ __('customers.date') }}</span>
+                                                <input type="date" name="payment_date"
+                                                       value="{{ $e['ref']->payment_date?->format('Y-m-d') }}"
+                                                       class="field-input" required>
+                                            </label>
+                                            <label class="mt-2 block text-sm">
+                                                <span class="field-label">{{ __('customers.mode') }}</span>
+                                                <select name="mode" class="field-input" required>
+                                                    @foreach (['cash', 'upi', 'cheque', 'bank', 'other'] as $mode)
+                                                        <option value="{{ $mode }}" @selected($e['ref']->mode === $mode)>
+                                                            {{ __('customers.modes.' . $mode) }}
+                                                        </option>
+                                                    @endforeach
+                                                </select>
+                                            </label>
+                                            <button type="submit" class="btn-primary mt-3">
+                                                {{ __('customers.correct_payment') }}
+                                            </button>
+                                        </form>
+                                    </details>
+                                @endunless
                             @endif
                         </td>
                     </tr>

@@ -6,8 +6,10 @@ namespace App\Ledger;
 use App\Models\Payment;
 use App\Models\Sale;
 use App\Models\SaleLine;
+use App\Services\LedgerWriter;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Ramsey\Uuid\Uuid;
 
 /**
  * The one home for corrections, mirroring LedgerWriter's shape.
@@ -29,6 +31,8 @@ use Illuminate\Support\Str;
  */
 class LedgerReverser
 {
+    public function __construct(private readonly LedgerWriter $writer) {}
+
     /**
      * Void a sale by writing its mirror image.
      *
@@ -110,6 +114,47 @@ class LedgerReverser
         $reversal->save();
 
         return $reversal;
+    }
+
+    /**
+     * Correct a payment: reverse what was recorded, then record what was meant.
+     *
+     * Editing the row in place is the one thing that must not happen. A payment
+     * IS a khata entry, so a silent amount change would move a balance the
+     * customer has already been shown with nothing on the books to explain it.
+     * The statement instead reads "paid ₹500, reversed ₹500, paid ₹450".
+     *
+     * The corrected payment's uuid is derived from the one being corrected, so
+     * a double-submitted correction replays onto the same row rather than
+     * crediting twice — recordPayment is idempotent by uuid. Correcting a
+     * correction derives from ITS uuid in turn, so the chain never collides
+     * and needs no counter column.
+     *
+     * @param  array{payment_date: string, amount: string, mode: string}  $data
+     *
+     * @throws ReversalNotAllowed when the original is itself a reversal, or is
+     *                            already reversed
+     */
+    public function correctPayment(Payment $original, array $data): Payment
+    {
+        return DB::transaction(function () use ($original, $data) {
+            // Guards live in reversePayment; letting it run first means a
+            // refusal happens before anything is written.
+            $this->reversePayment($original);
+
+            [$corrected] = $this->writer->recordPayment([
+                'uuid' => (string) Uuid::uuid5(
+                    Uuid::NAMESPACE_URL,
+                    "vyaparbook:payment:{$original->uuid}:correction",
+                ),
+                'customer_id' => $original->customer_id,
+                'payment_date' => $data['payment_date'],
+                'amount' => $data['amount'],
+                'mode' => $data['mode'],
+            ]);
+
+            return $corrected;
+        });
     }
 
     /**

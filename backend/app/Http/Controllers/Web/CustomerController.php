@@ -16,6 +16,7 @@ use Carbon\Carbon;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 use Illuminate\View\View;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -267,6 +268,34 @@ class CustomerController extends Controller
             $this->reverser->reversePayment($row);
 
             return __('customers.reversed');
+        });
+    }
+
+    /**
+     * Correct a payment that was recorded wrong — amount, date or mode.
+     *
+     * Not an in-place edit: the original is reversed and a corrected payment
+     * recorded, so the statement explains the change instead of a balance
+     * quietly differing from what the customer was last shown.
+     */
+    public function correctPayment(Request $request, string $customer, string $payment): RedirectResponse
+    {
+        $data = $request->validate([
+            'payment_date' => ['required', 'date'],
+            'amount' => ['required', 'numeric', 'gt:0'],
+            'mode' => ['required', Rule::in(['cash', 'upi', 'cheque', 'bank', 'other'])],
+        ]);
+
+        return $this->correct($request, $customer, function () use ($payment, $data) {
+            $row = Payment::find($payment);
+
+            if ($row === null) {
+                throw new NotFoundHttpException;
+            }
+
+            $this->reverser->correctPayment($row, $data);
+
+            return __('customers.payment_corrected');
         });
     }
 

@@ -37,6 +37,7 @@ const strings = {
         record_sale: 'बिक्री दर्ज करें',
         take_order: 'ऑर्डर लें',
         correct_order: 'यह ऑर्डर ठीक करें',
+        correct_payment: 'यह भुगतान ठीक करें',
         accept_orders: 'स्वीकृतियाँ',
         overdue: 'देर',
         orders: 'ऑर्डर',
@@ -174,6 +175,7 @@ const strings = {
         record_sale: 'Record sale',
         take_order: 'Take order',
         correct_order: 'Correct this order',
+        correct_payment: 'Correct this payment',
         accept_orders: 'Approvals',
         overdue: 'Late',
         // Not "My orders" any more: the pull sends the whole shop's, because
