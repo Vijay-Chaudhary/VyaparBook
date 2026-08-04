@@ -31,6 +31,8 @@ class Order extends Model
         'total' => 'decimal:2',
         'version' => 'integer',
         'sync_seq' => 'integer',
+        // Strictly compared in OrderWriter::saleUuidFor to pick the sale key.
+        'revision' => 'integer',
     ];
 
     /** @return HasMany<OrderLine, $this> */

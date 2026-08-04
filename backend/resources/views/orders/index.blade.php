@@ -141,12 +141,18 @@
                                  an order before delivery is not money, so there
                                  is nothing on the books to mirror. --}}
                             @unless (OrderStatus::isTerminal($order->status))
-                                <form method="POST" class="mt-1"
+                                <form method="POST"
                                       action="{{ route('orders.cancel', ['order' => $order->id]) }}"
                                       onsubmit="return confirm('{{ __('orders.confirm_cancel') }}')">
                                     @csrf
                                     <input type="hidden" name="business" value="{{ $businessId }}">
-                                    <button type="submit" class="text-xs text-danger">{{ __('orders.cancel') }}</button>
+                                    {{-- text-xs gave this a 16px hit area; as an
+                                         inline-flex target it clears 44px without
+                                         changing how the cell reads. --}}
+                                    <button type="submit"
+                                            class="-ml-1 inline-flex min-h-tap items-center px-1 text-sm font-medium text-danger">
+                                        {{ __('orders.cancel') }}
+                                    </button>
                                 </form>
                             @endunless
                         </td>
@@ -185,6 +191,74 @@
                                         @endif
                                     </span>
                                 @endforeach
+
+                                {{-- Owner corrections, including after delivery.
+                                     Behind a <details> because most rows are
+                                     read, not edited — the figures stay the
+                                     thing you see, and the machinery for
+                                     changing them stays one tap away. --}}
+                                @unless (in_array($order->status, [OrderStatus::CANCELLED, OrderStatus::REJECTED], true))
+                                    <details class="mt-2">
+                                        <summary class="inline-flex min-h-tap cursor-pointer items-center text-sm font-medium text-brand">
+                                            {{ __('orders.revise') }}
+                                        </summary>
+
+                                        <div class="card mt-2 max-w-xl">
+                                            <h3 class="text-base font-semibold text-ink">{{ __('orders.revise_heading') }}</h3>
+                                            <p class="mt-1 text-sm text-ink-muted">{{ __('orders.revise_hint') }}</p>
+
+                                            <form method="POST" class="mt-3"
+                                                  action="{{ route('orders.revise', ['order' => $order->id]) }}">
+                                                @csrf
+                                                <input type="hidden" name="business" value="{{ $businessId }}">
+
+                                                @foreach ($order->lines as $line)
+                                                    <fieldset class="mb-3">
+                                                        <legend class="text-sm font-medium text-ink">
+                                                            {{ $line->productPack?->product?->name_en ?: $line->productPack?->product?->name_hi }}
+                                                            {{ $line->productPack?->packSize?->label }}
+                                                        </legend>
+                                                        <div class="flex flex-wrap gap-2">
+                                                            <label class="text-sm">
+                                                                <span class="field-label">{{ __('orders.qty') }}</span>
+                                                                <input type="number" inputmode="numeric" step="1"
+                                                                       name="lines[{{ $line->id }}][qty]"
+                                                                       value="{{ $line->qty }}" class="field-input" required>
+                                                            </label>
+                                                            <label class="text-sm">
+                                                                <span class="field-label">{{ __('orders.rate') }}</span>
+                                                                <input type="number" inputmode="decimal" step="0.01" min="0"
+                                                                       name="lines[{{ $line->id }}][rate]"
+                                                                       value="{{ $line->rate }}" class="field-input" required>
+                                                            </label>
+                                                        </div>
+                                                    </fieldset>
+                                                @endforeach
+
+                                                <button type="submit" class="btn-primary">{{ __('orders.revise') }}</button>
+                                            </form>
+
+                                            {{-- Separated from the correction form
+                                                 above: voiding is destructive and
+                                                 must not sit a stray tap away from
+                                                 an ordinary edit. --}}
+                                            <form method="POST" class="mt-4 border-t border-hairline pt-3"
+                                                  action="{{ route('orders.void', ['order' => $order->id]) }}"
+                                                  onsubmit="return confirm('{{ __('orders.void_confirm') }}')">
+                                                @csrf
+                                                <input type="hidden" name="business" value="{{ $businessId }}">
+                                                <label class="block text-sm">
+                                                    <span class="field-label">{{ __('orders.void_note') }}</span>
+                                                    <input type="text" name="status_note" maxlength="255" class="field-input">
+                                                </label>
+                                                <button type="submit"
+                                                        class="btn-secondary mt-2 border-danger text-danger">
+                                                    {{ __('orders.void') }}
+                                                </button>
+                                            </form>
+                                        </div>
+                                    </details>
+                                @endunless
                             </td>
                         </tr>
                     @endif

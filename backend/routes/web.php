@@ -226,6 +226,12 @@ Route::middleware('auth')->group(function () {
     // reversal — there is nothing on the books yet to mirror.
     Route::post('orders/{order}/cancel', [OrderController::class, 'cancel'])->name('orders.cancel');
 
+    // Owner corrections. These are the only routes that act on a DELIVERED
+    // order — see OrderWriter's "Owner corrections" block for why they bypass
+    // OrderStatus rather than the state machine being widened for everyone.
+    Route::post('orders/{order}/revise', [OrderController::class, 'revise'])->name('orders.revise');
+    Route::post('orders/{order}/void', [OrderController::class, 'void'])->name('orders.void');
+
     // Session -> JWT exchange for the React layer. Throttled because it mints
     // credentials: a valid session should not make it freely spammable.
     Route::get('auth/token', [ApiTokenController::class, 'store'])

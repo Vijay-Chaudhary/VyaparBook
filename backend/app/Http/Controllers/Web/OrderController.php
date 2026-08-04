@@ -7,10 +7,12 @@ use App\Http\Controllers\Concerns\ResolvesOwnedTenant;
 use App\Http\Controllers\Controller;
 use App\Models\Order;
 use App\Orders\OrderStatus;
+use App\Services\OrderWriter;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Carbon;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Validation\ValidationException;
 use Illuminate\View\View;
 use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
 
@@ -27,6 +29,8 @@ class OrderController extends Controller
 
     /** Accepting is a manager's job, so admins qualify as well as owners. */
     private const ROLES = ['owner', 'admin'];
+
+    public function __construct(private readonly OrderWriter $writer) {}
 
     public function index(Request $request): View|RedirectResponse
     {
@@ -174,5 +178,82 @@ class OrderController extends Controller
         });
 
         return redirect()->route('orders', ['business' => $businessId])->with('status', __('orders.rejected'));
+    }
+
+    /**
+     * Correct the figures on an order the owner has already decided — including
+     * one already delivered, where the khata is rewritten by voiding the sale
+     * and issuing a corrected one.
+     *
+     * Unlike accept(), this does not consult OrderStatus: a delivered order is
+     * terminal by design, and OrderWriter::reviseOrder is the deliberate bypass.
+     * The gate is this method's role check, which is why it lives on the web
+     * surface and never on the sync push.
+     */
+    public function revise(Request $request, string $order): RedirectResponse
+    {
+        $businessId = $this->ownedBusinessId($request->input('business'), self::ROLES);
+        if ($businessId === null) {
+            return redirect()->route('app');
+        }
+
+        $data = $request->validate([
+            'lines' => ['required', 'array', 'min:1'],
+            'lines.*.qty' => ['required', 'integer', 'not_in:0'],
+            'lines.*.rate' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
+        ]);
+
+        $error = $this->runInTenant($businessId, function () use ($businessId, $order, $data) {
+            $model = Order::query()->where('business_id', $businessId)->find($order);
+
+            if ($model === null) {
+                throw new NotFoundHttpException;
+            }
+
+            try {
+                $this->writer->reviseOrder($model->uuid, $data['lines']);
+            } catch (ValidationException $e) {
+                // Revising a cancelled order — surfaced as a flash message
+                // rather than a 422 page, matching how this screen reports
+                // every other refusal.
+                return $e->validator->errors()->first();
+            }
+
+            return null;
+        });
+
+        return redirect()->route('orders', ['business' => $businessId])
+            ->with($error === null ? 'status' : 'error', $error ?? __('orders.revised'));
+    }
+
+    /**
+     * The owner's "delete", at any stage including delivered.
+     *
+     * Nothing is removed: a delivered order's sale is reversed by appending its
+     * mirror image, so the khata reads "sale, voided" instead of showing a gap,
+     * and the order row survives as cancelled. That is also what lets the change
+     * reach the salesmen's phones — sync carries row updates, never deletions.
+     */
+    public function void(Request $request, string $order): RedirectResponse
+    {
+        $businessId = $this->ownedBusinessId($request->input('business'), self::ROLES);
+        if ($businessId === null) {
+            return redirect()->route('app');
+        }
+
+        $data = $request->validate(['status_note' => ['nullable', 'string', 'max:255']]);
+
+        $this->runInTenant($businessId, function () use ($businessId, $order, $data) {
+            $model = Order::query()->where('business_id', $businessId)->find($order);
+
+            if ($model === null) {
+                throw new NotFoundHttpException;
+            }
+
+            $this->writer->voidOrder($model->uuid, $data['status_note'] ?? null);
+        });
+
+        return redirect()->route('orders', ['business' => $businessId])
+            ->with('status', __('orders.voided'));
     }
 }

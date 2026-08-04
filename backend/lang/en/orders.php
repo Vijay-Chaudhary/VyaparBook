@@ -25,6 +25,17 @@ return [
     'cancel' => 'Cancel order',
     'cancelled' => 'Order cancelled.',
     'cannot_cancel' => 'That order can no longer be cancelled.',
+
+    // Owner corrections, which may act on an order that is already delivered.
+    'revised' => 'Order corrected.',
+    'voided' => 'Order voided. Any sale it created has been reversed.',
+    'cannot_revise' => 'A :status order has no figures left to correct.',
+    'revise' => 'Correct figures',
+    'revise_heading' => 'Correct this order',
+    'revise_hint' => 'Delivered orders can be corrected. The sale already in the khata is reversed and a corrected one issued, so nothing is deleted.',
+    'void' => 'Void order',
+    'void_confirm' => 'Void this order? Any sale it created will be reversed in the khata. This cannot be undone from here.',
+    'void_note' => 'Reason (optional)',
     'confirm_cancel' => 'Cancel this order? The salesman will see it on their next sync.',
     'recent' => 'Recently decided',
     // Shown only where acceptance actually changed something. Silence means
