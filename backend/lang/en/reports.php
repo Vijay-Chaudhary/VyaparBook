@@ -9,6 +9,12 @@ return [
     'period' => 'Period',
     'view' => 'View',
 
+    // Shown when the business has recorded nothing yet, so a screen full of
+    // zeros reads as "new" rather than "broken".
+    'empty_title' => 'No entries yet',
+    'empty_body' => 'Record a sale, a purchase or a payment and this dashboard fills in. The figures below stay at zero until then.',
+    'empty_cta' => 'Record the first sale',
+
     // Tiles
     'sales_today' => 'Total sales today',
     'sales_month' => 'Total sales (this month)',
