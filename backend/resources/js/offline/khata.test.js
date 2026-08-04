@@ -377,3 +377,24 @@ describe('the order behind a sale', () => {
         expect(entry.orderId).toBeNull();
     });
 });
+
+describe('correcting a payment from the statement', () => {
+    it('carries the payment id, but not on a reversal', async () => {
+        // Correcting a reversal is refused server-side, so offering the route
+        // would only produce a dead end.
+        const c = customer();
+        await db.customers.add(c);
+        await db.payments.add(payment({ uuid: 'paid', id: 'srv-pay-1' }));
+        await db.payments.add(payment({
+            uuid: 'undo', id: 'srv-pay-2', reverses_id: 'srv-pay-1', amount: '-40.00',
+        }));
+
+        const byUuid = Object.fromEntries(
+            (await ledgerFor(db, c)).map((e) => [e.uuid, e.paymentId])
+        );
+
+        expect(byUuid.paid).toBe('srv-pay-1');
+        expect(byUuid.undo).toBeNull();
+    });
+});
+

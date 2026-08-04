@@ -135,6 +135,9 @@ export async function ledgerFor(db, customer, { includePending = true } = {}) {
         ...payments.map((p) => ({
             kind: p.reverses_id ? 'payment_reversal' : 'payment',
             uuid: p.uuid,
+            // null on a reversal: correcting one is refused server-side, so
+            // offering the route would only produce a dead end.
+            paymentId: p.reverses_id ? null : (p.id ?? null),
             date: p.payment_date,
             created_at: p.created_at,
             deltaPaise: -toPaise(p.amount),

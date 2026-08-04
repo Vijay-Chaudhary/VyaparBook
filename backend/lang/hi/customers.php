@@ -38,6 +38,16 @@ return [
     'corrected' => 'सुधारा गया',
     'voided' => 'बिक्री रद्द हुई। काटने वाली प्रविष्टि जुड़ी।',
     'reversed' => 'भुगतान वापस हुआ। काटने वाली प्रविष्टि जुड़ी।',
+
+    // Correcting a payment: reverse the original and record what was meant, so
+    // the statement explains the change instead of a balance quietly differing.
+    'correct_payment' => 'भुगतान ठीक करें',
+    'payment_corrected' => 'भुगतान ठीक हुआ। पुरानी प्रविष्टि वापस होकर सही रकम दर्ज हुई।',
+    'mode' => 'माध्यम',
+    'modes' => [
+        'cash' => 'नकद', 'upi' => 'यूपीआई', 'cheque' => 'चेक',
+        'bank' => 'बैंक ट्रांसफर', 'other' => 'अन्य',
+    ],
     'cannot_void_reversal' => 'यह पंक्ति स्वयं एक सुधार है, इसे रद्द नहीं किया जा सकता।',
     'already_voided' => 'यह बिक्री पहले ही रद्द हो चुकी है।',
     'cannot_reverse_reversal' => 'यह पंक्ति स्वयं एक सुधार है, इसे वापस नहीं किया जा सकता।',

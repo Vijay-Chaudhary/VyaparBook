@@ -324,12 +324,17 @@ class OrderWriter
      * $lines is keyed by order_line id; a line the caller omits keeps what it
      * has, mirroring how the approvals screen merges its edits.
      *
+     * $orderDate corrects the day the order was TAKEN. It never reaches the
+     * khata: a sale is dated the day goods arrived (deliver() stamps today),
+     * deliberately not the day they were ordered — so this moves what the
+     * overdue calculation counts from, and nothing else.
+     *
      * @param  array<string, array{qty: int|string, rate: int|string}>  $lines
      * @return array{0: Order, 1: bool}
      */
-    public function reviseOrder(string $orderUuid, array $lines): array
+    public function reviseOrder(string $orderUuid, array $lines, ?string $orderDate = null): array
     {
-        return DB::transaction(function () use ($orderUuid, $lines) {
+        return DB::transaction(function () use ($orderUuid, $lines, $orderDate) {
             $order = $this->lockOrder($orderUuid);
 
             // A cancelled or rejected order has no figures worth correcting,
@@ -361,6 +366,10 @@ class OrderWriter
             }
 
             $order->total = $total;
+
+            if ($orderDate !== null) {
+                $order->order_date = $orderDate;
+            }
 
             if ($order->status === OrderStatus::DELIVERED) {
                 $this->voidSaleFor($order);

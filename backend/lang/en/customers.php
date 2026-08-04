@@ -41,6 +41,16 @@ return [
     'corrected' => 'corrected',
     'voided' => 'Sale voided. A cancelling entry was added.',
     'reversed' => 'Payment reversed. A cancelling entry was added.',
+
+    // Correcting a payment: reverse the original and record what was meant, so
+    // the statement explains the change instead of a balance quietly differing.
+    'correct_payment' => 'Correct payment',
+    'payment_corrected' => 'Payment corrected. The original was reversed and the corrected amount recorded.',
+    'mode' => 'Mode',
+    'modes' => [
+        'cash' => 'Cash', 'upi' => 'UPI', 'cheque' => 'Cheque',
+        'bank' => 'Bank transfer', 'other' => 'Other',
+    ],
     'cannot_void_reversal' => 'That row is already a correction, so it cannot be voided.',
     'already_voided' => 'That sale has already been voided.',
     'cannot_reverse_reversal' => 'That row is already a correction, so it cannot be reversed.',

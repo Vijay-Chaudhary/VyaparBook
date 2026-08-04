@@ -359,6 +359,87 @@ describe('corrections', function () {
         expect((new App\Services\KhataService())->outstandingFor($fresh))->toBe('500.00');
     });
 
+    it('corrects a payment by reversing it and recording what was meant', function () {
+        // A payment recorded wrong is commoner than one that never happened.
+        // Reversing alone left the shopkeeper re-entering it from memory.
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business, 'Ramesh Kumar', '500.00');
+        $payment = cusPayment($business, $owner, $customer, '200.00', '2026-07-20');
+
+        $this->actingAs($owner)
+            ->post("/customers/{$customer->id}/payments/{$payment->id}/correct", [
+                'business' => $business->id,
+                'amount' => '150.00',
+                'payment_date' => '2026-07-21',
+                'mode' => 'upi',
+            ])
+            ->assertRedirect();
+
+        $rows = Tenancy::withoutTenant(fn () => DB::table('payments')
+            ->where('business_id', $business->id)->orderBy('created_at')->get());
+
+        // Nothing removed: paid 200, reversed 200, paid 150.
+        expect($rows)->toHaveCount(3);
+        expect((string) $rows->firstWhere('reverses_id', $payment->id)->amount)->toBe('-200.00');
+
+        // Identified by what it is, not by position: three rows written in the
+        // same second have no reliable created_at ordering.
+        $corrected = $rows->first(fn ($r) => $r->reverses_id === null && $r->id !== $payment->id);
+
+        expect((string) $corrected->amount)->toBe('150.00')
+            ->and($corrected->mode)->toBe('upi')
+            ->and((string) $corrected->payment_date)->toStartWith('2026-07-21');
+
+        // 500 opening − 150 actually paid.
+        $fresh = Customer::find($customer->id);
+        expect((new App\Services\KhataService())->outstandingFor($fresh))->toBe('350.00');
+    });
+
+    it('replays a resubmitted correction onto the same row rather than crediting twice', function () {
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business, 'Ramesh Kumar', '500.00');
+        $payment = cusPayment($business, $owner, $customer, '200.00', '2026-07-20');
+
+        $body = [
+            'business' => $business->id, 'amount' => '150.00',
+            'payment_date' => '2026-07-21', 'mode' => 'cash',
+        ];
+
+        $this->actingAs($owner)->post("/customers/{$customer->id}/payments/{$payment->id}/correct", $body);
+        // The second attempt is refused by the already-reversed guard, so the
+        // corrected row is never written twice.
+        $this->actingAs($owner)->post("/customers/{$customer->id}/payments/{$payment->id}/correct", $body);
+
+        expect(Tenancy::withoutTenant(fn () => DB::table('payments')
+            ->where('business_id', $business->id)->count()))->toBe(3);
+
+        $fresh = Customer::find($customer->id);
+        expect((new App\Services\KhataService())->outstandingFor($fresh))->toBe('350.00');
+    });
+
+    it('refuses to correct a reversal, which is not a payment anyone made', function () {
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business, 'Ramesh Kumar', '500.00');
+        $payment = cusPayment($business, $owner, $customer, '200.00', '2026-07-20');
+
+        $this->actingAs($owner)
+            ->post("/customers/{$customer->id}/payments/{$payment->id}/reverse", ['business' => $business->id]);
+
+        $reversalId = Tenancy::withoutTenant(fn () => DB::table('payments')
+            ->where('business_id', $business->id)->where('reverses_id', $payment->id)->value('id'));
+
+        $this->actingAs($owner)
+            ->post("/customers/{$customer->id}/payments/{$reversalId}/correct", [
+                'business' => $business->id, 'amount' => '10.00',
+                'payment_date' => '2026-07-22', 'mode' => 'cash',
+            ])
+            ->assertRedirect();
+
+        // Still just the pair; no third row was written.
+        expect(Tenancy::withoutTenant(fn () => DB::table('payments')
+            ->where('business_id', $business->id)->count()))->toBe(2);
+    });
+
     it('refuses to void the same sale twice, and says so', function () {
         [$owner, $business] = pwOwner();
         $customer = cusCustomer($business);

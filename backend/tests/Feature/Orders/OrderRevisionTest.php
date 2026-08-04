@@ -286,6 +286,39 @@ describe('revising a delivered order', function () {
     })->throws(ValidationException::class);
 });
 
+describe('correcting the order date', function () {
+    it('moves the day the order was taken without touching the khata', function () {
+        [$b, $salesman, $owner, $c, $pack] = revisionSetup();
+        $uuid = placeOrder($b, $salesman, $c, $pack);
+        walkToDelivered($b, $salesman, $owner, $uuid);
+
+        $before = outstanding($b, $owner, $c);
+
+        [$revised] = inRevisionTenant($b, $owner, fn () => app(OrderWriter::class)->reviseOrder(
+            $uuid,
+            [revisionLineId($b, $uuid) => ['qty' => 2, 'rate' => '100.00']],
+            '2026-07-15',
+        ), 'owner');
+
+        expect($revised->order_date->toDateString())->toBe('2026-07-15')
+            // The sale is dated the day goods arrived, deliberately not the day
+            // they were ordered — so moving the order date moves no money.
+            ->and(outstanding($b, $owner, $c))->toBe($before)
+            ->and($revised->revision)->toBe(1);
+    });
+
+    it('leaves the date alone when none is given', function () {
+        [$b, $salesman, $owner, $c, $pack] = revisionSetup();
+        $uuid = placeOrder($b, $salesman, $c, $pack);
+
+        [$revised] = inRevisionTenant($b, $owner, fn () => app(OrderWriter::class)
+            ->reviseOrder($uuid, [revisionLineId($b, $uuid) => ['qty' => 3, 'rate' => '100.00']]), 'owner');
+
+        expect($revised->order_date->toDateString())->toBe('2026-08-01')
+            ->and($revised->total)->toBe('300.00');
+    });
+});
+
 describe('voiding an order', function () {
     it('reverses a delivered order back to nothing owed', function () {
         [$b, $salesman, $owner, $c, $pack] = revisionSetup();

@@ -565,6 +565,9 @@ function App({ userName, locale }) {
                         // Same gate as the approvals link: only the two roles
                         // the Blade screen would admit see a route to it.
                         canCorrectOrders={canAcceptOrders && !readOnly}
+                        // Owner only, unlike orders: the Blade customer ledger
+                        // resolves its tenant with the default ['owner'] role.
+                        canCorrectPayments={role === 'owner' && !readOnly}
                         businessId={tenantId}
                     />
                 );

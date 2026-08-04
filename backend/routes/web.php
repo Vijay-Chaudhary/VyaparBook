@@ -145,6 +145,10 @@ Route::middleware('auth')->group(function () {
         ->name('customers.sales.void');
     Route::post('customers/{customer}/payments/{payment}/reverse', [CustomerController::class, 'reversePayment'])
         ->name('customers.payments.reverse');
+    // Reverse-and-reissue rather than an in-place edit: a payment is a khata
+    // entry, so a corrected amount has to be explained on the statement.
+    Route::post('customers/{customer}/payments/{payment}/correct', [CustomerController::class, 'correctPayment'])
+        ->name('customers.payments.correct');
 
     Route::get('suppliers', [SupplierController::class, 'index'])->name('suppliers');
     Route::post('suppliers', [SupplierController::class, 'store'])->name('suppliers.store');
