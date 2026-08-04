@@ -78,6 +78,51 @@ describe('buildOrderList', () => {
         expect(order.items[0].description).toBe('Sev Mix 1kg');
     });
 
+    it("gives an approver's queued order the status the server will grant it", () => {
+        // The owner is the one who approves; showing their own order as
+        // "Waiting" left them waiting for themselves until the next pull.
+        const [order] = buildOrderList({
+            outbox: [{
+                type: 'order', uuid: 'q1',
+                payload: { customer_id: 'c1', order_date: '2026-08-04', total: '105.00', lines: [] },
+            }],
+            packs, products, role: 'owner',
+        });
+
+        expect(order.status).toBe('accepted');
+        // Still unsynced, which is what suppresses its actions.
+        expect(order.pending).toBe(true);
+    });
+
+    it('does the same for an admin, who may also approve', () => {
+        const [order] = buildOrderList({
+            outbox: [{ type: 'order', uuid: 'q1', payload: { lines: [] } }],
+            packs, products, role: 'admin',
+        });
+
+        expect(order.status).toBe('accepted');
+    });
+
+    it("leaves a salesman's queued order waiting, because it genuinely is", () => {
+        const [order] = buildOrderList({
+            outbox: [{ type: 'order', uuid: 'q1', payload: { lines: [] } }],
+            packs, products, role: 'salesman',
+        });
+
+        expect(order.status).toBe('pending');
+    });
+
+    it('treats an unresolved role as not an approver', () => {
+        // whoami has not answered yet. Promising an acceptance the server may
+        // refuse is the worse of the two guesses.
+        const [order] = buildOrderList({
+            outbox: [{ type: 'order', uuid: 'q1', payload: { lines: [] } }],
+            packs, products, role: null,
+        });
+
+        expect(order.status).toBe('pending');
+    });
+
     it('ignores outbox entries that are not orders', () => {
         const list = buildOrderList({
             outbox: [

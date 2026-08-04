@@ -3,7 +3,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { getActiveBusiness, getImpersonation, getToken, setActiveBusiness } from './api/token';
 import { apiWrite } from './api/write';
 import { closeTenantDb, deleteTenantDb, openTenantDb } from './offline/db';
-import { buildOrderList } from './offline/orders';
+import { buildOrderList, SELF_APPROVING_ROLES } from './offline/orders';
 import { enqueue, pending, pendingCount, stalenessState } from './offline/outbox';
 import { productName } from './offline/catalog';
 import { khataList, ledgerFor, outstandingFor } from './offline/khata';
@@ -51,8 +51,11 @@ const STOCK_MANAGERS = ['owner', 'admin'];
  * Who may accept an order. Same two roles, but a different reason — acceptance
  * is an online-only Blade screen outside this app, so the phone can only link
  * to it, never do it.
+ *
+ * The same list decides whether a queued order shows as accepted, so it lives
+ * in offline/orders.js and is imported rather than declared twice.
  */
-const ORDER_APPROVERS = ['owner', 'admin'];
+const ORDER_APPROVERS = SELF_APPROVING_ROLES;
 
 function useOnline() {
     const [online, setOnline] = useState(navigator.onLine);
@@ -282,6 +285,10 @@ function App({ userName, locale }) {
                 // the whole shop's. In the deps below, so the list is remarked
                 // if whoami resolves after the first refresh.
                 userId,
+                // So an approver's queued order shows the status the server
+                // will give it, instead of waiting in "Waiting" for their own
+                // decision until the next pull.
+                role,
             }));
             setQueued(await pendingCount(database));
             setStaleness(await stalenessState(database));
@@ -306,7 +313,7 @@ function App({ userName, locale }) {
                 );
             }
         },
-        [canManageStock, userId]
+        [canManageStock, userId, role]
     );
 
     useEffect(() => {

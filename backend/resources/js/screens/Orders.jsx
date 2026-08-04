@@ -116,7 +116,11 @@ export function Orders({ orders, customersById, onAction, canAccept = false }) {
                                         </ul>
                                     )}
 
-                                    {status === 'pending' && (
+                                    {/* Keyed on the sync flag as well as the status: an
+                                        approver's queued order now shows as accepted, and
+                                        without this it would sit there with no actions and
+                                        no explanation for why. */}
+                                    {(order.pending || status === 'pending') && (
                                         <p className="mt-1 text-xs text-ink-muted">
                                             {order.pending ? t('pending_sync') : t('awaiting_acceptance')}
                                         </p>

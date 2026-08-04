@@ -23,6 +23,17 @@ const ACTIONS = {
 export const ORDER_STATUSES = ['pending', 'accepted', 'packed', 'delivered', 'rejected', 'cancelled'];
 
 /**
+ * Roles whose own orders the server accepts on creation, skipping the approval
+ * queue — OrderWriter::SELF_APPROVING_ROLES.
+ *
+ * Mirrored here for the same reason ACTIONS is: so a queued order shows the
+ * status the server is going to give it. Without this the owner watches their
+ * own order sit in "Waiting" until the next pull, waiting for a decision they
+ * are the one who makes.
+ */
+export const SELF_APPROVING_ROLES = ['owner', 'admin'];
+
+/**
  * The statuses that still need someone to do something. A delivered order has
  * moved into the customer's khata; a cancelled or rejected one needs nothing
  * further. Keeping them here would grow the list without bound and bury the
@@ -88,13 +99,19 @@ export function groupByStatus(orders) {
  * a salesman takes an order in a village and watches it vanish until signal
  * returns, which is exactly when they most need to see it.
  *
- * A queued order is marked `pending` and carries no actions: the server has
- * never heard of it, so packing or cancelling it would push a mutation naming
- * an order that does not exist and park.
+ * A queued order carries no actions whatever its status: the server has never
+ * heard of it, so packing or cancelling it would push a mutation naming an
+ * order that does not exist and park. That is the `pending` FLAG below, which
+ * is about sync and is separate from `status`.
+ *
+ * Its status is what the server will give it once the push lands — accepted
+ * for a role that self-approves, pending for anyone else. Showing `pending`
+ * unconditionally made an owner's own order look like it was queued for a
+ * decision they are the one who makes.
  */
 export function buildOrderList({
     orders = [], orderLines = [], outbox = [], packs = [], products = [], locale = 'en',
-    userId = null,
+    userId = null, role = null,
 } = {}) {
     const linesByOrder = new Map();
 
@@ -117,6 +134,10 @@ export function buildOrderList({
         items: describeLines(linesByOrder.get(order.id) ?? [], packs, products, locale),
     }));
 
+    // An unknown role reads as "not an approver": before whoami resolves,
+    // promising an acceptance the server may not grant is the worse guess.
+    const queuedStatus = SELF_APPROVING_ROLES.includes(role) ? 'accepted' : 'pending';
+
     const queued = outbox
         .filter((entry) => entry.type === 'order')
         .map((entry) => ({
@@ -124,7 +145,7 @@ export function buildOrderList({
             customer_id: entry.payload?.customer_id,
             order_date: entry.payload?.order_date,
             total: entry.payload?.total ?? '0',
-            status: 'pending',
+            status: queuedStatus,
             pending: true,
             // It is in THIS device's outbox, so this device took it.
             mine: true,
