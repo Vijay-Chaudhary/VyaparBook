@@ -9,6 +9,12 @@ return [
     'period' => 'अवधि',
     'view' => 'देखें',
 
+    // Shown when the business has recorded nothing yet, so a screen full of
+    // zeros reads as "new" rather than "broken".
+    'empty_title' => 'अभी कोई प्रविष्टि नहीं',
+    'empty_body' => 'कोई बिक्री, खरीद या भुगतान दर्ज करें और यह डैशबोर्ड भर जाएगा। तब तक नीचे के आंकड़े शून्य रहेंगे।',
+    'empty_cta' => 'पहली बिक्री दर्ज करें',
+
     'sales_today' => 'आज की कुल बिक्री',
     'sales_month' => 'इस महीने की कुल बिक्री',
     'customer_outstanding' => 'ग्राहक बकाया',

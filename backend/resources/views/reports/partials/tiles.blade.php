@@ -12,9 +12,14 @@
     <div class="card">
         <p class="text-sm text-ink-muted">{{ __('reports.customer_outstanding') }}</p>
         <p class="tabular text-lg font-bold text-danger">{{ Inr::format($report->outstanding->totalRupees) }}</p>
-        {{-- Phase 4a: the one action this figure implies — chase it. --}}
+        {{-- Phase 4a: the one action this figure implies — chase it.
+             text-xs is a label size (see tailwind.config.js) and gave this link
+             a 16px-tall hit area; as an inline-flex tap target it clears 44px
+             without changing the tile's visual weight. --}}
         <a href="{{ route('reminders', ['business' => $businessId]) }}"
-           class="text-xs text-brand">{{ __('reminders.heading') }}</a>
+           class="-ml-1 inline-flex min-h-tap items-center px-1 text-sm font-medium text-brand">
+            {{ __('reminders.heading') }}
+        </a>
     </div>
     <div class="card">
         <p class="text-sm text-ink-muted">{{ __('reports.production_month') }}</p>
