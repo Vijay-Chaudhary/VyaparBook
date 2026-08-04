@@ -396,3 +396,107 @@ describe('cancelling', function () {
         ))->toBe(OrderStatus::PENDING);
     });
 });
+
+describe('owner corrections', function () {
+    /** Walk the seeded pending order to delivered, so a sale exists to correct. */
+    function deliverSeededOrder(User $owner, \App\Models\Business $business, string $orderId): void
+    {
+        asTenant($business->id, function () use ($orderId) {
+            $uuid = \App\Models\Order::findOrFail($orderId)->uuid;
+            app()->bind('tenant.user_id', fn () => \App\Models\Order::findOrFail($orderId)->created_by);
+            app()->bind('tenant.role', fn () => 'owner');
+
+            $order = \App\Models\Order::findOrFail($orderId);
+            $order->status = OrderStatus::ACCEPTED;
+            $order->accepted_at = now();
+            $order->save();
+
+            $writer = app(\App\Services\OrderWriter::class);
+            $writer->pack($uuid);
+            $writer->deliver($uuid);
+        });
+    }
+
+    it('corrects a delivered order and reverses the sale it had already written', function () {
+        [$owner, $business, $orderId] = pendingOrder('100.00');
+        deliverSeededOrder($owner, $business, $orderId);
+
+        $lineId = asTenant($business->id, fn () => \App\Models\OrderLine::firstOrFail()->id);
+
+        $this->actingAs($owner)->post("/orders/{$orderId}/revise", [
+            'business' => $business->id,
+            'lines' => [$lineId => ['qty' => 1, 'rate' => '100.00']],
+        ])->assertRedirect(route('orders', ['business' => $business->id]));
+
+        [$status, $total] = Tenancy::withoutTenant(fn () => [
+            DB::table('orders')->where('id', $orderId)->value('status'),
+            DB::table('orders')->where('id', $orderId)->value('total'),
+        ]);
+
+        // Still delivered: the goods went out, only the figures were wrong.
+        expect($status)->toBe(OrderStatus::DELIVERED)
+            ->and($total)->toBe('100.00');
+
+        // 200 sale + (-200) reversal + 100 corrected — nothing deleted.
+        expect(Tenancy::withoutTenant(
+            fn () => DB::table('sales')->where('business_id', $business->id)->count()
+        ))->toBe(3);
+    });
+
+    it('voids a delivered order and reverses its sale', function () {
+        [$owner, $business, $orderId] = pendingOrder('100.00');
+        deliverSeededOrder($owner, $business, $orderId);
+
+        $this->actingAs($owner)->post("/orders/{$orderId}/void", [
+            'business' => $business->id,
+            'status_note' => 'Customer returned it',
+        ])->assertRedirect(route('orders', ['business' => $business->id]));
+
+        [$status, $note, $saleId] = Tenancy::withoutTenant(fn () => [
+            DB::table('orders')->where('id', $orderId)->value('status'),
+            DB::table('orders')->where('id', $orderId)->value('status_note'),
+            DB::table('orders')->where('id', $orderId)->value('sale_id'),
+        ]);
+
+        expect($status)->toBe(OrderStatus::CANCELLED)
+            ->and($note)->toBe('Customer returned it')
+            ->and($saleId)->toBeNull();
+    });
+
+    it('keeps a salesman away from both corrections', function () {
+        [$owner, $business, $orderId] = pendingOrder('100.00');
+
+        $salesman = User::factory()->create();
+        asTenant($business->id, fn () => \App\Models\Membership::create([
+            'user_id' => $salesman->id, 'business_id' => $business->id, 'role' => 'salesman',
+        ]));
+
+        // ownedBusinessId() admits only owner/admin, so a salesman with a
+        // perfectly good session is bounced before touching the order.
+        $this->actingAs($salesman)->post("/orders/{$orderId}/void", [
+            'business' => $business->id,
+        ])->assertRedirect(route('app'));
+
+        $this->actingAs($salesman)->post("/orders/{$orderId}/revise", [
+            'business' => $business->id,
+            'lines' => ['whatever' => ['qty' => 1, 'rate' => '1.00']],
+        ])->assertRedirect(route('app'));
+
+        expect(Tenancy::withoutTenant(
+            fn () => DB::table('orders')->where('id', $orderId)->value('status')
+        ))->toBe(OrderStatus::PENDING);
+    });
+
+    it('does not leak another tenant\'s order to the correction routes', function () {
+        [$owner, $business] = pendingOrder();
+        [$them, $theirBusiness, $theirOrderId] = pendingOrder();
+
+        $this->actingAs($owner)->post("/orders/{$theirOrderId}/void", [
+            'business' => $business->id,
+        ])->assertNotFound();
+
+        expect(Tenancy::withoutTenant(
+            fn () => DB::table('orders')->where('id', $theirOrderId)->value('status')
+        ))->toBe(OrderStatus::PENDING);
+    });
+});
