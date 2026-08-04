@@ -22,7 +22,11 @@ use Illuminate\View\View;
  */
 class SvgGroupedBarChart extends Component
 {
-    private const LOSS_COLOR = '#dc2626';
+    /** Negative bars override their series colour — see config/charts.php. */
+    private function lossColor(): string
+    {
+        return config('charts.loss');
+    }
 
     /**
      * @param list<array{label: string, color: string, values: list<int|float|string>}> $series
@@ -51,7 +55,7 @@ class SvgGroupedBarChart extends Component
                 return [
                     'label' => $s['label'],                  // series name, for the hover tooltip
                     'value' => $this->formatValue($raw),     // full (un-abbreviated) value
-                    'color' => $v < 0 ? self::LOSS_COLOR : $s['color'],
+                    'color' => $v < 0 ? $this->lossColor() : $s['color'],
                     'yPct' => min($y0, $yv),
                     'heightPct' => round(abs($yv - $y0), 1),
                     'negative' => $v < 0,

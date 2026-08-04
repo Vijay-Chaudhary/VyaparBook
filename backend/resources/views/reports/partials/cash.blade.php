@@ -5,7 +5,7 @@
         ->map(fn ($m) => \Illuminate\Support\Carbon::create()->month($m)->translatedFormat('M'))
         ->all();
     $netCashSeries = [
-        ['label' => __('reports.net_cash'), 'color' => '#0891b2',
+        ['label' => __('reports.net_cash'), 'color' => config('charts.series.net_cash'),
          'values' => collect($report->cashTrend)->map(fn ($r) => $r->netCashRupees)->all()],
     ];
 @endphp

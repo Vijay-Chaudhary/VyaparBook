@@ -5,15 +5,15 @@
         ->all();
 
     $moneySeries = [
-        ['label' => __('reports.sales'), 'color' => '#4472C4',
+        ['label' => __('reports.sales'), 'color' => config('charts.series.sales'),
          'values' => collect($report->trend)->map(fn ($t) => $t->salesRupees)->all()],
-        ['label' => __('reports.gross_profit'), 'color' => '#16a34a',
+        ['label' => __('reports.gross_profit'), 'color' => config('charts.series.gross_profit'),
          'values' => collect($report->trend)->map(fn ($t) => $t->grossProfitRupees)->all()],
-        ['label' => __('reports.net_profit'), 'color' => '#7c3aed',
+        ['label' => __('reports.net_profit'), 'color' => config('charts.series.net_profit'),
          'values' => collect($report->trend)->map(fn ($t) => $t->netProfitRupees)->all()],
     ];
     $prodSeries = [
-        ['label' => __('reports.production'), 'color' => '#4472C4',
+        ['label' => __('reports.production'), 'color' => config('charts.series.production'),
          'values' => collect($report->trend)->map(fn ($t) => $t->productionKg)->all()],
     ];
 @endphp
