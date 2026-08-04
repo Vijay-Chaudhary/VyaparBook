@@ -55,10 +55,12 @@ Route::middleware('guest')->group(function () {
     // a softer door onto the same credentials.
     Route::post('login', [LoginController::class, 'store'])->middleware('throttle:login');
 
-    Route::get('register', [RegisterController::class, 'show'])->name('register');
+    Route::get('register', [RegisterController::class, 'show'])
+        ->middleware('registration.enabled')->name('register');
     // Account creation is a natural credential-stuffing / spam target, so it
     // rides the same per-email+IP limiter as login.
-    Route::post('register', [RegisterController::class, 'store'])->middleware('throttle:login');
+    Route::post('register', [RegisterController::class, 'store'])
+        ->middleware(['registration.enabled', 'throttle:login']);
 });
 
 // Onboarding: signed in (session), but a tenant does not exist yet at step 1.

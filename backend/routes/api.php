@@ -3,7 +3,10 @@
 use Illuminate\Support\Facades\Route;
 
 Route::prefix('v1')->group(function () {
-    Route::post('auth/register', [\App\Http\Controllers\Api\V1\AuthController::class, 'register']);
+    // Same gate as the Blade form: closing signup on one surface only would
+    // leave the API as an open side door onto the identical flow.
+    Route::post('auth/register', [\App\Http\Controllers\Api\V1\AuthController::class, 'register'])
+        ->middleware('registration.enabled');
     // Credential-stuffing defence: no tenant exists yet, so this is keyed per
     // email+IP rather than per tenant.
     Route::post('auth/login', [\App\Http\Controllers\Api\V1\AuthController::class, 'login'])

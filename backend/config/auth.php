@@ -116,4 +116,21 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Self-service registration
+    |--------------------------------------------------------------------------
+    |
+    | When false, signup is closed: the link disappears from the login screen
+    | AND both register endpoints (Blade and API) 404. Hiding only the link
+    | would leave /register fully working for anyone who types the URL, which
+    | is not "closed" in any sense that matters — a stranger would still get an
+    | account and land in onboarding, creating a brand new tenant.
+    |
+    | Defaults to true so tests and local development are unaffected; a
+    | deployment that runs invite-only turns it off in its own .env.
+    |
+    */
+    'registration_enabled' => (bool) env('REGISTRATION_ENABLED', true),
+
 ];

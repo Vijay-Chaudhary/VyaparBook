@@ -19,6 +19,7 @@ return Application::configure(basePath: dirname(__DIR__))
             'plan.gate' => \App\Http\Middleware\EnforceActivePlan::class,
             'require.platform_admin' => \App\Http\Middleware\RequirePlatformAdmin::class,
             'platform_admin.web' => \App\Http\Middleware\EnsurePlatformAdmin::class,
+            'registration.enabled' => \App\Http\Middleware\EnsureRegistrationEnabled::class,
         ]);
 
         // Laravel's priority list sorts ThrottleRequests ahead of unlisted
