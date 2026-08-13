@@ -5,16 +5,18 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Concerns\ResolvesOwnedTenant;
 use App\Http\Controllers\Controller;
-use App\Ledger\LedgerReverser;
-use App\Ledger\ReversalNotAllowed;
+use App\Ledger\EditNotAllowed;
+use App\Ledger\LedgerEditor;
 use App\Models\Customer;
 use App\Models\Payment;
 use App\Models\Sale;
 use App\Services\DashboardReportService;
 use App\Services\KhataService;
 use Carbon\Carbon;
+use Illuminate\Database\Eloquent\Collection as EloquentCollection;
 use Illuminate\Http\RedirectResponse;
 use Illuminate\Http\Request;
+use Illuminate\Support\Collection;
 use Illuminate\Support\Str;
 use Illuminate\Validation\Rule;
 use Illuminate\View\View;
@@ -26,11 +28,12 @@ use Symfony\Component\HttpKernel\Exception\NotFoundHttpException;
  * console list that names a customer links to — the overdue review, the orders
  * queue, the invoice queue, the dashboard's outstanding table.
  *
- * Who a customer IS can be maintained here; what they OWE cannot. Sales and
- * payments stay in the offline app, where recording them works without a
- * connection, and duplicating that here would give the same money two write
- * paths. So this controller writes only to the customer row itself, and the
- * khata below it stays read-only.
+ * RECORDING sales and payments stays in the offline app, where it works without
+ * a connection, and duplicating that here would give the same money two write
+ * paths. CORRECTING one is this screen's job: the khata is where a wrong figure
+ * is noticed, and the owner is the only person allowed to change it. So each
+ * ledger row can be edited or deleted here (LedgerEditor), and a deleted row can
+ * be restored — but none can be created.
  *
  * Deleting archives rather than removes: a customer carrying sales or payments
  * cannot vanish without orphaning those rows and silently restating history.
@@ -47,7 +50,7 @@ class CustomerController extends Controller
     public function __construct(
         private readonly KhataService $khata,
         private readonly DashboardReportService $dashboard,
-        private readonly LedgerReverser $reverser,
+        private readonly LedgerEditor $editor,
     ) {}
 
     /** Everyone on the book with what they owe, biggest first, plus the add form. */
@@ -89,20 +92,35 @@ class CustomerController extends Controller
                 return null;
             }
 
-            return [$row, $this->khata->ledgerFor($row), $this->khata->outstandingFor($row)];
+            $ledger = $this->khata->ledgerFor($row);
+
+            // What each sale actually contained, for the edit form. Loaded onto
+            // the very rows the ledger already holds rather than fetched again:
+            // these are the same model instances, so the view sees the lines
+            // without a second pass over sales.
+            (new EloquentCollection($ledger->where('kind', 'sale')->pluck('ref')->all()))
+                ->load('lines.productPack.product', 'lines.productPack.packSize');
+
+            return [
+                $row,
+                $ledger,
+                $this->khata->outstandingFor($row),
+                $this->deletedEntries($row),
+            ];
         });
 
         if ($found === null) {
             return redirect()->route('customers', ['business' => $businessId]);
         }
 
-        [$row, $ledger, $outstanding] = $found;
+        [$row, $ledger, $outstanding, $deleted] = $found;
 
         return view('customers.show', [
             'businessId' => $businessId,
             'customer' => $row,
             'ledger' => $ledger,
             'outstanding' => $outstanding,
+            'deleted' => $deleted,
         ]);
     }
 
@@ -233,52 +251,60 @@ class CustomerController extends Controller
     }
 
     /**
-     * Void a sale from the owner's ledger.
+     * Correct a sale in place — its date, and each line's quantity and rate.
      *
-     * Append-only: LedgerReverser writes a mirror-image sale rather than
-     * removing anything, so outstanding, cash flow, COGS and any issued invoice
-     * all stay consistent with what is on the books. The ledger then reads
-     * "sale ₹500, voided ₹500" instead of a gap where a sale used to be.
+     * Lines are edited, not added or removed; LedgerEditor::updateSale explains
+     * why. The sale's total is recomputed from the lines and never accepted from
+     * the form, exactly as it is when the sale is first written.
      */
-    public function voidSale(Request $request, string $customer, string $sale): RedirectResponse
+    public function updateSale(Request $request, string $customer, string $sale): RedirectResponse
     {
-        return $this->correct($request, $customer, function () use ($sale) {
-            $row = Sale::with('lines')->find($sale);
+        $data = $request->validate([
+            'sale_date' => ['required', 'date'],
+            'lines' => ['sometimes', 'array'],
+            // Mirrors LedgerWriter::rulesForSale, so an edit cannot produce a
+            // sale the original write would have rejected. Negative qty is a
+            // return and stays legal; zero is not a line.
+            'lines.*.qty' => ['required', 'integer', 'not_in:0'],
+            'lines.*.rate' => ['required', 'numeric', 'min:0', 'decimal:0,2'],
+        ]);
+
+        return $this->edit($request, $customer, function () use ($sale, $data) {
+            $this->editor->updateSale($this->findSale($sale), $data);
+
+            return __('customers.sale_updated');
+        });
+    }
+
+    /** Take a sale off the khata. Soft — it moves to the deleted list and can come back. */
+    public function destroySale(Request $request, string $customer, string $sale): RedirectResponse
+    {
+        return $this->edit($request, $customer, function () use ($sale) {
+            $this->editor->deleteSale($this->findSale($sale));
+
+            return __('customers.sale_deleted');
+        });
+    }
+
+    public function restoreSale(Request $request, string $customer, string $sale): RedirectResponse
+    {
+        return $this->edit($request, $customer, function () use ($sale) {
+            // withTrashed: the whole point is that the row is currently deleted,
+            // so the default scope would hide the only row this can act on.
+            $row = Sale::withTrashed()->find($sale);
 
             if ($row === null) {
                 throw new NotFoundHttpException;
             }
 
-            $this->reverser->voidSale($row);
+            $this->editor->restoreSale($row);
 
-            return __('customers.voided');
+            return __('customers.sale_restored');
         });
     }
 
-    /** Reverse a payment. Outstanding rises back by the reversed amount. */
-    public function reversePayment(Request $request, string $customer, string $payment): RedirectResponse
-    {
-        return $this->correct($request, $customer, function () use ($payment) {
-            $row = Payment::find($payment);
-
-            if ($row === null) {
-                throw new NotFoundHttpException;
-            }
-
-            $this->reverser->reversePayment($row);
-
-            return __('customers.reversed');
-        });
-    }
-
-    /**
-     * Correct a payment that was recorded wrong — amount, date or mode.
-     *
-     * Not an in-place edit: the original is reversed and a corrected payment
-     * recorded, so the statement explains the change instead of a balance
-     * quietly differing from what the customer was last shown.
-     */
-    public function correctPayment(Request $request, string $customer, string $payment): RedirectResponse
+    /** Correct a payment in place — amount, date or mode. */
+    public function updatePayment(Request $request, string $customer, string $payment): RedirectResponse
     {
         $data = $request->validate([
             'payment_date' => ['required', 'date'],
@@ -286,24 +312,97 @@ class CustomerController extends Controller
             'mode' => ['required', Rule::in(['cash', 'upi', 'cheque', 'bank', 'other'])],
         ]);
 
-        return $this->correct($request, $customer, function () use ($payment, $data) {
-            $row = Payment::find($payment);
+        return $this->edit($request, $customer, function () use ($payment, $data) {
+            $this->editor->updatePayment($this->findPayment($payment), $data);
+
+            return __('customers.payment_updated');
+        });
+    }
+
+    /** Take a payment off the khata. Outstanding rises back by its amount. */
+    public function destroyPayment(Request $request, string $customer, string $payment): RedirectResponse
+    {
+        return $this->edit($request, $customer, function () use ($payment) {
+            $this->editor->deletePayment($this->findPayment($payment));
+
+            return __('customers.payment_deleted');
+        });
+    }
+
+    public function restorePayment(Request $request, string $customer, string $payment): RedirectResponse
+    {
+        return $this->edit($request, $customer, function () use ($payment) {
+            $row = Payment::withTrashed()->find($payment);
 
             if ($row === null) {
                 throw new NotFoundHttpException;
             }
 
-            $this->reverser->correctPayment($row, $data);
+            $this->editor->restorePayment($row);
 
-            return __('customers.payment_corrected');
+            return __('customers.payment_restored');
         });
     }
 
+    /** 404 rather than null, so a stray id can never fall through to a success message. */
+    private function findSale(string $sale): Sale
+    {
+        $row = Sale::with('lines')->find($sale);
+
+        if ($row === null) {
+            throw new NotFoundHttpException;
+        }
+
+        return $row;
+    }
+
+    private function findPayment(string $payment): Payment
+    {
+        $row = Payment::find($payment);
+
+        if ($row === null) {
+            throw new NotFoundHttpException;
+        }
+
+        return $row;
+    }
+
     /**
-     * Shared shape for both corrections: resolve the owned tenant, run pinned,
-     * turn a refusal into a readable message rather than a 500.
+     * Every deleted row for this customer, newest deletion first.
+     *
+     * Shaped like a KhataService ledger entry so the view can render it with the
+     * same columns, but deliberately NOT part of the ledger: a deleted sale is
+     * not a line of the statement, it is a line of what the statement no longer
+     * says. It carries no running balance for the same reason.
+     *
+     * @return Collection<int, array{kind: string, ref: Sale|Payment, date: mixed, delta: string}>
      */
-    private function correct(Request $request, string $customer, callable $work): RedirectResponse
+    private function deletedEntries(Customer $customer): Collection
+    {
+        $sales = $customer->sales()->onlyTrashed()->get()->map(fn (Sale $s) => [
+            'kind' => 'sale',
+            'ref' => $s,
+            'date' => $s->sale_date,
+            'delta' => (string) $s->total,
+        ]);
+
+        $payments = $customer->payments()->onlyTrashed()->get()->map(fn (Payment $p) => [
+            'kind' => 'payment',
+            'ref' => $p,
+            'date' => $p->payment_date,
+            'delta' => bcmul((string) $p->amount, '-1', 2),
+        ]);
+
+        return $sales->concat($payments)
+            ->sortByDesc(fn (array $e) => $e['ref']->deleted_at)
+            ->values();
+    }
+
+    /**
+     * Shared shape for every khata correction: resolve the owned tenant, run
+     * pinned, turn a refusal into a readable message rather than a 500.
+     */
+    private function edit(Request $request, string $customer, callable $work): RedirectResponse
     {
         $businessId = $this->ownedBusinessId($request->input('business'));
         if ($businessId === null) {
@@ -318,7 +417,7 @@ class CustomerController extends Controller
 
             try {
                 return [true, $work()];
-            } catch (ReversalNotAllowed $e) {
+            } catch (EditNotAllowed $e) {
                 return [false, $e->getMessage()];
             }
         });

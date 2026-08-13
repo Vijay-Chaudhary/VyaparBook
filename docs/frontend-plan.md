@@ -176,7 +176,7 @@ Order: **push before pull**, so local work reaches the server before remote stat
 
 Triggers: on app open, on regaining connectivity (`online` event), after any local write, and on a slow interval (~60s) while active. All debounced — `sync` has its own rate-limit bucket (60/min) and the client should stay far below it.
 
-**Conflict policy:** the ledger is append-only (sales/payments are immutable; corrections are new voiding entries), which very nearly eliminates true conflicts. Where a row *is* mutable (customer name, product price), last-write-wins on `version`, and the server's copy is authoritative on mismatch.
+**Conflict policy:** the ledger is append-only *on the device* — the phone only ever adds sales and payments, so it still has very nearly no true conflicts. The **owner's console** may edit or delete a row (soft delete, `deleted_at`); those changes reach the device the ordinary way, as a row with a new `sync_seq`, and `khata.js` drops a row carrying `deleted_at` exactly as it hides an archived customer. Corrections made through the REST API and the order workflow are still new voiding entries. Where a row *is* mutable (customer name, product price), last-write-wins on `version`, and the server's copy is authoritative on mismatch.
 
 ### 3.4 Tenant switching
 

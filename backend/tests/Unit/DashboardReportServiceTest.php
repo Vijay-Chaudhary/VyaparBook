@@ -79,6 +79,36 @@ it('totals customer outstanding as Σ of KhataService, and isolates tenants', fu
     expect($summary->customers[0]->customerId)->toBe($c1->id);
 });
 
+it('drops a deleted sale and payment from outstanding, agreeing with the khata', function () {
+    // customerOutstanding builds its sums as RAW correlated sub-selects, which
+    // get no SoftDeletes scope of their own. If they ever stop filtering
+    // deleted_at by hand, this screen reports a figure the customer's own khata
+    // page contradicts — and the owner has no way to tell which one lies.
+    $a = tenantBusiness();
+    $u = User::factory()->create();
+    $c = dashCustomer($a, 'Ramesh', '1000.00');
+
+    $sale = dashSale($c, $u, '270.00', '2026-07-10');
+    $payment = dashPayment($c, $u, '200.00', '2026-07-12');
+    dashSale($c, $u, '30.00', '2026-07-13');  // survives, so the sum is not trivially opening
+
+    asTenant($a->id, function () use ($sale, $payment) {
+        $editor = app(App\Ledger\LedgerEditor::class);
+        $editor->deleteSale(App\Models\Sale::find($sale->id));
+        $editor->deletePayment(App\Models\Payment::find($payment->id));
+    });
+
+    $expected = asTenant($a->id, fn () => (new KhataService())
+        ->outstandingFor(App\Models\Customer::find($c->id)));
+
+    $summary = inTenant($a->id, fn () => app(DashboardReportService::class)
+        ->customerOutstanding($a->id));
+
+    // 1000 opening + 30 surviving sale: the deleted 270 and 200 are simply gone.
+    expect($expected)->toBe('1030.00')
+        ->and($summary->totalRupees)->toBe($expected);
+});
+
 it('sums sales for today and the selected month, and builds a 12-row sales trend', function () {
     Illuminate\Support\Carbon::setTestNow('2026-07-22');
 

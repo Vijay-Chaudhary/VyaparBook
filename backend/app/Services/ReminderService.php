@@ -49,8 +49,13 @@ class ReminderService
             ->where('business_id', $businessId)
             ->whereNull('archived_at')
             ->selectRaw('customers.*')
-            ->selectRaw('CAST((select max(payment_date) from payments p where p.customer_id = customers.id) AS CHAR) as last_payment_on')
-            ->selectRaw('CAST((select min(sale_date) from sales s where s.customer_id = customers.id) AS CHAR) as first_sale_on')
+            // `deleted_at is null` written out by hand: a raw sub-select gets no
+            // SoftDeletes scope, and a deleted payment counted as the last one
+            // would hold back a reminder the customer should be getting.
+            ->selectRaw('CAST((select max(payment_date) from payments p
+                where p.customer_id = customers.id and p.deleted_at is null) AS CHAR) as last_payment_on')
+            ->selectRaw('CAST((select min(sale_date) from sales s
+                where s.customer_id = customers.id and s.deleted_at is null) AS CHAR) as first_sale_on')
             // Phase 4b: what happened to the most recent reminder, so the owner
             // can see "Sent"/"Failed" rather than re-tapping blindly.
             ->selectRaw('(select rl.status from reminder_logs rl where rl.customer_id = customers.id order by rl.created_at desc limit 1) as last_reminder_status')

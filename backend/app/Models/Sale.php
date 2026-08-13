@@ -11,10 +11,15 @@ use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
 use Illuminate\Database\Eloquent\Relations\HasMany;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Sale extends Model
 {
-    use BelongsToTenant, HasFactory, HasSyncSequence, HasUuids, HasVersion;
+    // SoftDeletes: the owner can delete a sale off the khata (LedgerEditor), and
+    // the row has to survive that — invoices.sale_id and orders.sale_id point at
+    // it. The global scope is what keeps a deleted sale out of every total;
+    // anything that must still see it says withTrashed() and says why.
+    use BelongsToTenant, HasFactory, HasSyncSequence, HasUuids, HasVersion, SoftDeletes;
 
     // created_by and total are deliberately absent from $fillable: created_by is
     // stamped from app('tenant.user_id') and total is computed from the lines,

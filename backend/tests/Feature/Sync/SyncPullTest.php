@@ -120,3 +120,21 @@ it('includes an archived row in the delta so the client learns to hide it', func
     $response = pull($token, $cursor)->assertOk()->assertJsonCount(1, 'customers');
     expect($response->json('customers.0.archived_at'))->not->toBeNull();
 });
+
+it('includes a deleted payment in the delta, for the same reason', function () {
+    // The owner deletes a khata row from the console. A device learns about
+    // rows by being sent them, never by being told one vanished — so if the
+    // SoftDeletes scope quietly dropped it from the delta, every phone would
+    // keep counting a payment the shop deleted.
+    [$business, $user, $token] = pullSetup();
+    $customer = seedPullCustomer($business, 'Ram Traders');
+    $payment = seedPullPayment($customer, $user, '200.00');
+
+    $cursor = pull($token, 0)->json('cursor');
+
+    asTenant($business->id, fn () => app(App\Ledger\LedgerEditor::class)
+        ->deletePayment(App\Models\Payment::find($payment->id)));
+
+    $response = pull($token, $cursor)->assertOk()->assertJsonCount(1, 'payments');
+    expect($response->json('payments.0.deleted_at'))->not->toBeNull();
+});

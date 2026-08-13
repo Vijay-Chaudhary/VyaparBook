@@ -50,9 +50,22 @@ class SyncController extends Controller
             ->get();
 
         $customers = $delta(Customer::class);
-        $sales = $delta(Sale::class);
+
+        // withTrashed for the two the owner can delete. A device learns about
+        // rows by being sent them, never by being told one vanished — so a
+        // deleted sale hidden by the SoftDeletes scope would simply stop
+        // appearing in the delta and sit in every phone's khata forever.
+        // Deleting bumps sync_seq (LedgerEditor saves rather than calling
+        // delete()), so the row streams once more carrying deleted_at, and the
+        // client drops it exactly as it hides an archived customer.
+        $trashedDelta = fn (string $model) => $model::withTrashed()
+            ->where('sync_seq', '>', $since)
+            ->orderBy('sync_seq')
+            ->get();
+
+        $sales = $trashedDelta(Sale::class);
         $saleLines = $delta(SaleLine::class);
-        $payments = $delta(Payment::class);
+        $payments = $trashedDelta(Payment::class);
 
         // Stock & production is owner/admin only (PRD §7), reads included — so a
         // salesman's/accountant's pull must not stream those rows to their device.

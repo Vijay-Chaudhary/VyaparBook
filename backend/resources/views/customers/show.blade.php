@@ -125,78 +125,131 @@
                         $isReversal = str_ends_with($e['kind'], '_reversal');
                         $done = $reversed->has($e['ref']->id);
                         $isSale = str_starts_with($e['kind'], 'sale');
+                        $row = $e['ref'];
                     @endphp
                     <tr class="{{ $isReversal || $done ? 'text-ink-muted' : '' }}">
                         <td class="tabular">{{ $e['date']->format('d M Y') }}</td>
                         <td>{{ __('customers.' . $e['kind']) }}</td>
                         <td class="tabular text-right">{{ Inr::format($e['delta']) }}</td>
                         <td class="tabular text-right">{{ Inr::format($e['running_balance']) }}</td>
-                        <td class="text-right">
-                            {{-- Nothing is ever removed: the button writes a
-                                 mirror-image row, so both stay visible and the
-                                 ledger reads "sale ₹500, voided ₹500" rather
-                                 than showing a gap. A reversal cannot itself be
-                                 reversed, and an original only once. --}}
+                        <td class="text-right align-top">
+                            {{-- Half of a reversal pair has no figures of its own
+                                 to edit, and deleting either half would revive
+                                 the other's effect on the balance. Those rows are
+                                 named rather than offered an action; everything
+                                 else is corrected by changing it. --}}
                             @if ($isReversal)
                                 <span class="text-xs">{{ __('customers.is_correction') }}</span>
                             @elseif ($done)
                                 <span class="text-xs">{{ __('customers.corrected') }}</span>
                             @else
-                                <form method="POST" class="inline"
-                                      action="{{ $isSale
-                                          ? route('customers.sales.void', ['customer' => $customer->id, 'sale' => $e['ref']->id])
-                                          : route('customers.payments.reverse', ['customer' => $customer->id, 'payment' => $e['ref']->id]) }}"
-                                      onsubmit="return confirm('{{ $isSale ? __('customers.confirm_void') : __('customers.confirm_reverse') }}')">
-                                    @csrf
-                                    <input type="hidden" name="business" value="{{ $businessId }}">
-                                    <button type="submit" class="text-xs text-danger">
-                                        {{ $isSale ? __('customers.void') : __('customers.reverse') }}
-                                    </button>
-                                </form>
+                                {{-- Behind a <details> because most rows are read,
+                                     not edited: the figures stay the thing you
+                                     see and the edit stays one tap away. Mirrors
+                                     the order revision form on the orders screen.
 
-                                {{-- A payment recorded wrong is far more common
-                                     than one that never happened, and reversing
-                                     it left the shopkeeper to re-enter it from
-                                     memory. Correcting does both halves at once
-                                     and keeps them paired on the statement. --}}
-                                @unless ($isSale)
-                                    <details class="mt-1 text-left" id="payment-{{ $e['ref']->id }}" {{ request('payment') === $e['ref']->id ? 'open' : '' }}>
-                                        <summary class="inline-flex min-h-tap cursor-pointer items-center text-sm font-medium text-brand">
-                                            {{ __('customers.correct_payment') }}
-                                        </summary>
-                                        <form method="POST" class="card mt-2"
-                                              action="{{ route('customers.payments.correct', [
-                                                  'customer' => $customer->id, 'payment' => $e['ref']->id,
-                                              ]) }}">
+                                     ?payment={id} arrives from the "Correct
+                                     payment" link on the app's khata. Opened
+                                     server-side rather than with a fragment,
+                                     because :target cannot force a <details>
+                                     open and this screen carries no JS. --}}
+                                <details class="text-left"
+                                         id="{{ $isSale ? 'sale' : 'payment' }}-{{ $row->id }}"
+                                         {{ request($isSale ? 'sale' : 'payment') === $row->id ? 'open' : '' }}>
+                                    <summary class="inline-flex min-h-tap cursor-pointer items-center justify-end text-sm font-medium text-brand">
+                                        {{ $isSale ? __('customers.edit_sale') : __('customers.edit_payment') }}
+                                    </summary>
+
+                                    <div class="card mt-2 max-w-xl">
+                                        <form method="POST"
+                                              action="{{ $isSale
+                                                  ? route('customers.sales.update', ['customer' => $customer->id, 'sale' => $row->id])
+                                                  : route('customers.payments.update', ['customer' => $customer->id, 'payment' => $row->id]) }}">
                                             @csrf
+                                            @method('PATCH')
                                             <input type="hidden" name="business" value="{{ $businessId }}">
-                                            <label class="block text-sm">
-                                                <span class="field-label">{{ __('customers.amount') }}</span>
-                                                <input type="number" step="0.01" min="0.01" name="amount"
-                                                       value="{{ $e['ref']->amount }}" class="field-input" required>
-                                            </label>
-                                            <label class="mt-2 block text-sm">
-                                                <span class="field-label">{{ __('customers.date') }}</span>
-                                                <input type="date" name="payment_date"
-                                                       value="{{ $e['ref']->payment_date?->format('Y-m-d') }}"
-                                                       class="field-input" required>
-                                            </label>
-                                            <label class="mt-2 block text-sm">
-                                                <span class="field-label">{{ __('customers.mode') }}</span>
-                                                <select name="mode" class="field-input" required>
-                                                    @foreach (['cash', 'upi', 'cheque', 'bank', 'other'] as $mode)
-                                                        <option value="{{ $mode }}" @selected($e['ref']->mode === $mode)>
-                                                            {{ __('customers.modes.' . $mode) }}
-                                                        </option>
-                                                    @endforeach
-                                                </select>
-                                            </label>
+
+                                            @if ($isSale)
+                                                <label class="block text-sm">
+                                                    <span class="field-label">{{ __('customers.date') }}</span>
+                                                    <input type="date" name="sale_date"
+                                                           value="{{ $row->sale_date?->format('Y-m-d') }}"
+                                                           class="field-input" required>
+                                                </label>
+
+                                                {{-- Quantity and rate per line, and
+                                                     nothing else: the total is Σ of
+                                                     these and is recomputed server-side,
+                                                     never typed. Lines cannot be added
+                                                     or dropped here — LedgerEditor says
+                                                     why. --}}
+                                                @foreach ($row->lines as $line)
+                                                    <fieldset class="mt-3">
+                                                        <legend class="text-sm font-medium text-ink">
+                                                            {{ $line->productPack?->product?->name_en ?: $line->productPack?->product?->name_hi }}
+                                                            {{ $line->productPack?->packSize?->label }}
+                                                        </legend>
+                                                        <div class="flex flex-wrap gap-2">
+                                                            <label class="text-sm">
+                                                                <span class="field-label">{{ __('customers.qty') }}</span>
+                                                                <input type="number" inputmode="numeric" step="1"
+                                                                       name="lines[{{ $line->id }}][qty]"
+                                                                       value="{{ $line->qty }}" class="field-input" required>
+                                                            </label>
+                                                            <label class="text-sm">
+                                                                <span class="field-label">{{ __('customers.rate') }}</span>
+                                                                <input type="number" inputmode="decimal" step="0.01" min="0"
+                                                                       name="lines[{{ $line->id }}][rate]"
+                                                                       value="{{ $line->rate }}" class="field-input" required>
+                                                            </label>
+                                                        </div>
+                                                    </fieldset>
+                                                @endforeach
+                                            @else
+                                                <label class="block text-sm">
+                                                    <span class="field-label">{{ __('customers.amount') }}</span>
+                                                    <input type="number" step="0.01" min="0.01" name="amount"
+                                                           value="{{ $row->amount }}" class="field-input" required>
+                                                </label>
+                                                <label class="mt-2 block text-sm">
+                                                    <span class="field-label">{{ __('customers.date') }}</span>
+                                                    <input type="date" name="payment_date"
+                                                           value="{{ $row->payment_date?->format('Y-m-d') }}"
+                                                           class="field-input" required>
+                                                </label>
+                                                <label class="mt-2 block text-sm">
+                                                    <span class="field-label">{{ __('customers.mode') }}</span>
+                                                    <select name="mode" class="field-input" required>
+                                                        @foreach (['cash', 'upi', 'cheque', 'bank', 'other'] as $mode)
+                                                            <option value="{{ $mode }}" @selected($row->mode === $mode)>
+                                                                {{ __('customers.modes.' . $mode) }}
+                                                            </option>
+                                                        @endforeach
+                                                    </select>
+                                                </label>
+                                            @endif
+
                                             <button type="submit" class="btn-primary mt-3">
-                                                {{ __('customers.correct_payment') }}
+                                                {{ __('customers.save_changes') }}
                                             </button>
                                         </form>
-                                    </details>
-                                @endunless
+
+                                        {{-- Its own form below a rule: deleting is
+                                             destructive and must not sit a stray tap
+                                             away from an ordinary edit. Same
+                                             separation as voiding an order. --}}
+                                        <form method="POST" class="mt-4 border-t border-hairline pt-3"
+                                              action="{{ $isSale
+                                                  ? route('customers.sales.destroy', ['customer' => $customer->id, 'sale' => $row->id])
+                                                  : route('customers.payments.destroy', ['customer' => $customer->id, 'payment' => $row->id]) }}"
+                                              onsubmit="return confirm('{{ $isSale ? __('customers.confirm_delete_sale') : __('customers.confirm_delete_payment') }}')">
+                                            @csrf
+                                            @method('DELETE')
+                                            <input type="hidden" name="business" value="{{ $businessId }}">
+                                            <button type="submit" class="text-sm text-danger">{{ __('customers.delete') }}</button>
+                                        </form>
+                                    </div>
+                                </details>
                             @endif
                         </td>
                     </tr>
@@ -208,6 +261,52 @@
             <p class="mt-2 text-sm text-ink-muted">{{ __('customers.no_entries') }}</p>
         @endif
     </div>
+
+    {{-- Below the khata, not inside it: a deleted row is not a line of the
+         statement, it is a line of what the statement no longer says. Shown at
+         all because a delete tapped on the wrong row has to be undoable, and an
+         owner who cannot see what they deleted cannot undo it. --}}
+    @if ($deleted->isNotEmpty())
+        <div class="card mt-4 overflow-x-auto">
+            <h2 class="font-semibold">{{ __('customers.deleted_heading') }}</h2>
+            <p class="mb-2 text-sm text-ink-muted">{{ __('customers.deleted_hint') }}</p>
+
+            <table class="w-full text-sm">
+                <thead>
+                    <tr class="text-left text-ink-muted">
+                        <th>{{ __('customers.date') }}</th>
+                        <th>{{ __('customers.particulars') }}</th>
+                        <th class="text-right">{{ __('customers.amount') }}</th>
+                        <th></th>
+                    </tr>
+                </thead>
+                <tbody>
+                    @foreach ($deleted as $e)
+                        <tr class="text-ink-muted">
+                            <td class="tabular">{{ $e['date']->format('d M Y') }}</td>
+                            <td>
+                                {{ __('customers.' . $e['kind']) }}
+                                <span class="block text-xs">
+                                    {{ __('customers.deleted_on', ['date' => $e['ref']->deleted_at?->format('d M Y')]) }}
+                                </span>
+                            </td>
+                            <td class="tabular text-right">{{ Inr::format($e['delta']) }}</td>
+                            <td class="text-right">
+                                <form method="POST"
+                                      action="{{ $e['kind'] === 'sale'
+                                          ? route('customers.sales.restore', ['customer' => $customer->id, 'sale' => $e['ref']->id])
+                                          : route('customers.payments.restore', ['customer' => $customer->id, 'payment' => $e['ref']->id]) }}">
+                                    @csrf
+                                    <input type="hidden" name="business" value="{{ $businessId }}">
+                                    <button type="submit" class="text-sm text-brand">{{ __('customers.restore') }}</button>
+                                </form>
+                            </td>
+                        </tr>
+                    @endforeach
+                </tbody>
+            </table>
+        </div>
+    @endif
 
     {{-- Said plainly rather than left as a missing button: an owner looking for
          "record payment" here should know where it lives, not assume it broke. --}}

@@ -398,3 +398,60 @@ describe('correcting a payment from the statement', () => {
     });
 });
 
+
+describe('deleted rows', () => {
+    // The owner deletes a khata row in the console. The server keeps streaming
+    // it (soft delete) with deleted_at set, and that stamp is the only thing
+    // telling this device to stop counting it.
+    it('leaves a deleted sale out of outstanding', async () => {
+        const c = customer({ opening_balance: '100.00' });
+        await db.customers.put(c);
+        await db.sales.bulkPut([
+            sale({ total: '80.00' }),
+            sale({ total: '500.00', deleted_at: '2026-07-05T09:00:00Z' }),
+        ]);
+
+        expect(toDecimal(await outstandingFor(db, c))).toBe('180.00');
+    });
+
+    it('leaves a deleted payment out of outstanding', async () => {
+        const c = customer({ opening_balance: '100.00' });
+        await db.customers.put(c);
+        await db.payments.bulkPut([
+            payment({ amount: '40.00' }),
+            payment({ amount: '60.00', deleted_at: '2026-07-05T09:00:00Z' }),
+        ]);
+
+        expect(toDecimal(await outstandingFor(db, c))).toBe('60.00');
+    });
+
+    it('leaves a deleted row off the statement, so it agrees with outstanding', async () => {
+        // If these two ever disagree, one is wrong and neither can be trusted.
+        const c = customer({ opening_balance: '100.00' });
+        await db.customers.put(c);
+        await db.sales.put(sale({ total: '500.00', deleted_at: '2026-07-05T09:00:00Z' }));
+        await db.payments.put(payment({ amount: '40.00' }));
+
+        const entries = await ledgerFor(db, c);
+
+        expect(entries).toHaveLength(1);
+        expect(toDecimal(entries.at(-1).runningPaise)).toBe(
+            toDecimal(await outstandingFor(db, c))
+        );
+    });
+
+    it('counts a restored row again once the stamp is cleared', async () => {
+        // Restore is a server-side undo: the same row arrives with deleted_at
+        // back to null, and the device must simply believe it.
+        const c = customer();
+        await db.customers.put(c);
+        const s = sale({ total: '500.00', deleted_at: '2026-07-05T09:00:00Z' });
+        await db.sales.put(s);
+
+        expect(toDecimal(await outstandingFor(db, c))).toBe('0.00');
+
+        await db.sales.put({ ...s, deleted_at: null });
+
+        expect(toDecimal(await outstandingFor(db, c))).toBe('500.00');
+    });
+});

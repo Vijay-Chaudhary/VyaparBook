@@ -13,8 +13,10 @@ class KhataService
      * outstanding = opening_balance + Σ sale.total − Σ payment.amount.
      *
      * Reversals are ordinary rows with negated amounts, so they self-cancel here
-     * and no row is ever excluded or mutated — "outstanding is always
-     * recomputable" (PRD §9). bcadd/bcsub at scale 2: rupees must not drift.
+     * — "outstanding is always recomputable" (PRD §9). The one row that does not
+     * count is one the owner deleted: SoftDeletes drops it from both sums
+     * through the relation, with nothing here needing to know. bcadd/bcsub at
+     * scale 2: rupees must not drift.
      */
     public function outstandingFor(Customer $customer): string
     {
