@@ -3,11 +3,19 @@
 //
 // pwOwner comes from tests/Pest.php.
 
+use App\Ledger\LedgerReverser;
 use App\Models\Business;
 use App\Models\Customer;
+use App\Models\Invoice;
+use App\Models\Order;
+use App\Models\PackSize;
 use App\Models\Payment;
+use App\Models\Product;
+use App\Models\ProductPack;
 use App\Models\Sale;
+use App\Models\SaleLine;
 use App\Models\User;
+use App\Services\KhataService;
 use App\Support\Tenancy;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
@@ -49,6 +57,83 @@ function cusPayment(Business $b, User $u, Customer $c, string $amount, string $d
 
     return $p;
     });
+}
+
+/**
+ * One sale line, with the two snapshot columns set: an edit must recompute
+ * line_total and leave list_rate and cost_at_sale exactly as the day it sold.
+ */
+function cusSaleLine(Business $b, Sale $s, int $qty, string $rate): SaleLine
+{
+    return asTenant($b->id, function () use ($b, $s, $qty, $rate) {
+        $pack = ProductPack::factory()->create([
+            'business_id' => $b->id,
+            'product_id' => Product::factory()->create(['business_id' => $b->id])->id,
+            'pack_size_id' => PackSize::factory()->create(['business_id' => $b->id])->id,
+        ]);
+
+        $line = SaleLine::factory()->make([
+            'business_id' => $b->id, 'sale_id' => $s->id,
+            'product_pack_id' => $pack->id, 'qty' => $qty, 'rate' => $rate,
+        ]);
+        $line->list_rate = $rate;
+        $line->cost_at_sale = '30.00';
+        $line->save();
+
+        return $line;
+    });
+}
+
+/** A filed tax invoice against $sale — the thing that freezes it. */
+function cusInvoice(Business $b, User $u, Customer $c, Sale $sale): Invoice
+{
+    return asTenant($b->id, function () use ($b, $u, $c, $sale) {
+        $invoice = new Invoice([
+            'business_id' => $b->id, 'sale_id' => $sale->id,
+            'number' => '2026-27/0001', 'financial_year' => '2026-27', 'seq' => 1,
+            'issued_on' => '2026-07-20', 'buyer_name' => $c->name,
+            'seller_gstin' => '09ABCDE1234F1Z5',
+            'taxable_total' => (string) $sale->total, 'cgst_total' => '0.00',
+            'sgst_total' => '0.00', 'grand_total' => (string) $sale->total,
+        ]);
+        $invoice->created_by = $u->id;   // not fillable — stamped, never posted
+        $invoice->save();
+
+        return $invoice;
+    });
+}
+
+/** A delivered order pointing at $sale, which is what makes the sale the order's. */
+function cusOrder(Business $b, User $u, Customer $c, Sale $sale): Order
+{
+    return asTenant($b->id, function () use ($b, $u, $c, $sale) {
+        $order = new Order([
+            'business_id' => $b->id, 'uuid' => (string) Str::uuid(),
+            'customer_id' => $c->id, 'order_date' => '2026-07-19',
+        ]);
+        // None of these are fillable: OrderWriter stamps them.
+        $order->created_by = $u->id;
+        $order->total = (string) $sale->total;
+        $order->status = 'delivered';
+        $order->sale_id = $sale->id;
+        $order->save();
+
+        return $order;
+    });
+}
+
+/** Outstanding as the app computes it, read back tenant-pinned. */
+function cusOutstanding(Customer $c): string
+{
+    return asTenant($c->business_id, fn () => (new KhataService())
+        ->outstandingFor(Customer::find($c->id)));
+}
+
+/** How many entries the statement actually shows — a deleted row is not one. */
+function cusLedgerCount(Customer $c): int
+{
+    return asTenant($c->business_id, fn () => (new KhataService())
+        ->ledgerFor(Customer::find($c->id))->count());
 }
 
 describe('access', function () {
@@ -316,236 +401,303 @@ describe('archive', function () {
 });
 
 describe('corrections', function () {
-    it('voids a sale by adding a cancelling entry, never removing the original', function () {
-        // This is what "delete a sale" means here. Removing the row would
-        // silently restate outstanding, cash flow, COGS and any issued invoice;
-        // a mirror-image entry cancels it while both stay on the books.
+    it('edits a payment in place, so the khata says what really happened', function () {
+        // This is the change the owner asked for. The old behaviour wrote
+        // "paid 200, reversed 200, paid 150" for one mistyped payment, and a
+        // khata that reports three events for one is not the shop's khata.
         [$owner, $business] = pwOwner();
-        $customer = cusCustomer($business);
-        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
+        $customer = cusCustomer($business, 'Ramesh Kumar', '500.00');
+        $payment = cusPayment($business, $owner, $customer, '200.00', '2026-07-20');
 
         $this->actingAs($owner)
-            ->post("/customers/{$customer->id}/sales/{$sale->id}/void", ['business' => $business->id])
+            ->patch("/customers/{$customer->id}/payments/{$payment->id}", [
+                'business' => $business->id, 'amount' => '150.00',
+                'payment_date' => '2026-07-21', 'mode' => 'upi',
+            ])
             ->assertRedirect(route('customers.show', ['customer' => $customer->id, 'business' => $business->id]));
 
-        // Original untouched, byte for byte.
-        $original = DB::table('sales')->where('business_id', $business->id)
-            ->where('id', $sale->id)->first();
-        expect((string) $original->total)->toBe('500.00');
-        expect($original->reverses_id)->toBeNull();
-
-        // And a reversal pointing at it, so the two net to nothing.
-        $reversal = DB::table('sales')->where('business_id', $business->id)
-            ->where('reverses_id', $sale->id)->sole();
-        expect((string) $reversal->total)->toBe('-500.00');
-
-        $fresh = Customer::find($customer->id);
-        expect((new App\Services\KhataService())->outstandingFor($fresh))->toBe('0.00');
-    });
-
-    it('reverses a payment, putting the outstanding back', function () {
-        [$owner, $business] = pwOwner();
-        $customer = cusCustomer($business, 'Ramesh Kumar', '500.00');
-        $payment = cusPayment($business, $owner, $customer, '200.00', '2026-07-20');
-
-        $this->actingAs($owner)
-            ->post("/customers/{$customer->id}/payments/{$payment->id}/reverse", ['business' => $business->id])
-            ->assertRedirect();
-
-        expect((string) DB::table('payments')->where('business_id', $business->id)
-            ->where('reverses_id', $payment->id)->value('amount'))->toBe('-200.00');
-
-        $fresh = Customer::find($customer->id);
-        expect((new App\Services\KhataService())->outstandingFor($fresh))->toBe('500.00');
-    });
-
-    it('corrects a payment by reversing it and recording what was meant', function () {
-        // A payment recorded wrong is commoner than one that never happened.
-        // Reversing alone left the shopkeeper re-entering it from memory.
-        [$owner, $business] = pwOwner();
-        $customer = cusCustomer($business, 'Ramesh Kumar', '500.00');
-        $payment = cusPayment($business, $owner, $customer, '200.00', '2026-07-20');
-
-        $this->actingAs($owner)
-            ->post("/customers/{$customer->id}/payments/{$payment->id}/correct", [
-                'business' => $business->id,
-                'amount' => '150.00',
-                'payment_date' => '2026-07-21',
-                'mode' => 'upi',
-            ])
-            ->assertRedirect();
-
+        // One row, still — carrying the corrected figures, with no cancelling
+        // entry beside it.
         $rows = Tenancy::withoutTenant(fn () => DB::table('payments')
-            ->where('business_id', $business->id)->orderBy('created_at')->get());
+            ->where('business_id', $business->id)->get());
 
-        // Nothing removed: paid 200, reversed 200, paid 150.
-        expect($rows)->toHaveCount(3);
-        expect((string) $rows->firstWhere('reverses_id', $payment->id)->amount)->toBe('-200.00');
-
-        // Identified by what it is, not by position: three rows written in the
-        // same second have no reliable created_at ordering.
-        $corrected = $rows->first(fn ($r) => $r->reverses_id === null && $r->id !== $payment->id);
-
-        expect((string) $corrected->amount)->toBe('150.00')
-            ->and($corrected->mode)->toBe('upi')
-            ->and((string) $corrected->payment_date)->toStartWith('2026-07-21');
+        expect($rows)->toHaveCount(1)
+            ->and((string) $rows[0]->amount)->toBe('150.00')
+            ->and($rows[0]->mode)->toBe('upi')
+            ->and((string) $rows[0]->payment_date)->toStartWith('2026-07-21');
 
         // 500 opening − 150 actually paid.
-        $fresh = Customer::find($customer->id);
-        expect((new App\Services\KhataService())->outstandingFor($fresh))->toBe('350.00');
+        expect(cusOutstanding($customer))->toBe('350.00');
     });
 
-    it('replays a resubmitted correction onto the same row rather than crediting twice', function () {
+    it('edits a sale, recomputing the total from the lines rather than trusting the form', function () {
         [$owner, $business] = pwOwner();
-        $customer = cusCustomer($business, 'Ramesh Kumar', '500.00');
-        $payment = cusPayment($business, $owner, $customer, '200.00', '2026-07-20');
-
-        $body = [
-            'business' => $business->id, 'amount' => '150.00',
-            'payment_date' => '2026-07-21', 'mode' => 'cash',
-        ];
-
-        $this->actingAs($owner)->post("/customers/{$customer->id}/payments/{$payment->id}/correct", $body);
-        // The second attempt is refused by the already-reversed guard, so the
-        // corrected row is never written twice.
-        $this->actingAs($owner)->post("/customers/{$customer->id}/payments/{$payment->id}/correct", $body);
-
-        expect(Tenancy::withoutTenant(fn () => DB::table('payments')
-            ->where('business_id', $business->id)->count()))->toBe(3);
-
-        $fresh = Customer::find($customer->id);
-        expect((new App\Services\KhataService())->outstandingFor($fresh))->toBe('350.00');
-    });
-
-    it('refuses to correct a reversal, which is not a payment anyone made', function () {
-        [$owner, $business] = pwOwner();
-        $customer = cusCustomer($business, 'Ramesh Kumar', '500.00');
-        $payment = cusPayment($business, $owner, $customer, '200.00', '2026-07-20');
+        $customer = cusCustomer($business);
+        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
+        $line = cusSaleLine($business, $sale, 10, '50.00');
 
         $this->actingAs($owner)
-            ->post("/customers/{$customer->id}/payments/{$payment->id}/reverse", ['business' => $business->id]);
-
-        $reversalId = Tenancy::withoutTenant(fn () => DB::table('payments')
-            ->where('business_id', $business->id)->where('reverses_id', $payment->id)->value('id'));
-
-        $this->actingAs($owner)
-            ->post("/customers/{$customer->id}/payments/{$reversalId}/correct", [
-                'business' => $business->id, 'amount' => '10.00',
-                'payment_date' => '2026-07-22', 'mode' => 'cash',
+            ->patch("/customers/{$customer->id}/sales/{$sale->id}", [
+                'business' => $business->id,
+                'sale_date' => '2026-07-22',
+                'lines' => [$line->id => ['qty' => 8, 'rate' => '45.00']],
+                // Not a field the form has, and not one the server may take:
+                // the total is Σ line_total or it is fiction.
+                'total' => '999999.00',
             ])
             ->assertRedirect();
 
-        // Still just the pair; no third row was written.
-        expect(Tenancy::withoutTenant(fn () => DB::table('payments')
-            ->where('business_id', $business->id)->count()))->toBe(2);
+        [$freshSale, $freshLine] = asTenant($business->id, fn () => [
+            Sale::find($sale->id), SaleLine::find($line->id),
+        ]);
+
+        expect((string) $freshSale->total)->toBe('360.00')            // 8 × 45
+            ->and($freshSale->sale_date->toDateString())->toBe('2026-07-22')
+            ->and((string) $freshLine->line_total)->toBe('360.00')
+            // The snapshots are what the pack listed and cost that day. An edit
+            // to qty must not quietly restate either.
+            ->and((string) $freshLine->list_rate)->toBe('50.00')
+            ->and((string) $freshLine->cost_at_sale)->toBe('30.00');
+
+        expect(cusOutstanding($customer))->toBe('360.00');
     });
 
-    it('refuses to void the same sale twice, and says so', function () {
-        [$owner, $business] = pwOwner();
-        $customer = cusCustomer($business);
-        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
-        $url = "/customers/{$customer->id}/sales/{$sale->id}/void";
-
-        $this->actingAs($owner)->post($url, ['business' => $business->id])->assertRedirect();
-        $this->actingAs($owner)->post($url, ['business' => $business->id])
-            ->assertSessionHas('error', __('customers.already_voided'));
-
-        // Still exactly one reversal — a second would double the correction.
-        expect(DB::table('sales')->where('business_id', $business->id)
-            ->where('reverses_id', $sale->id)->count())->toBe(1);
-    });
-
-    it('refuses to void a row that is itself a correction', function () {
+    it('deletes a sale off the khata, keeping the row so it can come back', function () {
         [$owner, $business] = pwOwner();
         $customer = cusCustomer($business);
         $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
 
         $this->actingAs($owner)
-            ->post("/customers/{$customer->id}/sales/{$sale->id}/void", ['business' => $business->id])
+            ->delete("/customers/{$customer->id}/sales/{$sale->id}", ['business' => $business->id])
             ->assertRedirect();
 
-        $reversalId = DB::table('sales')->where('business_id', $business->id)
-            ->where('reverses_id', $sale->id)->value('id');
+        // Gone from the khata: outstanding no longer counts it, and the
+        // statement no longer lists it.
+        expect(cusOutstanding($customer))->toBe('0.00');
+        expect(cusLedgerCount($customer))->toBe(0);
 
-        // Reversing a reversal is a re-entry, not a correction — if the sale
-        // really did happen, record it again rather than un-voiding.
-        $this->actingAs($owner)
-            ->post("/customers/{$customer->id}/sales/{$reversalId}/void", ['business' => $business->id])
-            ->assertSessionHas('error', __('customers.cannot_void_reversal'));
+        // But still on disk, stamped — invoices.sale_id and orders.sale_id are
+        // real foreign keys, and restore has to have something to restore.
+        $row = Tenancy::withoutTenant(fn () => DB::table('sales')->where('id', $sale->id)->first());
+        expect($row)->not->toBeNull()
+            ->and($row->deleted_at)->not->toBeNull();
     });
 
-    it('offers the action on the ledger, not by URL alone', function () {
+    it('deletes a payment, putting the outstanding back', function () {
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business, 'Ramesh Kumar', '500.00');
+        $payment = cusPayment($business, $owner, $customer, '200.00', '2026-07-20');
+
+        $this->actingAs($owner)
+            ->delete("/customers/{$customer->id}/payments/{$payment->id}", ['business' => $business->id])
+            ->assertRedirect();
+
+        expect(cusOutstanding($customer))->toBe('500.00');
+        expect(cusLedgerCount($customer))->toBe(0);
+    });
+
+    it('bumps sync_seq on a delete, so the phones stop showing the row too', function () {
+        // A device learns about rows by being sent them, never by being told one
+        // vanished. A soft delete that did not bump sync_seq would leave the
+        // sale in every phone's khata for good.
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business);
+        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
+        $before = $sale->sync_seq;
+
+        $this->actingAs($owner)
+            ->delete("/customers/{$customer->id}/sales/{$sale->id}", ['business' => $business->id]);
+
+        $row = Tenancy::withoutTenant(fn () => DB::table('sales')->where('id', $sale->id)->first());
+        expect((int) $row->sync_seq)->toBeGreaterThan((int) $before);
+    });
+
+    it('restores a deleted sale to the khata', function () {
         [$owner, $business] = pwOwner();
         $customer = cusCustomer($business);
         $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
 
-        $this->actingAs($owner)->get("/customers/{$customer->id}?business={$business->id}")
-            ->assertOk()
-            ->assertSee(route('customers.sales.void', ['customer' => $customer->id, 'sale' => $sale->id]), false)
-            ->assertSee(__('customers.void'));
+        $this->actingAs($owner)
+            ->delete("/customers/{$customer->id}/sales/{$sale->id}", ['business' => $business->id]);
+
+        $this->actingAs($owner)
+            ->post("/customers/{$customer->id}/sales/{$sale->id}/restore", ['business' => $business->id])
+            ->assertRedirect();
+
+        expect(cusOutstanding($customer))->toBe('500.00');
+        expect(cusLedgerCount($customer))->toBe(1);
     });
 
-    it('marks an already-corrected row instead of offering the action again', function () {
+    it('restores a deleted payment', function () {
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business, 'Ramesh Kumar', '500.00');
+        $payment = cusPayment($business, $owner, $customer, '200.00', '2026-07-20');
+
+        $this->actingAs($owner)
+            ->delete("/customers/{$customer->id}/payments/{$payment->id}", ['business' => $business->id]);
+        $this->actingAs($owner)
+            ->post("/customers/{$customer->id}/payments/{$payment->id}/restore", ['business' => $business->id])
+            ->assertRedirect();
+
+        expect(cusOutstanding($customer))->toBe('300.00');
+    });
+
+    it('refuses to change a sale that already carries a tax invoice', function () {
+        // The invoice is in the customer's hands and carries a government
+        // sequence number. Editing what it was issued against would leave a
+        // filed document describing no sale in this book.
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business);
+        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
+        cusInvoice($business, $owner, $customer, $sale);
+
+        $this->actingAs($owner)
+            ->delete("/customers/{$customer->id}/sales/{$sale->id}", ['business' => $business->id])
+            ->assertSessionHas('error', __('customers.cannot_edit_invoiced'));
+
+        $this->actingAs($owner)
+            ->patch("/customers/{$customer->id}/sales/{$sale->id}", [
+                'business' => $business->id, 'sale_date' => '2026-07-22',
+            ])
+            ->assertSessionHas('error', __('customers.cannot_edit_invoiced'));
+
+        expect(cusOutstanding($customer))->toBe('500.00');
+    });
+
+    it('sends an order-delivered sale back to the order that owns its figures', function () {
+        // Correcting the order re-issues the sale, so an edit made here would be
+        // silently undone the next time anyone touched the order.
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business);
+        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
+        cusOrder($business, $owner, $customer, $sale);
+
+        $this->actingAs($owner)
+            ->delete("/customers/{$customer->id}/sales/{$sale->id}", ['business' => $business->id])
+            ->assertSessionHas('error', __('customers.cannot_edit_order_sale'));
+
+        expect(cusOutstanding($customer))->toBe('500.00');
+    });
+
+    it('refuses to touch either half of an older reversal pair', function () {
+        // The API and the order workflow still correct by appending a negated
+        // mirror row. Editing either half stops the pair cancelling; deleting
+        // either half revives the other's effect on the balance.
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business, 'Ramesh Kumar', '500.00');
+        $payment = cusPayment($business, $owner, $customer, '200.00', '2026-07-20');
+
+        // Written by the real reverser, so the fixture is the pair the API
+        // actually produces rather than a hand-built imitation of one.
+        $reversal = asTenant($business->id, function () use ($owner, $payment) {
+            app()->bind('tenant.user_id', fn () => $owner->id);
+
+            return app(LedgerReverser::class)->reversePayment(Payment::find($payment->id));
+        });
+
+        $this->actingAs($owner)
+            ->delete("/customers/{$customer->id}/payments/{$reversal->id}", ['business' => $business->id])
+            ->assertSessionHas('error', __('customers.cannot_edit_reversal'));
+
+        $this->actingAs($owner)
+            ->delete("/customers/{$customer->id}/payments/{$payment->id}", ['business' => $business->id])
+            ->assertSessionHas('error', __('customers.cannot_edit_reversed'));
+
+        // The pair still nets to zero: 500 opening, 200 paid, 200 reversed.
+        expect(cusOutstanding($customer))->toBe('500.00');
+    });
+
+    it('offers edit and delete on the ledger, not by URL alone', function () {
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business);
+        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
+        cusSaleLine($business, $sale, 10, '50.00');
+
+        $this->actingAs($owner)->get("/customers/{$customer->id}?business={$business->id}")
+            ->assertOk()
+            ->assertSee(route('customers.sales.update', ['customer' => $customer->id, 'sale' => $sale->id]), false)
+            ->assertSee(route('customers.sales.destroy', ['customer' => $customer->id, 'sale' => $sale->id]), false)
+            ->assertSee(__('customers.edit_sale'))
+            ->assertSee(__('customers.delete'));
+    });
+
+    it('lists a deleted entry with its way back, below the khata', function () {
+        // A delete tapped on the wrong row has to be undoable, and an owner who
+        // cannot see what they deleted cannot undo it.
         [$owner, $business] = pwOwner();
         $customer = cusCustomer($business);
         $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
 
         $this->actingAs($owner)
-            ->post("/customers/{$customer->id}/sales/{$sale->id}/void", ['business' => $business->id]);
+            ->delete("/customers/{$customer->id}/sales/{$sale->id}", ['business' => $business->id]);
 
         $this->actingAs($owner)->get("/customers/{$customer->id}?business={$business->id}")
             ->assertOk()
-            ->assertSee(__('customers.corrected'))
-            ->assertSee(__('customers.is_correction'));
+            ->assertSee(__('customers.deleted_heading'))
+            ->assertSee(route('customers.sales.restore', ['customer' => $customer->id, 'sale' => $sale->id]), false);
     });
 
     it('shows the refusal on the page, not only in the session', function () {
         // A flash nobody renders is a button that appears to do nothing, and
-        // the owner presses it again. Asserting the session alone would pass
-        // while the screen stayed silent.
+        // the owner presses it again.
         [$owner, $business] = pwOwner();
         $customer = cusCustomer($business);
         $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
-        $url = "/customers/{$customer->id}/sales/{$sale->id}/void";
+        cusInvoice($business, $owner, $customer, $sale);
 
-        $this->actingAs($owner)->post($url, ['business' => $business->id]);
-
-        $this->actingAs($owner)->post($url, ['business' => $business->id])
-            ->assertRedirect();
+        $this->actingAs($owner)
+            ->delete("/customers/{$customer->id}/sales/{$sale->id}", ['business' => $business->id]);
 
         $this->actingAs($owner)->get("/customers/{$customer->id}?business={$business->id}")
             ->assertOk()
-            ->assertSee(__('customers.already_voided'));
+            ->assertSee(__('customers.cannot_edit_invoiced'));
     });
 
     it('confirms a successful correction on the page', function () {
         [$owner, $business] = pwOwner();
-        $customer = cusCustomer($business);
-        $sale = cusSale($business, $owner, $customer, '500.00', '2026-07-20');
+        $customer = cusCustomer($business, 'Ramesh Kumar', '500.00');
+        $payment = cusPayment($business, $owner, $customer, '200.00', '2026-07-20');
 
         $this->actingAs($owner)
-            ->post("/customers/{$customer->id}/sales/{$sale->id}/void", ['business' => $business->id])
-            ->assertRedirect();
+            ->patch("/customers/{$customer->id}/payments/{$payment->id}", [
+                'business' => $business->id, 'amount' => '150.00',
+                'payment_date' => '2026-07-20', 'mode' => 'cash',
+            ]);
 
         $this->actingAs($owner)->get("/customers/{$customer->id}?business={$business->id}")
             ->assertOk()
-            ->assertSee(__('customers.voided'));
+            ->assertSee(__('customers.payment_updated'));
     });
 
-    it('does not void another tenant\'s sale', function () {
+    it('rejects an amount that is not a payment anyone could have made', function () {
+        [$owner, $business] = pwOwner();
+        $customer = cusCustomer($business, 'Ramesh Kumar', '500.00');
+        $payment = cusPayment($business, $owner, $customer, '200.00', '2026-07-20');
+
+        $this->actingAs($owner)
+            ->patch("/customers/{$customer->id}/payments/{$payment->id}", [
+                'business' => $business->id, 'amount' => '0',
+                'payment_date' => '2026-07-20', 'mode' => 'cash',
+            ])
+            ->assertSessionHasErrors('amount');
+
+        expect(cusOutstanding($customer))->toBe('300.00');
+    });
+
+    it('does not edit or delete another tenant\'s sale', function () {
         [$owner, $business] = pwOwner();
         [$theirOwner, $theirBusiness] = pwOwner();
         $theirCustomer = cusCustomer($theirBusiness);
         $theirSale = cusSale($theirBusiness, $theirOwner, $theirCustomer, '500.00', '2026-07-20');
 
         $this->actingAs($owner)
-            ->post("/customers/{$theirCustomer->id}/sales/{$theirSale->id}/void", ['business' => $business->id])
+            ->delete("/customers/{$theirCustomer->id}/sales/{$theirSale->id}", ['business' => $business->id])
             ->assertNotFound();
 
-        // Cross-tenant on purpose: the assertion IS that nothing was written
-        // for the other shop, which cannot be checked from inside this tenant.
+        // Cross-tenant on purpose: the assertion IS that the other shop's row is
+        // untouched, which cannot be checked from inside this tenant.
         expect(Tenancy::withoutTenant(
-            fn () => DB::table('sales')->where('reverses_id', $theirSale->id)->count()
-        ))->toBe(0);
+            fn () => DB::table('sales')->where('id', $theirSale->id)->value('deleted_at')
+        ))->toBeNull();
     });
 });

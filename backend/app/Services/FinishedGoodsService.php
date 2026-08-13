@@ -44,6 +44,10 @@ class FinishedGoodsService
         $sold = DB::table('sale_lines')
             ->join('product_packs', 'product_packs.id', '=', 'sale_lines.product_pack_id')
             ->join('pack_sizes', 'pack_sizes.id', '=', 'product_packs.pack_size_id')
+            // Joined only to read deleted_at: a raw builder gets no SoftDeletes
+            // scope, and a deleted sale's packs are back on the shelf.
+            ->join('sales', 'sales.id', '=', 'sale_lines.sale_id')
+            ->whereNull('sales.deleted_at')
             ->where('sale_lines.business_id', $businessId)
             ->groupBy('product_packs.product_id')
             ->selectRaw('product_packs.product_id as product_id, CAST(coalesce(sum(sale_lines.qty * pack_sizes.weight_kg), 0) AS CHAR) as kg')

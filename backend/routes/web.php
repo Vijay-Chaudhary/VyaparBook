@@ -137,18 +137,30 @@ Route::middleware('auth')->group(function () {
     Route::post('customers/{customer}/restore', [CustomerController::class, 'restore'])->name('customers.restore');
 
     /*
-     | Corrections. Append-only: both write a mirror-image row rather than
-     | removing anything, so outstanding, cash flow, COGS and any issued invoice
-     | stay consistent with the books.
+     | Khata corrections: edit the row, or delete it. The mirror-image reversal
+     | this replaced left the statement reading "sale ₹500, voided ₹500" for what
+     | was one mistyped sale; the owner wants their khata to say what happened.
+     |
+     | DELETE is soft, so the row survives the invoices.sale_id / orders.sale_id
+     | foreign keys that point at it and `restore` can put it back. What must NOT
+     | be corrected this way is refused with a reason — see LedgerEditor.
+     |
+     | {sale}/{payment} are resolved inside the controller under the pinned
+     | tenant, never via implicit binding, exactly as {customer} is.
      */
-    Route::post('customers/{customer}/sales/{sale}/void', [CustomerController::class, 'voidSale'])
-        ->name('customers.sales.void');
-    Route::post('customers/{customer}/payments/{payment}/reverse', [CustomerController::class, 'reversePayment'])
-        ->name('customers.payments.reverse');
-    // Reverse-and-reissue rather than an in-place edit: a payment is a khata
-    // entry, so a corrected amount has to be explained on the statement.
-    Route::post('customers/{customer}/payments/{payment}/correct', [CustomerController::class, 'correctPayment'])
-        ->name('customers.payments.correct');
+    Route::patch('customers/{customer}/sales/{sale}', [CustomerController::class, 'updateSale'])
+        ->name('customers.sales.update');
+    Route::delete('customers/{customer}/sales/{sale}', [CustomerController::class, 'destroySale'])
+        ->name('customers.sales.destroy');
+    Route::post('customers/{customer}/sales/{sale}/restore', [CustomerController::class, 'restoreSale'])
+        ->name('customers.sales.restore');
+
+    Route::patch('customers/{customer}/payments/{payment}', [CustomerController::class, 'updatePayment'])
+        ->name('customers.payments.update');
+    Route::delete('customers/{customer}/payments/{payment}', [CustomerController::class, 'destroyPayment'])
+        ->name('customers.payments.destroy');
+    Route::post('customers/{customer}/payments/{payment}/restore', [CustomerController::class, 'restorePayment'])
+        ->name('customers.payments.restore');
 
     Route::get('suppliers', [SupplierController::class, 'index'])->name('suppliers');
     Route::post('suppliers', [SupplierController::class, 'store'])->name('suppliers.store');

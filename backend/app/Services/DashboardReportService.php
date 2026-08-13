@@ -154,10 +154,16 @@ class DashboardReportService
         $rows = Customer::query()
             ->where('business_id', $businessId)
             ->whereNull('archived_at')
+            // The deleted_at predicates are the SoftDeletes scope written out by
+            // hand: these are raw subqueries, so nothing applies it for them,
+            // and without them this screen would report an outstanding the
+            // customer's own khata page disagrees with.
             ->selectRaw('id, name, village, CAST((
                 opening_balance
-                + coalesce((select sum(s.total) from sales s where s.customer_id = customers.id), 0)
-                - coalesce((select sum(p.amount) from payments p where p.customer_id = customers.id), 0)
+                + coalesce((select sum(s.total) from sales s
+                    where s.customer_id = customers.id and s.deleted_at is null), 0)
+                - coalesce((select sum(p.amount) from payments p
+                    where p.customer_id = customers.id and p.deleted_at is null), 0)
             ) AS CHAR) as outstanding')
             ->get();
 
@@ -294,6 +300,11 @@ class DashboardReportService
         return DB::table('sale_lines as sl')
             ->join('sales as s', 's.id', '=', 'sl.sale_id')
             ->where('sl.business_id', $businessId)
+            // A raw builder walks past the SoftDeletes scope exactly as it walks
+            // past the tenant scope, so a deleted sale's lines have to be
+            // excluded by hand — otherwise this month's costing counts a sale
+            // the khata above it no longer shows.
+            ->whereNull('s.deleted_at')
             ->whereRaw('extract(year from s.sale_date) = ?', [$year])
             // Group by the SELECT aliases, not by repeating the expression.
             // Postgres accepted `group by extract(...)` alongside the same
@@ -418,6 +429,7 @@ class DashboardReportService
             ->join('products as prod', 'prod.id', '=', 'pp.product_id')
             ->join('pack_sizes as ps', 'ps.id', '=', 'pp.pack_size_id')
             ->where('sl.business_id', $businessId)
+            ->whereNull('s.deleted_at') // deleted sales are off the books; see salesByMonthAndPack
             ->whereRaw('extract(year from s.sale_date) = ?', [$year])
             ->groupBy('pp.id', 'prod.name_en', 'prod.name_hi', 'ps.label')
             ->selectRaw("

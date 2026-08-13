@@ -10,10 +10,14 @@ use Illuminate\Database\Eloquent\Concerns\HasUuids;
 use Illuminate\Database\Eloquent\Factories\HasFactory;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Database\Eloquent\Relations\BelongsTo;
+use Illuminate\Database\Eloquent\SoftDeletes;
 
 class Payment extends Model
 {
-    use BelongsToTenant, HasFactory, HasSyncSequence, HasUuids, HasVersion;
+    // SoftDeletes for the same reason as Sale: the owner deletes a payment off
+    // the khata and the global scope keeps it out of outstanding and cash flow,
+    // while the row itself stays restorable.
+    use BelongsToTenant, HasFactory, HasSyncSequence, HasUuids, HasVersion, SoftDeletes;
 
     // created_by is absent from $fillable: it is stamped from app('tenant.user_id'),
     // never taken from request input. version and sync_seq are trait-managed.

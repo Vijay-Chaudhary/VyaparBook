@@ -28,7 +28,9 @@ class CashFlowService
 {
     /**
      * Cash in per month: Σ payments.amount grouped by month. A reversal is a row
-     * with a negated amount, so the sum self-nets; payments have no soft-delete.
+     * with a negated amount, so the sum self-nets; a payment the owner deleted
+     * from the khata is dropped by the SoftDeletes scope on the model, so money
+     * that never came in stops counting as cash.
      *
      * @return list<string> 12 scale-2 strings, index 0 = January.
      */

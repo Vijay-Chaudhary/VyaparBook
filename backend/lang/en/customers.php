@@ -28,33 +28,54 @@ return [
     'restore' => 'Restore',
 
     'outstanding' => 'Outstanding',
-    'read_only' => 'Sales and payments are recorded in the app. Here you can correct one.',
+    'read_only' => 'Sales and payments are recorded in the app. Here you can correct or delete one.',
 
-    // Corrections are append-only: voiding writes a mirror-image row rather
-    // than deleting, so outstanding, cash flow, COGS and any issued invoice
-    // stay consistent with what is on the books.
-    'void' => 'Void',
-    'reverse' => 'Reverse',
-    'confirm_void' => 'Void this sale? A cancelling entry is added — nothing is deleted.',
-    'confirm_reverse' => 'Reverse this payment? A cancelling entry is added — nothing is deleted.',
-    'is_correction' => 'correction',
-    'corrected' => 'corrected',
-    'voided' => 'Sale voided. A cancelling entry was added.',
-    'reversed' => 'Payment reversed. A cancelling entry was added.',
+    // Corrections change the row itself: an edit says what really happened and a
+    // delete takes the entry off the khata, instead of the cancelling entry this
+    // replaced. Deleting is undoable — see the deleted list below the ledger.
+    'edit_sale' => 'Edit sale',
+    'edit_payment' => 'Edit payment',
+    'save_changes' => 'Save changes',
+    'delete' => 'Delete',
+    'qty' => 'Qty',
+    'rate' => 'Rate',
+    'confirm_delete_sale' => 'Delete this sale? It leaves the khata and the balance changes. You can restore it below.',
+    'confirm_delete_payment' => 'Delete this payment? It leaves the khata and the balance changes. You can restore it below.',
+    'sale_updated' => 'Sale updated.',
+    'payment_updated' => 'Payment updated.',
+    'sale_deleted' => 'Sale deleted. Restore it from the deleted list if that was a mistake.',
+    'payment_deleted' => 'Payment deleted. Restore it from the deleted list if that was a mistake.',
+    'sale_restored' => 'Sale restored to the khata.',
+    'payment_restored' => 'Payment restored to the khata.',
 
-    // Correcting a payment: reverse the original and record what was meant, so
-    // the statement explains the change instead of a balance quietly differing.
-    'correct_payment' => 'Correct payment',
-    'payment_corrected' => 'Payment corrected. The original was reversed and the corrected amount recorded.',
+    'deleted_heading' => 'Deleted entries',
+    'deleted_hint' => 'These are off the khata and out of every total. Restore puts one back.',
+    'deleted_on' => 'Deleted :date',
+
     'mode' => 'Mode',
     'modes' => [
         'cash' => 'Cash', 'upi' => 'UPI', 'cheque' => 'Cheque',
         'bank' => 'Bank transfer', 'other' => 'Other',
     ],
+
+    // A khata can still contain a reversal PAIR, written by the REST API or by
+    // an order correction, both of which stay append-only. Neither half is
+    // editable here, so both are labelled instead of offered an action.
+    'is_correction' => 'correction',
+    'corrected' => 'corrected',
+
+    // LedgerReverser's own refusals. Still reached through the API and the order
+    // workflow, which is why they outlive the console's void/reverse buttons.
     'cannot_void_reversal' => 'That row is already a correction, so it cannot be voided.',
     'already_voided' => 'That sale has already been voided.',
     'cannot_reverse_reversal' => 'That row is already a correction, so it cannot be reversed.',
     'already_reversed' => 'That payment has already been reversed.',
+
+    // Refusals. Each one is a figure somebody outside this screen also holds.
+    'cannot_edit_reversal' => 'That row is one half of an older correction, so it has no figures of its own to change.',
+    'cannot_edit_reversed' => 'That row was already corrected by a cancelling entry, and the two cancel out as they stand.',
+    'cannot_edit_invoiced' => 'A tax invoice was issued for this sale, so it cannot be changed or deleted. Cancel the invoice first.',
+    'cannot_edit_order_sale' => 'This sale came from an order. Correct the order instead — that re-issues the sale.',
 
     'ledger' => 'Khata',
     'date' => 'Date',

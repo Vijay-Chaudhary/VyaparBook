@@ -10,7 +10,14 @@ import { PENDING } from './outbox';
  *   outstanding = opening_balance + Σ sale.total − Σ payment.amount
  *
  * Reversals are ordinary rows with negated amounts, so they self-cancel and no
- * row is ever excluded or mutated — outstanding stays recomputable (PRD §9).
+ * row is ever excluded — outstanding stays recomputable (PRD §9).
+ *
+ * One row IS excluded: one the owner deleted from the console khata. The server
+ * keeps streaming it (soft delete, so the delta pull still carries it) with
+ * deleted_at set, which is how the device learns to stop counting it — the same
+ * shape as an archived customer. `live()` is the one place that decides, so
+ * outstanding and the statement can never disagree about which rows are real.
+ *
  * All arithmetic is in integer paise; see money.js for why.
  *
  * This has to agree with the server to the paisa. A shopkeeper who sees one
@@ -28,8 +35,12 @@ import { PENDING } from './outbox';
 export async function outstandingFor(db, customer, { includePending = true } = {}) {
     const customerKeys = [customer.uuid, customer.id].filter(Boolean);
 
-    const sales = await db.sales.filter((s) => customerKeys.includes(s.customer_id)).toArray();
-    const payments = await db.payments.filter((p) => customerKeys.includes(p.customer_id)).toArray();
+    const sales = live(
+        await db.sales.filter((s) => customerKeys.includes(s.customer_id)).toArray()
+    );
+    const payments = live(
+        await db.payments.filter((p) => customerKeys.includes(p.customer_id)).toArray()
+    );
 
     let total = toPaise(customer.opening_balance);
     total += sumPaise(sales.map((s) => toPaise(s.total)));
@@ -42,6 +53,17 @@ export async function outstandingFor(db, customer, { includePending = true } = {
     }
 
     return total;
+}
+
+/**
+ * Rows the shop still stands behind — everything the owner has not deleted.
+ *
+ * The cached row keeps deleted_at rather than being dropped from Dexie, so a
+ * restore on the server puts it straight back on the next pull instead of
+ * needing the device to re-fetch history it already has.
+ */
+function live(rows) {
+    return rows.filter((r) => !r.deleted_at);
 }
 
 /**
@@ -94,8 +116,12 @@ export async function khataList(db, { includeArchived = false } = {}) {
 export async function ledgerFor(db, customer, { includePending = true } = {}) {
     const customerKeys = [customer.uuid, customer.id].filter(Boolean);
 
-    const sales = await db.sales.filter((s) => customerKeys.includes(s.customer_id)).toArray();
-    const payments = await db.payments.filter((p) => customerKeys.includes(p.customer_id)).toArray();
+    const sales = live(
+        await db.sales.filter((s) => customerKeys.includes(s.customer_id)).toArray()
+    );
+    const payments = live(
+        await db.payments.filter((p) => customerKeys.includes(p.customer_id)).toArray()
+    );
 
     // Read the catalog once for the whole ledger rather than per sale. A synced
     // sale's items come from cached sale_lines; a queued one's from its outbox
